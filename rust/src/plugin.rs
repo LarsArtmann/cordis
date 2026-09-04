@@ -282,13 +282,29 @@ impl Registry {
     }
 
     /// Dispose every fiber of the plugin identified by `id` and remove its
-    /// runtime, restoring the state from before its first start.
+    /// runtime, restoring the state from before its first start. The
+    /// runtime's body and last config move to the core's stash so a
+    /// registry restore can restart it.
     pub fn delete_id(&self, id: u64) {
         core::enter(&self.core);
         let fibers = {
             let mut core = self.core.borrow_mut();
             match core.runtimes.remove(&id) {
-                Some(runtime) => runtime.fibers,
+                Some(runtime) => {
+                    let stashed = runtime
+                        .fibers
+                        .last()
+                        .and_then(|fid| core.fibers.get(fid.0))
+                        .map(|data| {
+                            let f = data.as_ref().expect("fiber slot missing").borrow();
+                            f.config.clone()
+                        })
+                        .map(|config| (Rc::clone(&runtime.base), config));
+                    if let Some(entry) = stashed {
+                        core.stash.insert(id, entry);
+                    }
+                    runtime.fibers
+                }
                 None => Vec::new(),
             }
         };
@@ -309,7 +325,7 @@ impl Registry {
 }
 
 /// Shared start path for both plugin forms.
-fn start_base(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value) -> crate::Result<Fiber> {
+pub(crate) fn start_base(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value) -> crate::Result<Fiber> {
     core::enter(&ctx.core);
     let result = start_inner(ctx, base, config);
     core::leave(&ctx.core);
@@ -330,6 +346,7 @@ fn start_inner(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value
             name: base.name.clone(),
             apply: Rc::clone(&base.apply),
             fibers: Vec::new(),
+            base: Rc::clone(&base),
         });
     }
 
@@ -360,6 +377,7 @@ fn start_inner(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value
                 name: base.name.clone(),
                 apply: Rc::clone(&base.apply),
                 fibers: Vec::new(),
+                base: Rc::clone(&base),
             })
             .fibers
             .push(id);

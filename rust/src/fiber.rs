@@ -7,7 +7,25 @@ use crate::sync::Rc;
 use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, ContextData, Disposer};
-use crate::core::{Bag, Core};
+use crate::core::{Bag, Core, ApplyFn};
+
+/// The canonical name of the status event, mirroring `internal/status`
+/// upstream. It fires on every fiber state change.
+pub const EVENT_STATUS: &str = "internal/status";
+
+/// The payload of [`EVENT_STATUS`]: one fiber state change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusChange {
+    /// The framework-wide unique id of the fiber (0 for root, -1 after
+    /// disposal).
+    pub uid: i64,
+    /// The plugin name of the fiber, or `"root"` for the root fiber.
+    pub name: String,
+    /// The state before the change.
+    pub old: FiberState,
+    /// The state after the change.
+    pub new: FiberState,
+}
 
 /// The lifecycle state of a fiber, mirroring FiberState upstream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +58,9 @@ pub struct EffectMeta {
 pub(crate) struct FiberData {
     pub id: FiberId,
     pub uid: i64,
+    /// The plugin name captured at creation, so status events and dying
+    /// fibers keep their identity after the runtime is gone.
+    pub name: String,
     pub ctx: Context,
     pub parent: Context,
     pub config: crate::events::Value,
@@ -59,6 +80,7 @@ impl FiberData {
         FiberData {
             id: FiberId(0),
             uid: 0,
+            name: "root".to_string(),
             ctx: ctx.clone(),
             parent: ctx,
             config: crate::events::value(()),
@@ -108,9 +130,11 @@ impl Fiber {
 
     /// The plugin name, resolved through the parent chain like upstream.
     pub fn name(&self) -> String {
-        // Lock order: Core before FiberData, everywhere.
+        // Lock order: Core before FiberData, everywhere. The data lookup
+        // goes through the held core lock; a second self.core.borrow()
+        // here would deadlock the Mutex build.
         let core = self.core.borrow();
-        let data = self.data();
+        let data = core.fiber(self.id);
         let f = data.borrow();
         if let Some(runtime_id) = f.runtime
             && let Some(runtime) = core.runtimes.get(&runtime_id)
@@ -336,9 +360,16 @@ pub(crate) fn new_fiber(
     };
     let core = Rc::clone(&parent.core);
     let uid = core.borrow_mut().next_uid();
+    let name = core
+        .borrow()
+        .runtimes
+        .get(&runtime)
+        .map(|r| r.name.clone())
+        .unwrap_or_default();
     FiberData {
         id,
         uid,
+        name,
         ctx,
         parent: parent.clone(),
         config,
@@ -399,6 +430,29 @@ fn deps_ready(core: &Rc<RefCell<Core>>, id: FiberId) -> bool {
     true
 }
 
+/// Deliver `internal/status` when the fiber's state differs from `old`.
+/// Listener bodies run with no borrows held.
+pub fn settle_state(core: &Rc<RefCell<Core>>, id: FiberId, old: FiberState) {
+    let (ctx, change) = {
+        let c = core.borrow();
+        let fiber = c.fiber(id);
+        let f = fiber.borrow();
+        if f.state == old {
+            return;
+        }
+        (
+            f.ctx.clone(),
+            StatusChange {
+                uid: f.uid,
+                name: f.name.clone(),
+                old,
+                new: f.state,
+            },
+        )
+    };
+    ctx.emit_named(EVENT_STATUS, &[crate::events::value(change)]);
+}
+
 /// One step of the fiber state machine, driven by the drain queue. User
 /// code always runs without borrows held.
 pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
@@ -409,7 +463,7 @@ pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
         Restart,
     }
 
-    let action = {
+    let (action, old_state) = {
         let fiber = core.borrow().fiber(id);
         let mut f = fiber.borrow_mut();
         if f.executing {
@@ -428,7 +482,7 @@ pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
         if f.executing {
             return;
         }
-        match (state, want_active, restart, disposed) {
+        let action = match (state, want_active, restart, disposed) {
             (_, _, _, true) if state != FiberState::Active => {
                 f.state = FiberState::Disposed;
                 f.uid = -1;
@@ -449,8 +503,10 @@ pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
                 Action::Activate
             }
             _ => Action::None,
-        }
+        };
+        (action, state)
     };
+    settle_state(core, id, old_state);
 
     match action {
         Action::None => {}
@@ -464,8 +520,11 @@ pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
         }
         Action::Restart => {
             unload(core, id);
-            let fiber = core.borrow().fiber(id);
-            fiber.borrow_mut().state = FiberState::Loading;
+            {
+                let fiber = core.borrow().fiber(id);
+                fiber.borrow_mut().state = FiberState::Loading;
+            }
+            settle_state(core, id, FiberState::Unloading);
             load(core, id);
             finish_transition(core, id, true);
         }
@@ -473,19 +532,24 @@ pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
 }
 
 fn finish_transition(core: &Rc<RefCell<Core>>, id: FiberId, activated: bool) {
-    let fiber = core.borrow().fiber(id);
-    let mut f = fiber.borrow_mut();
-    f.executing = false;
-    if f.disposed {
-        f.state = FiberState::Disposed;
-        f.uid = -1;
-    } else if f.state != FiberState::Failed {
-        f.state = if activated {
-            FiberState::Active
-        } else {
-            FiberState::Pending
-        };
-    }
+    let old = {
+        let fiber = core.borrow().fiber(id);
+        let mut f = fiber.borrow_mut();
+        f.executing = false;
+        let old = f.state;
+        if f.disposed {
+            f.state = FiberState::Disposed;
+            f.uid = -1;
+        } else if f.state != FiberState::Failed {
+            f.state = if activated {
+                FiberState::Active
+            } else {
+                FiberState::Pending
+            };
+        }
+        old
+    };
+    settle_state(core, id, old);
 }
 
 /// Roll back every effect of the current activation, last in, first out.
@@ -501,29 +565,65 @@ fn unload(core: &Rc<RefCell<Core>>, id: FiberId) {
 }
 
 /// Execute the plugin body, collecting its effects. On failure the partial
-/// effects roll back and the fiber enters StateFailed.
+/// effects roll back and the fiber enters `StateFailed`.
 fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
-    let (ctx, config, apply, name) = {
-        // Lock order: Core before FiberData, everywhere.
+    enum Outcome {
+        Dead,
+        Ready {
+            ctx: Context,
+            config: crate::events::Value,
+            apply: ApplyFn,
+            name: String,
+        },
+    }
+    let prior = {
+        // Lock order: Core before FiberData, everywhere. Every core lock
+        // is released before settle_state re-locks it.
         let c = core.borrow();
         let fiber = c.fiber(id);
         let mut f = fiber.borrow_mut();
+        let prior = f.state;
         f.bag = Some(Bag::new());
         f.state = FiberState::Loading;
-        let Some(runtime_id) = f.runtime else {
-            f.state = FiberState::Disposed;
-            f.uid = -1;
+        prior
+    };
+    settle_state(core, id, prior);
+
+    let outcome = {
+        let c = core.borrow();
+        let fiber = c.fiber(id);
+        let mut f = fiber.borrow_mut();
+        match f.runtime {
+            None => {
+                f.state = FiberState::Disposed;
+                f.uid = -1;
+                Outcome::Dead
+            }
+            Some(runtime_id) => {
+                if let Some(runtime) = c.runtimes.get(&runtime_id) {
+                    Outcome::Ready {
+                        ctx: f.ctx.clone(),
+                        config: f.config.clone(),
+                        apply: Rc::clone(&runtime.apply),
+                        name: runtime.name.clone(),
+                    }
+                } else {
+                    // The runtime was removed concurrently; the fiber is
+                    // stale and will settle as disposed on its next
+                    // transition.
+                    f.state = FiberState::Disposed;
+                    f.uid = -1;
+                    Outcome::Dead
+                }
+            },
+        }
+    };
+    let (ctx, config, apply, name) = match outcome {
+        Outcome::Dead => {
+            settle_state(core, id, FiberState::Loading);
             return;
-        };
-        let Some(runtime) = c.runtimes.get(&runtime_id) else {
-            // The runtime was removed concurrently; the fiber is stale and
-            // will settle as disposed on its next transition.
-            f.state = FiberState::Disposed;
-            f.uid = -1;
-            return;
-        };
-        let (runtime_name, apply) = (runtime.name.clone(), Rc::clone(&runtime.apply));
-        (f.ctx.clone(), f.config.clone(), apply, runtime_name)
+        }
+        Outcome::Ready { ctx, config, apply, name } => (ctx, config, apply, name),
     };
 
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| apply(&ctx, config)));
@@ -545,5 +645,6 @@ fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
         core.borrow_mut().log_error(&name, &message);
         let fiber = core.borrow().fiber(id);
         fiber.borrow_mut().state = FiberState::Failed;
+        settle_state(core, id, FiberState::Loading);
     }
 }

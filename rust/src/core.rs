@@ -44,6 +44,9 @@ pub(crate) struct RuntimeData {
     pub name: String,
     pub apply: ApplyFn,
     pub fibers: Vec<FiberId>,
+    /// The plugin body this runtime was started from, kept so a registry
+    /// restore can restart the runtime after its fibers went away.
+    pub base: Rc<PluginBase>,
 }
 
 /// A cleanup releasing one resource.
@@ -174,6 +177,10 @@ pub(crate) struct Core {
     pub last_key: IsolateKey,
     pub fibers: Vec<Option<Rc<RefCell<FiberData>>>>,
     pub runtimes: HashMap<u64, RuntimeData>,
+    /// Bodies of runtimes that were removed, kept so a registry restore
+    /// can restart them with their last config. Restarts run on the
+    /// context calling restore.
+    pub stash: HashMap<u64, (Rc<PluginBase>, crate::events::Value)>,
     pub counter: usize,
 
     /// Re-entrant API depth: transitions drain when the outermost public
@@ -198,6 +205,7 @@ impl Core {
             last_key: 0,
             fibers: Vec::new(),
             runtimes: HashMap::new(),
+            stash: HashMap::new(),
             counter: 0,
             depth: 0,
             draining: false,

@@ -224,6 +224,21 @@ impl Context {
     /// # Panics
     /// When a listener for `E` receives an argument of another type; this
     /// indicates mixed typed and untyped use of the same event name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cordis::{Context, EventOptions};
+    ///
+    /// struct Ping(u32);
+    ///
+    /// let ctx = Context::new();
+    /// let _hook = ctx.on(
+    ///     |ping: &Ping| assert_eq!(ping.0, 42),
+    ///     EventOptions::default(),
+    /// );
+    /// ctx.emit(Ping(42));
+    /// ```
     pub fn on<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.on_named(event_name::<E>(), typed_listener(listener), options)
     }

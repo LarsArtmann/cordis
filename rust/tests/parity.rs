@@ -488,3 +488,99 @@ fn realm_filtered_events() {
     assert_eq!(*root_calls.borrow(), 1);
     assert_eq!(*iso_calls.borrow(), 2);
 }
+
+#[test]
+fn status_events_emission_order() {
+    use cordis::{FiberState as FS, StatusChange, EVENT_STATUS};
+
+    let ctx = Context::new();
+    let seq: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    {
+        let seq = Rc::clone(&seq);
+        ctx.on_named(
+            EVENT_STATUS,
+            Rc::new(move |args: &[Value]| {
+                let change = args[0].downcast_ref::<StatusChange>().unwrap();
+                seq.borrow_mut().push(format!(
+                    "{}:{:?}-> {:?}",
+                    change.name, change.old, change.new
+                ));
+                None
+            }),
+            opts(),
+        )
+        .unwrap();
+    }
+
+    let p = plugin("svc", |_ctx: &Context, _: &()| Ok(()));
+    let fiber = start_fn(&ctx, &p, ()).unwrap();
+    let started = vec![
+        "svc:Pending-> Loading".to_string(),
+        "svc:Loading-> Active".to_string(),
+    ];
+    assert_eq!(*seq.borrow(), started);
+
+    // A restart passes through unloading and loading again.
+    seq.borrow_mut().clear();
+    fiber.restart().unwrap();
+    let restarted = vec![
+        "svc:Active-> Unloading".to_string(),
+        "svc:Unloading-> Loading".to_string(),
+        "svc:Loading-> Active".to_string(),
+    ];
+    assert_eq!(*seq.borrow(), restarted);
+
+    // Disposal unwinds through unloading into disposed; the name stays
+    // with the fiber even though the runtime is already gone.
+    seq.borrow_mut().clear();
+    fiber.dispose();
+    let disposed = vec![
+        "svc:Active-> Unloading".to_string(),
+        "svc:Unloading-> Disposed".to_string(),
+    ];
+    assert_eq!(*seq.borrow(), disposed);
+    assert_eq!(fiber.state(), FS::Disposed);
+}
+
+#[test]
+fn snapshot_restore_roundtrip() {
+    let ctx = Context::new();
+    let starts = Rc::new(RefCell::new(0));
+    let p = plugin("svc", {
+        let starts = Rc::clone(&starts);
+        move |ctx: &Context, conf: &u32| {
+            *starts.borrow_mut() += 1;
+            ctx.provide_named("port", value(*conf))?;
+            Ok(())
+        }
+    });
+
+    let fiber = start_fn(&ctx, &p, 8080_u32).unwrap();
+    let snapshot = ctx.snapshot();
+    assert_eq!(snapshot.runtimes.len(), 1);
+    assert_eq!(snapshot.runtimes[0].name, "svc");
+    assert_eq!(snapshot.runtimes[0].fibers.len(), 1);
+
+    // Delete rolls the registry back; restore brings the runtime back
+    // with its config and it serves again.
+    ctx.registry().delete(&p);
+    assert_eq!(ctx.snapshot().runtimes.len(), 0);
+    ctx.restore(&snapshot);
+    assert_eq!(*starts.borrow(), 2);
+    assert_eq!(
+        *ctx.get_named("port").unwrap().downcast::<u32>().unwrap(),
+        8080
+    );
+
+    // Restoring an older snapshot disposes runtimes that appeared since.
+    let after = ctx.snapshot();
+    let extra = plugin("extra", |_ctx: &Context, _: &()| Ok(()));
+    start_fn(&ctx, &extra, ()).unwrap();
+    assert_eq!(ctx.snapshot().runtimes.len(), 2);
+    ctx.restore(&after);
+    let now = ctx.snapshot();
+    assert_eq!(now.runtimes.len(), 1);
+    assert_eq!(now.runtimes[0].name, "svc");
+    assert_eq!(now.runtimes[0].fibers[0].state, FiberState::Active);
+    drop(fiber);
+}

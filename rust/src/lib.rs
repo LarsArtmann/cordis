@@ -30,11 +30,13 @@ mod events;
 mod fiber;
 mod plugin;
 mod service;
+mod snapshot;
 
 pub use context::{Context, Disposer, Filter, Guard};
 pub use events::{event_name, service_name, value, EventOptions, Listener, Next, Value};
-pub use fiber::{EffectMeta, Fiber, FiberState};
+pub use fiber::{EffectMeta, Fiber, FiberState, StatusChange, EVENT_STATUS};
 pub use plugin::{plugin, plugin_type_id, start, start_fn, FnPlugin, Plugin, Registry, Runtime};
+pub use snapshot::{FiberSnapshot, RegistrySnapshot, RuntimeSnapshot};
 
 use std::error::Error as StdError;
 use std::fmt;
