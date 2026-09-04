@@ -31,6 +31,18 @@ impl Context {
     /// context's realm. The service is bound to the context's fiber exactly
     /// like a named service and rolls back with it. Providing the same type
     /// twice in one realm fails with [`crate::Error::DuplicateService`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cordis::Context;
+    ///
+    /// struct Greeting(String);
+    ///
+    /// let ctx = Context::new();
+    /// ctx.provide(Greeting("hello".into())).unwrap();
+    /// assert_eq!(ctx.get::<Greeting>().unwrap().0, "hello");
+    /// ```
     pub fn provide<T: crate::sync::Shared>(&self, value: T) -> crate::Result<Disposer> {
         self.provide_named(crate::events::service_name::<T>(), Rc::new(value))
     }
@@ -96,6 +108,16 @@ impl Context {
 
     /// The service published under `name` in this context's realm, when its
     /// provider is active.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cordis::Context;
+    ///
+    /// let ctx = Context::new();
+    /// ctx.provide_named("port", cordis::value(8080_u32)).unwrap();
+    /// assert_eq!(*ctx.get_named("port").unwrap().downcast::<u32>().unwrap(), 8080);
+    /// ```
     pub fn get_named(&self, name: &str) -> Option<Value> {
         let key = {
             let mut core = self.core.borrow_mut();
