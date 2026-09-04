@@ -6,22 +6,22 @@ its architecture.
 
 ## Parity matrix
 
-| Feature | Go | Rust | Zig |
-| ------- | -- | ---- | --- |
-| Context tree (extend) | DONE | DONE | DONE |
-| Isolation realms + shared labels | DONE | DONE | DONE |
-| Intercept (per-scope service config) | DONE | - | - |
-| Effects: nested, labeled, LIFO rollback, introspection | DONE | DONE | partial (no labels tree introspection) |
-| Events: emit / parallel / serial / bail / waterfall | DONE | DONE | emit + bail |
-| Event filters + global listeners | DONE | DONE | DONE |
-| Fiber states, dispose, restart, update | DONE | DONE | DONE |
-| Inject reactivity (pending / unload / reload in place) | DONE | DONE | DONE |
-| Registry (size / has / delete, snapshot restore) | DONE | DONE | - |
-| Config validation | DONE | - | - |
-| Fiber Await | DONE | - | - |
-| Batch transactions | DONE | DONE | - |
-| Logger service (levels, exporters, buffer) | DONE | - | - |
-| Concurrent access safety | DONE (race tested) | single-threaded | single-threaded |
+| Feature                                                | Go                 | Rust            | Zig                                    |
+| ------------------------------------------------------ | ------------------ | --------------- | -------------------------------------- |
+| Context tree (extend)                                  | DONE               | DONE            | DONE                                   |
+| Isolation realms + shared labels                       | DONE               | DONE            | DONE                                   |
+| Intercept (per-scope service config)                   | DONE               | -               | -                                      |
+| Effects: nested, labeled, LIFO rollback, introspection | DONE               | DONE            | partial (no labels tree introspection) |
+| Events: emit / parallel / serial / bail / waterfall    | DONE               | DONE            | emit + bail                            |
+| Event filters + global listeners                       | DONE               | DONE            | DONE                                   |
+| Fiber states, dispose, restart, update                 | DONE               | DONE            | DONE                                   |
+| Inject reactivity (pending / unload / reload in place) | DONE               | DONE            | DONE                                   |
+| Registry (size / has / delete, snapshot restore)       | DONE               | DONE            | -                                      |
+| Config validation                                      | DONE               | -               | -                                      |
+| Fiber Await                                            | DONE               | -               | -                                      |
+| Batch transactions                                     | DONE               | DONE            | -                                      |
+| Logger service (levels, exporters, buffer)             | DONE               | -               | -                                      |
+| Concurrent access safety                               | DONE (race tested) | single-threaded | single-threaded                        |
 
 ## Planned, in priority order
 
@@ -52,13 +52,13 @@ Landed native APIs:
 
 Divergences from TS behavior, by design:
 
-- Typed services and events derive their names from *type identity*
+- Typed services and events derive their names from _type identity_
   (reflect string / `type_name` / `@typeName`). Two distinct types with
   identical derived names (structurally identical anonymous types, or
   Rust's best-effort `type_name`) would share a slot; prefer named types.
-- Rust's `Plugin` trait registry identity is per *type*
+- Rust's `Plugin` trait registry identity is per _type_
   (`plugin_type_id::<P>()`), while `FnPlugin` values are per
-  *construction* — both match "one plugin definition, one runtime".
+  _construction_ — both match "one plugin definition, one runtime".
 - Zig's `TypedPlugin` registry identity is the address of the comptime
   view embedded in the returned type.
 - String event names are not restricted in code, but the convention is

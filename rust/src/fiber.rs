@@ -107,20 +107,26 @@ impl Fiber {
 
     /// The plugin name, resolved through the parent chain like upstream.
     pub fn name(&self) -> String {
+        // Lock order: Core before FiberData, everywhere.
+        let core = self.core.borrow();
         let data = self.data();
         let f = data.borrow();
         if let Some(runtime_id) = f.runtime
-            && let Some(runtime) = self.core.borrow().runtimes.get(&runtime_id)
+            && let Some(runtime) = core.runtimes.get(&runtime_id)
             && !runtime.name.is_empty()
         {
             return runtime.name.clone();
         }
-        if f.runtime.is_none() {
-            return "root".to_string();
-        }
+        let is_root = f.runtime.is_none();
         let parent = f.parent.clone();
         drop(f);
-        parent.fiber().name()
+        drop(data);
+        drop(core);
+        if is_root {
+            "root".to_string()
+        } else {
+            parent.fiber().name()
+        }
     }
 
     /// The context owned by this fiber.
@@ -491,17 +497,25 @@ fn unload(core: &Rc<RefCell<Core>>, id: FiberId) {
 /// effects roll back and the fiber enters StateFailed.
 fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
     let (ctx, config, apply, name) = {
-        let fiber = core.borrow().fiber(id);
+        // Lock order: Core before FiberData, everywhere.
+        let c = core.borrow();
+        let fiber = c.fiber(id);
         let mut f = fiber.borrow_mut();
         f.bag = Some(Bag::new());
         f.state = FiberState::Loading;
-        let runtime_id = f.runtime.expect("plugin fiber");
-        let (runtime_name, apply) = {
-            let c = core.borrow();
-            eprintln!("LOAD fiber {:?} runtime {} queue {:?} disposeflag {}", id, runtime_id, c.dirty, fiber.borrow().disposed);
-            let runtime = c.runtimes.get(&runtime_id).unwrap_or_else(|| panic!("runtime {} missing, have {:?}", runtime_id, c.runtimes.keys().collect::<Vec<_>>()));
-            (runtime.name.clone(), Rc::clone(&runtime.apply))
+        let Some(runtime_id) = f.runtime else {
+            f.state = FiberState::Disposed;
+            f.uid = -1;
+            return;
         };
+        let Some(runtime) = c.runtimes.get(&runtime_id) else {
+            // The runtime was removed concurrently; the fiber is stale and
+            // will settle as disposed on its next transition.
+            f.state = FiberState::Disposed;
+            f.uid = -1;
+            return;
+        };
+        let (runtime_name, apply) = (runtime.name.clone(), Rc::clone(&runtime.apply));
         (f.ctx.clone(), f.config.clone(), apply, runtime_name)
     };
 

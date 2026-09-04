@@ -1,80 +1,87 @@
-import { defineProperty } from 'cosmokit'
-import { Context } from './context'
-import { createCallable, joinPrototype, symbols, Tracker } from './utils'
+import { defineProperty } from "cosmokit";
+import { Context } from "./context";
+import { createCallable, joinPrototype, symbols, Tracker } from "./utils";
 
 export abstract class Service<out T = never> {
-  static readonly init: unique symbol = symbols.init
-  static readonly check: unique symbol = symbols.check
-  static readonly config: unique symbol = symbols.config
-  static readonly invoke: unique symbol = symbols.invoke
-  static readonly extend: unique symbol = symbols.extend
-  static readonly tracker: unique symbol = symbols.tracker
-  static readonly resolveConfig: unique symbol = symbols.resolveConfig
+  static readonly init: unique symbol = symbols.init;
+  static readonly check: unique symbol = symbols.check;
+  static readonly config: unique symbol = symbols.config;
+  static readonly invoke: unique symbol = symbols.invoke;
+  static readonly extend: unique symbol = symbols.extend;
+  static readonly tracker: unique symbol = symbols.tracker;
+  static readonly resolveConfig: unique symbol = symbols.resolveConfig;
 
-  declare [symbols.config]: T
+  declare [symbols.config]: T;
 
-  public name!: string
+  public name!: string;
 
-  constructor(protected ctx: Context, name: string) {
-    name ??= this.constructor['provide'] as string
+  constructor(
+    protected ctx: Context,
+    name: string,
+  ) {
+    name ??= this.constructor["provide"] as string;
 
-    let self = this
+    let self = this;
     const tracker: Tracker = {
       associate: name,
-      property: 'ctx',
-    }
+      property: "ctx",
+    };
     if (self[symbols.invoke]) {
-      self = createCallable(name, joinPrototype(Object.getPrototypeOf(this), Function.prototype), tracker)
+      self = createCallable(
+        name,
+        joinPrototype(Object.getPrototypeOf(this), Function.prototype),
+        tracker,
+      );
     }
-    self.ctx = ctx
-    self.name = name
-    defineProperty(self, symbols.tracker, tracker)
+    self.ctx = ctx;
+    self.name = name;
+    defineProperty(self, symbols.tracker, tracker);
 
-    self.ctx.reflect.provide(name, self, this[symbols.check])
-    return self
+    self.ctx.reflect.provide(name, self, this[symbols.check]);
+    return self;
   }
 
   protected [symbols.filter](ctx: Context) {
-    return ctx[symbols.isolate][this.name] === this.ctx[symbols.isolate][this.name]
+    return ctx[symbols.isolate][this.name] === this.ctx[symbols.isolate][this.name];
   }
 
   protected [symbols.extend](props?: any) {
-    let self: any
+    let self: any;
     if (this[Service.invoke]) {
-      self = createCallable(this.name, this, this[symbols.tracker])
+      self = createCallable(this.name, this, this[symbols.tracker]);
     } else {
-      self = Object.create(this)
+      self = Object.create(this);
     }
-    return Object.assign(self, props)
+    return Object.assign(self, props);
   }
 
   [symbols.resolveConfig](base?: T, head?: T): T {
-    let intercept = this.ctx[Context.intercept]
-    const configs: any[] = []
+    let intercept = this.ctx[Context.intercept];
+    const configs: any[] = [];
     while (this.name in intercept) {
       if (Object.hasOwn(intercept, this.name)) {
-        configs.unshift(intercept[this.name])
+        configs.unshift(intercept[this.name]);
       }
-      intercept = Object.getPrototypeOf(intercept)
+      intercept = Object.getPrototypeOf(intercept);
     }
-    if (base) configs.unshift(base)
-    if (head) configs.push(head)
-    if (this['Config']?.merge) {
-      return this['Config'].merge(...configs)
+    if (base) configs.unshift(base);
+    if (head) configs.push(head);
+    if (this["Config"]?.merge) {
+      return this["Config"].merge(...configs);
     } else {
-      return Object.assign({}, ...configs)
+      return Object.assign({}, ...configs);
     }
   }
 
   static [Symbol.hasInstance](instance: any) {
-    if (!instance) return false
-    let constructor = instance.constructor
+    if (!instance) return false;
+    let constructor = instance.constructor;
     while (constructor) {
       // constructor may be a proxy
-      constructor = constructor.prototype?.constructor
-      if (constructor === this) return true
-      constructor &&= Object.getPrototypeOf(constructor)
+      constructor = constructor.prototype?.constructor;
+      if (constructor === this) return true;
+      constructor &&= Object.getPrototypeOf(constructor);
     }
-    return false
+    return false;
   }
 }

@@ -5,11 +5,11 @@ the cordis core (fiber lifecycle, inject reactivity, LIFO rollback,
 isolation realms, root restart cascades). Each port ships a runner that
 executes the script and emits a canonical trace:
 
-| Runner | Location |
-| ------ | -------- |
-| Go | `go/golden_test.go` |
-| Rust | `rust/tests/golden.rs` |
-| Zig | `zig/tests/golden.zig` |
+| Runner | Location               |
+| ------ | ---------------------- |
+| Go     | `go/golden_test.go`    |
+| Rust   | `rust/tests/golden.rs` |
+| Zig    | `zig/tests/golden.zig` |
 
 The trace must equal `expected.txt` byte for byte in every language. A
 divergence means one port's semantics drifted; fix the port, never the
