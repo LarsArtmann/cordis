@@ -20,7 +20,7 @@ const Counter = struct {
 };
 
 fn onCount(ctx: *Context, name: []const u8, counter: *Counter) !void {
-    try ctx.on(name, Listener.bind(Counter, counter, Counter.listener));
+    try ctx.onNamed(name, Listener.bind(Counter, counter, Counter.listener));
 }
 
 test "on, emit, dispose by fiber rollback" {
@@ -29,7 +29,7 @@ test "on, emit, dispose by fiber rollback" {
 
     var counter = Counter{};
     try onCount(ctx, "test", &counter);
-    ctx.emit("test", &.{});
+    ctx.emitNamed("test", &.{});
     try std.testing.expectEqual(1, counter.n);
 }
 
@@ -57,9 +57,9 @@ test "bail returns first non-null result" {
         }
     };
     var s = S{};
-    try ctx.on("test", Listener.bind(S, &s, S.first));
-    try ctx.on("test", Listener.bind(S, &s, S.second));
-    try ctx.on("test", Listener.bind(S, &s, S.third));
+    try ctx.onNamed("test", Listener.bind(S, &s, S.first));
+    try ctx.onNamed("test", Listener.bind(S, &s, S.second));
+    try ctx.onNamed("test", Listener.bind(S, &s, S.third));
 
     const result = ctx.bail("test", &.{});
     try std.testing.expect(result != null);
@@ -72,7 +72,8 @@ test "plugin lifecycle: apply, restart, dispose" {
 
     const S = struct {
         applies: i32 = 0,
-        fn apply(c: *Context, config: ?Value) cordis.Error!void {
+        fn apply(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = c;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
@@ -109,16 +110,18 @@ test "plugin error rolls back partial effects" {
             self.calls += 1;
             return null;
         }
-        fn faulty(c: *Context, config: ?Value) cordis.Error!void {
+        fn faulty(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.on("custom-event", Listener.bind(@This(), self, listener));
+            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
             return cordis.Error.PluginFailed;
         }
-        fn healthy(c: *Context, config: ?Value) cordis.Error!void {
+        fn healthy(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.on("custom-event", Listener.bind(@This(), self, listener));
+            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
         }
         var registry: *@This() = undefined;
     };
@@ -132,7 +135,7 @@ test "plugin error rolls back partial effects" {
 
     try std.testing.expectEqual(cordis.FiberState.failed, faulty_fiber.state());
     try std.testing.expectEqual(1, ctx.loggedErrors().len);
-    ctx.emit("custom-event", &.{});
+    ctx.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(1, s.calls); // only the healthy listener
 }
 
@@ -148,15 +151,17 @@ test "nested plugins cascade on dispose" {
             self.calls += 1;
             return null;
         }
-        fn applyInner(c: *Context, config: ?Value) cordis.Error!void {
+        fn applyInner(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.on("custom-event", Listener.bind(@This(), self, listener));
+            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
         }
-        fn applyOuter(c: *Context, config: ?Value) cordis.Error!void {
+        fn applyOuter(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.on("custom-event", Listener.bind(@This(), self, listener));
+            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
             _ = try self.inner.start(c, null);
         }
         var registry: *@This() = undefined;
@@ -167,11 +172,11 @@ test "nested plugins cascade on dispose" {
     const outer = Plugin{ .name = "outer", .apply = S.applyOuter };
 
     const fiber = try outer.start(ctx, null);
-    ctx.emit("custom-event", &.{});
+    ctx.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(2, s.calls);
 
     fiber.dispose();
-    ctx.emit("custom-event", &.{});
+    ctx.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(2, s.calls); // both rolled back
 }
 
@@ -182,20 +187,22 @@ test "inject reactivity: pending, active, unload, reload" {
     const S = struct {
         applies: i32 = 0,
         cleanups: i32 = 0,
-        fn apply(c: *Context, config: ?Value) cordis.Error!void {
+        fn apply(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = c;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
             self.applies += 1;
         }
-        fn provideFoo(c: *Context, config: ?Value) cordis.Error!void {
+        fn provideFoo(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
             const v: i32 = 1;
-            const stored = c.core.a().create(i32) catch return cordis.Error.OutOfMemory;
+            const stored = c.core.a().create(i32) catch @panic("cordis: out of memory");
             stored.* = v;
             _ = self;
-            try c.provide("foo", cordis.value(stored));
+            try c.provideNamed("foo", cordis.value(stored));
         }
         var registry: *@This() = undefined;
     };
@@ -230,7 +237,8 @@ test "isolation realms" {
 
     const S = struct {
         calls: i32 = 0,
-        fn apply(c: *Context, config: ?Value) cordis.Error!void {
+        fn apply(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = c;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
@@ -248,15 +256,15 @@ test "isolation realms" {
     }
 
     const v1: i32 = 100;
-    try ctx.provide("foo", cordis.value(&v1));
+    try ctx.provideNamed("foo", cordis.value(&v1));
     try std.testing.expectEqual(1, s.calls);
-    try std.testing.expect(iso1.get("foo") == null);
+    try std.testing.expect(iso1.getNamed("foo") == null);
 
     const v2: i32 = 200;
-    try iso1.provide("foo", cordis.value(&v2));
+    try iso1.provideNamed("foo", cordis.value(&v2));
     try std.testing.expectEqual(2, s.calls);
-    try std.testing.expect(iso2.get("foo") == null);
-    try std.testing.expectEqual(100, ctx.getTyped(i32, "foo").?.*);
+    try std.testing.expect(iso2.getNamed("foo") == null);
+    try std.testing.expectEqual(100, ctx.getTypedNamed(i32, "foo").?.*);
 }
 
 test "shared isolation label shares the realm" {
@@ -267,9 +275,9 @@ test "shared isolation label shares the realm" {
     const iso2 = ctx.isolateShared("foo", "shared");
 
     const v: i32 = 200;
-    try iso1.provide("foo", cordis.value(&v));
-    try std.testing.expectEqual(200, iso2.getTyped(i32, "foo").?.*);
-    try std.testing.expect(ctx.get("foo") == null);
+    try iso1.provideNamed("foo", cordis.value(&v));
+    try std.testing.expectEqual(200, iso2.getTypedNamed(i32, "foo").?.*);
+    try std.testing.expect(ctx.getNamed("foo") == null);
 }
 
 test "realm filtered events" {
@@ -283,11 +291,11 @@ test "realm filtered events" {
     try onCount(isolated, "custom-event", &iso_calls);
 
     const emitter = isolated.withFilter(Context.realmFilter(isolated, "foo"));
-    emitter.emit("custom-event", &.{});
+    emitter.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(0, root_calls.n);
     try std.testing.expectEqual(1, iso_calls.n);
 
-    ctx.emit("custom-event", &.{});
+    ctx.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(1, root_calls.n);
     try std.testing.expectEqual(2, iso_calls.n);
 }
@@ -298,7 +306,8 @@ test "update reinvokes with the new config" {
 
     const S = struct {
         last: i32 = 0,
-        fn apply(c: *Context, config: ?Value) cordis.Error!void {
+        fn apply(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
+            _ = p;
             _ = c;
             const self: *@This() = @ptrCast(@alignCast(registry));
             self.last = @as(*const i32, @ptrCast(@alignCast(config.?))).*;

@@ -1,0 +1,68 @@
+# cordis golden scenario v1
+#
+# Executed verbatim by the Go, Rust and Zig runners (go/golden_test.go,
+# rust/tests/golden.rs, zig/tests/golden.zig). The trace each runner emits
+# must match golden/expected.txt exactly in every language, which pins the
+# shared semantics: fiber lifecycle, inject reactivity, LIFO rollback,
+# isolation realms and root restart cascades.
+#
+# Ops:
+#   provide <name>
+#   provide-in-realm <name> realm=<label>
+#   withdraw <name>
+#   withdraw-in-realm <name> realm=<label>
+#   start <plugin> [inject=<a,b,...>] [config=<int>] [lifo]
+#   start-isolated <plugin> inject=<a,b,...> realm=<label> [config=<int>]
+#   update <plugin> <int>
+#   restart <plugin>
+#   dispose <plugin>
+#   restart-root
+#   expect-state <plugin> <STATE>
+#
+# Every plugin body traces "apply <name> config=<n>" and attaches a cleanup
+# tracing "cleanup <name>"; the lifo variant attaches three cleanups
+# (#1..#3) to pin reverse order rollback.
+
+provide config
+start consumer inject=config config=1
+expect-state consumer ACTIVE
+
+start watcher inject=config config=2
+expect-state watcher ACTIVE
+
+withdraw config
+expect-state consumer PENDING
+expect-state watcher PENDING
+
+provide config
+expect-state consumer ACTIVE
+expect-state watcher ACTIVE
+
+update consumer 5
+expect-state consumer ACTIVE
+
+restart consumer
+expect-state consumer ACTIVE
+
+dispose consumer
+expect-state consumer DISPOSED
+withdraw config
+
+start stacker config=0 lifo
+expect-state stacker ACTIVE
+dispose stacker
+expect-state stacker DISPOSED
+
+provide-in-realm config realm=tenant-a
+start-isolated isolated-watcher inject=config realm=tenant-a config=9
+expect-state isolated-watcher ACTIVE
+expect-state watcher PENDING
+
+withdraw-in-realm config realm=tenant-a
+expect-state isolated-watcher PENDING
+
+provide config
+start tail config=0
+expect-state tail ACTIVE
+restart-root
+expect-state tail DISPOSED

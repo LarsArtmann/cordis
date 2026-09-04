@@ -13,14 +13,14 @@ func TestProvideGet(t *testing.T) {
 	if _, ok := ctx.Get("counter"); ok {
 		t.Fatal("expected missing service")
 	}
-	if _, err := Get[*Counter](ctx, "counter"); err == nil {
+	if _, err := GetNamed[*Counter](ctx, "counter"); err == nil {
 		t.Fatal("expected typed get to fail for missing service")
 	}
 
 	if _, err := ctx.Provide("counter", counter); err != nil {
 		t.Fatal(err)
 	}
-	got := MustGet[*Counter](ctx, "counter")
+	got := MustGetNamed[*Counter](ctx, "counter")
 	if got != counter {
 		t.Fatal("expected the provided instance")
 	}
@@ -55,10 +55,13 @@ func TestProvideUnprovideCycle(t *testing.T) {
 func TestInjectWaitsForService(t *testing.T) {
 	ctx := New()
 	calls := 0
-	fiber := ctx.Inject([]string{"foo"}, func(ctx *Context) error {
+	fiber, err := ctx.Inject([]string{"foo"}, func(ctx *Context) error {
 		calls++
 		return nil
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if fiber == nil {
 		t.Fatal("expected fiber")
 	}
@@ -82,7 +85,7 @@ func TestInjectWaitsForService(t *testing.T) {
 func TestInjectUnloadsWithDependency(t *testing.T) {
 	ctx := New()
 	var seq []string
-	fiber := ctx.Inject([]string{"foo"}, func(ctx *Context) error {
+	fiber, err := ctx.Inject([]string{"foo"}, func(ctx *Context) error {
 		seq = append(seq, "apply")
 		_, err := ctx.Effect(func(ctx *Context) error {
 			ctx.registerTestCleanup(func() { seq = append(seq, "cleanup") })
@@ -90,6 +93,9 @@ func TestInjectUnloadsWithDependency(t *testing.T) {
 		})
 		return err
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dispose, err := ctx.Provide("foo", 1)
 	if err != nil {
 		t.Fatal(err)
@@ -171,7 +177,7 @@ func TestUpdateCoordination(t *testing.T) {
 		return err
 	})
 	consumer := NewPlugin("consumer", func(ctx *Context, mode string) error {
-		calls = append(calls, pair{MustGet[int](ctx, "value"), mode})
+		calls = append(calls, pair{MustGetNamed[int](ctx, "value"), mode})
 		return nil
 	}).Inject("value")
 
@@ -207,7 +213,10 @@ func TestUpdateCoordination(t *testing.T) {
 func TestServiceCheck(t *testing.T) {
 	ctx := New()
 	ready := false
-	fiber := ctx.Inject([]string{"foo"}, func(ctx *Context) error { return nil })
+	fiber, err := ctx.Inject([]string{"foo"}, func(ctx *Context) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := ctx.Provide("foo", 1, func() bool { return ready }); err != nil {
 		t.Fatal(err)
 	}

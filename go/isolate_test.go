@@ -10,14 +10,16 @@ func TestIsolatedContexts(t *testing.T) {
 	calls := 0
 	disposed := 0
 	watch := func(c *Context) {
-		c.Inject([]string{"foo"}, func(ctx *Context) error {
+		if _, err := c.Inject([]string{"foo"}, func(ctx *Context) error {
 			calls++
 			_, err := ctx.Effect(func(ctx *Context) error {
 				ctx.registerTestCleanup(func() { disposed++ })
 				return nil
 			})
 			return err
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	watch(ctx)
 	watch(ctx1)
@@ -58,14 +60,16 @@ func TestIsolateSharedLabel(t *testing.T) {
 	calls := 0
 	disposed := 0
 	watch := func(c *Context) {
-		c.Inject([]string{"foo"}, func(ctx *Context) error {
+		if _, err := c.Inject([]string{"foo"}, func(ctx *Context) error {
 			calls++
 			_, err := ctx.Effect(func(ctx *Context) error {
 				ctx.registerTestCleanup(func() { disposed++ })
 				return nil
 			})
 			return err
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	watch(ctx)
 	watch(ctx1)
@@ -128,4 +132,62 @@ func TestIsolatedEvents(t *testing.T) {
 	if rootCalls != 1 || isolatedCalls != 2 {
 		t.Fatalf("expected both listeners, got root=%d isolated=%d", rootCalls, isolatedCalls)
 	}
+}
+
+func TestIsolateLabelsAreCollisionFree(t *testing.T) {
+	ctx := New()
+	// With the previous fmt.Sprintf("%s\x00%v") encoding these four labels
+	// collapsed into two identical synthetic keys.
+	a := ctx.Isolate("foo", "bar\x00baz")
+	b := ctx.Isolate("foo", "bar", "baz")
+	c := ctx.Isolate("foo\x00bar", "baz")
+	d := ctx.Isolate("foo", "bar\x00", "baz")
+
+	if _, err := a.Provide("foo", 1); err != nil {
+		t.Fatal(err)
+	}
+	for name, isolated := range map[string]*Context{
+		"b": b,
+		"c": c,
+		"d": d,
+	} {
+		if _, err := isolated.Provide("foo", 1); err != nil {
+			t.Fatalf("label of scope %s must denote a distinct realm: %v", name, err)
+		}
+	}
+
+	// Equal labels still share one realm.
+	a2 := ctx.Isolate("foo", "bar\x00baz")
+	if _, ok := a2.Get("foo"); !ok {
+		t.Fatal("equal labels must share the realm")
+	}
+}
+
+func TestIsolateLabelOfEveryKind(t *testing.T) {
+	ctx := New()
+	type tenant struct{ id int }
+
+	shared := ctx.Isolate("foo", tenant{id: 7})
+	other := ctx.Isolate("foo", tenant{id: 8})
+	same := ctx.Isolate("foo", tenant{id: 7})
+
+	if _, err := shared.Provide("foo", 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.Provide("foo", 1); err != nil {
+		t.Fatal("struct labels with different values must denote different realms:", err)
+	}
+	if _, ok := same.Get("foo"); !ok {
+		t.Fatal("equal struct labels must share the realm")
+	}
+}
+
+func TestIsolateUncomparableLabelPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected a panic for an uncomparable label")
+		}
+	}()
+	ctx := New()
+	ctx.Isolate("foo", []int{1, 2, 3})
 }

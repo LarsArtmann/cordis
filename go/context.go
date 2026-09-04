@@ -1,6 +1,9 @@
 package cordis
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
 // Context is a scope in the context tree. It carries the services, event
 // listeners and effects registered within it, and it is the single handle
@@ -66,8 +69,9 @@ func (c *Context) Extend() *Context {
 // provided again within the realm.
 //
 // Passing the same label to multiple Isolate calls lets them share one
-// realm, mirroring ctx.isolate(name, label) upstream. Labels must be
-// comparable; when omitted, a fresh realm is created.
+// realm, mirroring ctx.isolate(name, label) upstream: the label itself is
+// the realm identity, exactly like the realm symbols upstream. Labels must
+// be comparable; when omitted, a fresh realm is created.
 func (c *Context) Isolate(name string, label ...any) *Context {
 	child := c.Extend()
 	child.isolate = map[string]isolateKey{name: c.realmKey(name, label)}
@@ -76,15 +80,26 @@ func (c *Context) Isolate(name string, label ...any) *Context {
 
 // realmKey derives the child's key for name. Without a label a brand new key
 // is allocated; with a label the label itself names the realm, so isolated
-// contexts created with equal labels share it.
+// contexts created with equal labels share it, mirroring the label symbols
+// upstream. Labels are stored in their own table keyed by value, so no
+// string formatting can ever make two distinct labels collide.
 func (c *Context) realmKey(name string, label []any) isolateKey {
 	if len(label) > 0 && label[0] != nil {
 		if key, ok := label[0].(isolateKey); ok {
 			return key
 		}
-		// Map arbitrary user labels into the key space deterministically by
-		// storing them in the root realm table under a synthetic name.
-		return c.core.rootKey(fmt.Sprintf("%s\x00%v", name, label[0]))
+		lbl := label[0]
+		if !reflect.TypeOf(lbl).Comparable() {
+			panic(fmt.Sprintf("cordis: isolate label of type %T is not comparable", lbl))
+		}
+		c.core.mu.Lock()
+		defer c.core.mu.Unlock()
+		if key, ok := c.core.labels[lbl]; ok {
+			return key
+		}
+		c.core.lastKey++
+		c.core.labels[lbl] = c.core.lastKey
+		return c.core.lastKey
 	}
 	c.core.mu.Lock()
 	defer c.core.mu.Unlock()

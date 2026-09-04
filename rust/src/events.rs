@@ -16,6 +16,21 @@ pub fn value<T: Any>(v: T) -> Value {
     Rc::new(v)
 }
 
+/// The canonical name of the typed service `T`: its `type_name`. The typed
+/// service API stores services under this name, so lookups resolve by type
+/// identity instead of hand written strings. Pass it to `FnPlugin::inject`
+/// and `Context::isolate` to depend on, or isolate, a typed service.
+pub fn service_name<T: ?Sized + Any>() -> &'static str {
+    std::any::type_name::<T>()
+}
+
+/// The canonical name of the typed event `E`. Typed events dispatch under
+/// this name; string event names remain for the framework's internal
+/// namespace.
+pub fn event_name<E: ?Sized + Any>() -> &'static str {
+    std::any::type_name::<E>()
+}
+
 /// A chain continuation for the waterfall dispatch mode.
 pub type Next = Rc<dyn Fn(&[Value]) -> Option<Value>>;
 
@@ -39,9 +54,12 @@ pub struct EventOptions {
 }
 
 impl Context {
-    /// Subscribe to `name`. The subscription is bound to this context's
-    /// fiber and rolls back with it; the returned Disposer removes it early.
-    pub fn on(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
+    /// Subscribe to the string event `name`. Prefer the typed [`Context::on`]
+    /// for application events; string names remain for the framework's
+    /// internal namespace and dynamic event names. The subscription is bound
+    /// to this context's fiber and rolls back with it; the returned Disposer
+    /// removes it early.
+    pub fn on_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
         core::enter(&self.core);
         let result = self.on_inner(name, listener, options);
         core::leave(&self.core);
@@ -93,11 +111,12 @@ impl Context {
         }))
     }
 
-    /// Subscribe to `name`, removing the listener after the first delivery.
-    pub fn once(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
+    /// Subscribe to the string event `name`, removing the listener after the
+    /// first delivery.
+    pub fn once_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
         let holder: Rc<std::cell::RefCell<Option<Disposer>>> = Rc::new(std::cell::RefCell::new(None));
         let fired = Rc::new(std::cell::Cell::new(false));
-        let disposer = self.on(
+        let disposer = self.on_named(
             name,
             Rc::new({
                 let holder = Rc::clone(&holder);
@@ -136,9 +155,9 @@ impl Context {
             .collect()
     }
 
-    /// Deliver `name` synchronously to every matching listener in
-    /// registration order.
-    pub fn emit(&self, name: &str, args: &[Value]) {
+    /// Deliver the string event `name` synchronously to every matching
+    /// listener in registration order.
+    pub fn emit_named(&self, name: &str, args: &[Value]) {
         for hook in self.resolve_hooks(name) {
             (hook.listener)(args);
         }
@@ -185,6 +204,32 @@ impl Context {
         self.bail(name, args)
     }
 
+    /// Subscribe to the event type `E`. Typed events are the primary event
+    /// API: the event name derives from the type, so emitters and listeners
+    /// cannot drift apart on a hand written string, and the payload arrives
+    /// fully typed. The subscription is bound to this context's fiber and
+    /// rolls back with it; the returned Disposer removes it early.
+    ///
+    /// # Panics
+    /// When a listener for `E` receives an argument of another type; this
+    /// indicates mixed typed and untyped use of the same event name.
+    pub fn on<E: Any>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
+        self.on_named(event_name::<E>(), typed_listener(listener), options)
+    }
+
+    /// Subscribe to the event type `E`, removing the listener after the
+    /// first delivery.
+    pub fn once<E: Any>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
+        self.once_named(event_name::<E>(), typed_listener(listener), options)
+    }
+
+    /// Deliver `event` synchronously to every listener registered for its
+    /// type `E`, in registration order, applying this context's emission
+    /// filter.
+    pub fn emit<E: Any>(&self, event: E) {
+        self.emit_named(event_name::<E>(), &[value(event)]);
+    }
+
     /// Compose listeners around a terminal function, mirroring
     /// ctx.waterfall upstream. Each listener receives the arguments followed
     /// by a `next` continuation; not calling `next` short-circuits the chain.
@@ -226,4 +271,21 @@ fn remove_hook(core: &mut Core, name: &str, hook: &Rc<Hook>) {
     if let Some(hooks) = core.hooks.get_mut(name) {
         hooks.retain(|candidate| !Rc::ptr_eq(candidate, hook));
     }
+}
+
+/// Wrap a typed listener into the type erased Listener shape.
+fn typed_listener<E: Any>(listener: impl Fn(&E) + 'static) -> Listener {
+    Rc::new(move |args: &[Value]| {
+        let first = args
+            .first()
+            .unwrap_or_else(|| panic!("cordis: typed event {} expects one argument", event_name::<E>()));
+        let typed = first.clone().downcast::<E>().unwrap_or_else(|_| {
+            panic!(
+                "cordis: typed event {} received an argument of another type",
+                event_name::<E>()
+            )
+        });
+        listener(&typed);
+        None
+    })
 }

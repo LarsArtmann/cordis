@@ -31,7 +31,10 @@ pub fn value(ptr: anytype) Value {
     return @ptrCast(ptr);
 }
 
-/// Errors surfaced by the framework.
+/// Errors surfaced by the framework. Allocation failures are deliberately
+/// not part of the domain error set: the tree owns an arena, and running
+/// out of memory aborts the process (std style) instead of being threaded
+/// through every API.
 pub const Error = error{
     /// An effect, listener, service or plugin was registered on a context
     /// whose fiber is no longer active.
@@ -40,8 +43,6 @@ pub const Error = error{
     DuplicateService,
     /// A plugin body failed.
     PluginFailed,
-    /// Out of memory.
-    OutOfMemory,
 };
 
 /// The lifecycle state of a fiber, mirroring FiberState upstream.
@@ -86,8 +87,10 @@ const Hook = struct {
     global: bool,
 };
 
-/// A plugin body.
-pub const ApplyFn = *const fn (ctx: *Context, config: ?Value) Error!void;
+/// A plugin body. It receives the plugin it runs on, the fiber's context
+/// and the raw config value; comptime constructed plugins unwrap the config
+/// in their bridge before user code sees it.
+pub const ApplyFn = *const fn (plugin: *const Plugin, ctx: *Context, config: ?Value) Error!void;
 
 /// A unit of composable behavior: a name, injected dependencies and an
 /// apply function. The Plugin value address is its registry identity, so
@@ -96,12 +99,52 @@ pub const Plugin = struct {
     name: []const u8,
     inject: []const []const u8 = &.{},
     apply: ApplyFn,
+    /// Runtime context passed through to apply, mirroring the
+    /// std.mem.Function pattern. Comptime constructed plugins leave it null.
+    data: ?*const anyopaque = null,
 
     /// Start this plugin on ctx with an optional config value.
     pub fn start(self: *const Plugin, ctx: *Context, config: ?Value) Error!Fiber {
         return startPlugin(ctx, self, config);
     }
 };
+
+/// Comptime plugin construction: returns a plugin type carrying the name,
+/// the typed apply function and the injected dependencies, all resolved at
+/// compile time. The type is the registry identity (its embedded view has
+/// a unique address per instantiation), so starting it twice creates two
+/// fibers of one runtime:
+///
+/// ```zig
+/// const Greeter = cordis.TypedPlugin("greeter", Config, apply, &.{});
+/// const fiber = try Greeter.start(ctx, Config{ .name = "ada" });
+/// ```
+///
+/// The apply function receives the fully typed config; the bridge that
+/// erases its type is generated at comptime.
+pub fn TypedPlugin(
+    comptime name: []const u8,
+    comptime Config: type,
+    comptime apply: *const fn (*Context, Config) Error!void,
+    comptime inject: []const []const u8,
+) type {
+    return struct {
+        const view = Plugin{ .name = name, .inject = inject, .apply = bridge };
+
+        fn bridge(_: *const Plugin, ctx: *Context, raw: ?Value) Error!void {
+            const config: *const Config = @ptrCast(@alignCast(raw.?));
+            return apply(ctx, config.*);
+        }
+
+        /// Start the plugin on ctx with a typed config. The config is
+        /// copied into the tree's arena.
+        pub fn start(ctx: *Context, config: Config) Error!Fiber {
+            const stored = ctx.core.a().create(Config) catch @panic("cordis: out of memory");
+            stored.* = config;
+            return startPlugin(ctx, &view, value(stored));
+        }
+    };
+}
 
 const Cleanup = struct {
     ctx: *anyopaque,
@@ -257,7 +300,7 @@ pub const Core = struct {
         const f = self.fibers.items[id].?;
         if (f.queued) return;
         f.queued = true;
-        self.dirty.append(self.gpa, id) catch @panic("OOM");
+        self.dirty.append(self.gpa, id) catch @panic("cordis: out of memory");
     }
 
     fn nextUid(self: *Core) i64 {
@@ -268,8 +311,8 @@ pub const Core = struct {
     fn rootKey(self: *Core, name: []const u8) u64 {
         if (self.keys.get(name)) |key| return key;
         self.last_key += 1;
-        const owned = self.a().dupe(u8, name) catch @panic("OOM");
-        self.keys.put(owned, self.last_key) catch @panic("OOM");
+        const owned = self.a().dupe(u8, name) catch @panic("cordis: out of memory");
+        self.keys.put(owned, self.last_key) catch @panic("cordis: out of memory");
         return self.last_key;
     }
 
@@ -315,8 +358,8 @@ pub const Core = struct {
     }
 
     fn logError(self: *Core, name: []const u8, message: []const u8) void {
-        const line = std.fmt.allocPrint(self.a(), "<{s}> {s}", .{ name, message }) catch @panic("OOM");
-        self.errors.append(self.gpa, line) catch @panic("OOM");
+        const line = std.fmt.allocPrint(self.a(), "<{s}> {s}", .{ name, message }) catch @panic("cordis: out of memory");
+        self.errors.append(self.gpa, line) catch @panic("cordis: out of memory");
     }
 
     fn transition(self: *Core, id: usize) void {
@@ -402,7 +445,7 @@ pub const Core = struct {
         f.bag = Bag.empty;
         f.state = .loading;
         const plugin = f.plugin.?;
-        plugin.apply(f.ctx, f.config) catch |err| {
+        plugin.apply(plugin, f.ctx, f.config) catch |err| {
             self.unload(id);
             self.logError(plugin.name, @errorName(err));
             f.state = .failed;
@@ -500,7 +543,7 @@ pub const Context = struct {
 
     /// A plain child scope, mirroring ctx.extend() upstream.
     pub fn extend(self: *Context) *Context {
-        const child = self.core.a().create(Context) catch @panic("OOM");
+        const child = self.core.a().create(Context) catch @panic("cordis: out of memory");
         child.* = .{ .core = self.core, .parent = self, .fiber = self.fiber, .realm = null, .filter = null, .collect = null };
         return child;
     }
@@ -515,7 +558,7 @@ pub const Context = struct {
     /// A child scope sharing a realm with every other scope created with
     /// the same label, mirroring ctx.isolate(name, label).
     pub fn isolateShared(self: *Context, name: []const u8, label: []const u8) *Context {
-        const synthetic = std.fmt.allocPrint(self.core.a(), "{s}\x00{s}", .{ name, label }) catch @panic("OOM");
+        const synthetic = std.fmt.allocPrint(self.core.a(), "{s}\x00{s}", .{ name, label }) catch @panic("cordis: out of memory");
         const child = self.extend();
         child.realm = .{ .name = name, .key = self.core.rootKey(synthetic) };
         return child;
@@ -572,28 +615,30 @@ pub const Context = struct {
         if (self.core.fibers.items[self.fiber].?.disposed) return Error.InactiveEffect;
     }
 
-    /// Subscribe to `name`. The subscription is bound to this context's
-    /// fiber and rolls back with it.
-    pub fn on(self: *Context, name: []const u8, listener: Listener) Error!void {
+    /// Subscribe to the string event `name`. Prefer `onTyped` for
+    /// application events; string names remain for the framework's internal
+    /// namespace. The subscription is bound to this context's fiber and
+    /// rolls back with it.
+    pub fn onNamed(self: *Context, name: []const u8, listener: Listener) Error!void {
         self.core.enter();
         defer self.core.leave();
         try self.assertActive();
         const bag = self.currentBag() orelse return Error.InactiveEffect;
 
         const list = blk: {
-            const result = self.core.hooks.getOrPut(name) catch return Error.OutOfMemory;
+            const result = self.core.hooks.getOrPut(name) catch @panic("cordis: out of memory");
             if (!result.found_existing) {
-                result.key_ptr.* = self.core.a().dupe(u8, name) catch return Error.OutOfMemory;
+                result.key_ptr.* = self.core.a().dupe(u8, name) catch @panic("cordis: out of memory");
                 result.value_ptr.* = .empty;
             }
             break :blk result.value_ptr;
         };
-        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = false }) catch return Error.OutOfMemory;
+        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = false }) catch @panic("cordis: out of memory");
 
         const removal = self.core.a().create(struct {
             list: *std.ArrayList(Hook),
             listener: Listener,
-        }) catch return Error.OutOfMemory;
+        }) catch @panic("cordis: out of memory");
         const Removal = @TypeOf(removal.*);
         removal.* = .{ .list = list, .listener = listener };
         bag.append(self.core.gpa, .{
@@ -608,7 +653,7 @@ pub const Context = struct {
                     }
                 }
             }.run),
-        }) catch return Error.OutOfMemory;
+        }) catch @panic("cordis: out of memory");
     }
 
     fn visible(self: *Context, hook: Hook) bool {
@@ -617,13 +662,32 @@ pub const Context = struct {
         return filter(self, hook.owner);
     }
 
-    /// Deliver `name` synchronously to every matching listener in
-    /// registration order.
-    pub fn emit(self: *Context, name: []const u8, args: []const Value) void {
+    /// Attach a labeled cleanup to the current effect scope: the enclosing
+    /// effect body while one runs, otherwise the fiber itself. Cleanups run
+    /// on rollback, last in, first out. `data` must outlive the
+    /// registration (static or arena allocated) and is passed to `f`
+    /// unchanged.
+    pub fn attach(self: *Context, data: anytype, comptime f: *const fn (@TypeOf(data)) void) Error!void {
+        self.core.enter();
+        defer self.core.leave();
+        try self.assertActive();
+        const bag = self.currentBag() orelse return Error.InactiveEffect;
+        const Data = @TypeOf(data);
+        if (@typeInfo(Data) != .pointer) @compileError("cordis.attach expects a pointer to the cleanup data, got " ++ @typeName(Data));
+        const Child = @typeInfo(Data).pointer.child;
+        bag.append(self.core.gpa, .{
+            .label = "ctx.attach()",
+            .cleanup = Cleanup.bind(Child, data, f),
+        }) catch @panic("cordis: out of memory");
+    }
+
+    /// Deliver the string event `name` synchronously to every matching
+    /// listener in registration order.
+    pub fn emitNamed(self: *Context, name: []const u8, args: []const Value) void {
         const list = self.core.hooks.getPtr(name) orelse return;
         var snapshot: std.ArrayList(Hook) = .empty;
         defer snapshot.deinit(self.core.gpa);
-        snapshot.appendSlice(self.core.gpa, list.items) catch @panic("OOM");
+        snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory");
         for (snapshot.items) |hook| {
             if (!self.visible(hook)) continue;
             _ = hook.listener.call(hook.listener.ctx, args);
@@ -636,7 +700,7 @@ pub const Context = struct {
         const list = self.core.hooks.getPtr(name) orelse return null;
         var snapshot: std.ArrayList(Hook) = .empty;
         defer snapshot.deinit(self.core.gpa);
-        snapshot.appendSlice(self.core.gpa, list.items) catch @panic("OOM");
+        snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory");
         for (snapshot.items) |hook| {
             if (!self.visible(hook)) continue;
             if (hook.listener.call(hook.listener.ctx, args)) |result| return result;
@@ -644,23 +708,25 @@ pub const Context = struct {
         return null;
     }
 
-    /// Publish `val` under `name` in this context's service realm. Bound to
-    /// the context's fiber and withdrawn automatically when it unloads.
-    pub fn provide(self: *Context, name: []const u8, val: Value) Error!void {
+    /// Publish `val` under the string `name` in this context's service
+    /// realm. Prefer `provide` (typed); string names remain for dynamic
+    /// service names. Bound to the context's fiber and withdrawn
+    /// automatically when it unloads.
+    pub fn provideNamed(self: *Context, name: []const u8, val: Value) Error!void {
         self.core.enter();
         defer self.core.leave();
         try self.assertActive();
         const bag = self.currentBag() orelse return Error.InactiveEffect;
         const key = self.isolateKey(name);
         if (self.core.store.contains(key)) return Error.DuplicateService;
-        self.core.store.put(key, .{ .fiber = self.fiber, .val = val }) catch return Error.OutOfMemory;
+        self.core.store.put(key, .{ .fiber = self.fiber, .val = val }) catch @panic("cordis: out of memory");
 
         const removal = self.core.a().create(struct {
             core: *Core,
             ctx: *Context,
             key: u64,
             name: []const u8,
-        }) catch return Error.OutOfMemory;
+        }) catch @panic("cordis: out of memory");
         const Removal = @TypeOf(removal.*);
         removal.* = .{ .core = self.core, .ctx = self, .key = key, .name = name };
         bag.append(self.core.gpa, .{
@@ -671,14 +737,14 @@ pub const Context = struct {
                     r.core.notifyDependents(r.ctx, r.name);
                 }
             }.run),
-        }) catch return Error.OutOfMemory;
+        }) catch @panic("cordis: out of memory");
 
         self.core.notifyDependents(self, name);
     }
 
-    /// The service published under `name` in this context's realm, when its
-    /// provider is active.
-    pub fn get(self: *Context, name: []const u8) ?Value {
+    /// The service published under the string `name` in this context's
+    /// realm, when its provider is active.
+    pub fn getNamed(self: *Context, name: []const u8) ?Value {
         const key = self.isolateKey(name);
         const imp = self.core.store.get(key) orelse return null;
         const provider = self.core.fibers.items[imp.fiber].?;
@@ -686,16 +752,61 @@ pub const Context = struct {
         return imp.val;
     }
 
-    /// The typed variant of get.
-    pub fn getTyped(self: *Context, comptime T: type, name: []const u8) ?*const T {
-        const v = self.get(name) orelse return null;
+    /// The typed variant of getNamed.
+    pub fn getTypedNamed(self: *Context, comptime T: type, name: []const u8) ?*const T {
+        const v = self.getNamed(name) orelse return null;
         return @ptrCast(@alignCast(v));
+    }
+
+    /// Publish `ptr`'s pointee as the service identified by its type T in
+    /// this context's realm. The service name is the type identity, so
+    /// providers and consumers cannot drift apart on a hand written string;
+    /// the value must outlive the registration (static or arena allocated).
+    /// Isolate the typed service with `isolate(@typeName(T))`.
+    pub fn provide(self: *Context, ptr: anytype) Error!void {
+        const P = @TypeOf(ptr);
+        if (@typeInfo(P) != .pointer) @compileError("cordis.provide expects a pointer, got " ++ @typeName(P));
+        const T = @typeInfo(P).pointer.child;
+        return self.provideNamed(@typeName(T), value(ptr));
+    }
+
+    /// The service of type T published in this context's realm, when its
+    /// provider is active.
+    pub fn getTyped(self: *Context, comptime T: type) ?*const T {
+        return self.getTypedNamed(T, @typeName(T));
+    }
+
+    /// Subscribe to the event type E. Typed events are the primary event
+    /// API: the event name derives from the type, so emitters and listeners
+    /// cannot drift apart on a hand written string, and the payload arrives
+    /// fully typed. `data` is passed to `f` unchanged and must outlive the
+    /// subscription; the subscription is bound to this context's fiber and
+    /// rolls back with it.
+    pub fn onTyped(self: *Context, comptime E: type, data: anytype, comptime f: *const fn (@TypeOf(data), E) void) Error!void {
+        const Data = @TypeOf(data);
+        if (@typeInfo(Data) != .pointer) @compileError("cordis.onTyped expects a pointer to the listener data, got " ++ @typeName(Data));
+        const wrapper = struct {
+            fn call(raw: *anyopaque, args: []const Value) ?Value {
+                const d: Data = @ptrCast(@alignCast(raw));
+                const event: *const E = @ptrCast(@alignCast(args[0]));
+                f(d, event.*);
+                return null;
+            }
+        };
+        return self.onNamed(@typeName(E), .{ .ctx = @ptrCast(data), .call = &wrapper.call });
+    }
+
+    /// Deliver `event` synchronously to every listener registered for its
+    /// type E, in registration order, applying this context's emission
+    /// filter.
+    pub fn emitTyped(self: *Context, comptime E: type, event: *const E) void {
+        self.emitNamed(@typeName(E), &.{value(event)});
     }
 
     /// Start an anonymous plugin that runs `apply` once every service in
     /// `deps` is available, mirroring ctx.inject upstream.
     pub fn injectPlugin(self: *Context, name: []const u8, deps: []const []const u8, apply: ApplyFn) Error!Fiber {
-        const plugin = self.core.a().create(Plugin) catch return Error.OutOfMemory;
+        const plugin = self.core.a().create(Plugin) catch @panic("cordis: out of memory");
         plugin.* = .{ .name = name, .inject = deps, .apply = apply };
         return startPlugin(self, plugin, null);
     }
@@ -713,9 +824,9 @@ fn startPlugin(ctx: *Context, plugin: *const Plugin, config: ?Value) Error!Fiber
     try ctx.assertActive();
     const parent_bag = ctx.currentBag() orelse return Error.InactiveEffect;
 
-    const fiber_ctx = core.a().create(Context) catch return Error.OutOfMemory;
+    const fiber_ctx = core.a().create(Context) catch @panic("cordis: out of memory");
     fiber_ctx.* = .{ .core = core, .parent = ctx, .fiber = undefined, .realm = null, .filter = null, .collect = null };
-    const data = core.a().create(FiberData) catch return Error.OutOfMemory;
+    const data = core.a().create(FiberData) catch @panic("cordis: out of memory");
     data.* = .{
         .uid = core.nextUid(),
         .ctx = fiber_ctx,
@@ -731,13 +842,13 @@ fn startPlugin(ctx: *Context, plugin: *const Plugin, config: ?Value) Error!Fiber
         .bag = null,
     };
     const id = core.fibers.items.len;
-    core.fibers.append(core.gpa, data) catch return Error.OutOfMemory;
+    core.fibers.append(core.gpa, data) catch @panic("cordis: out of memory");
     fiber_ctx.fiber = id;
     const fiber = Fiber{ .core = core, .id = id };
 
     // Register the fiber's disposal on the parent fiber's effect bag so
     // parent rollback cascades to child plugins.
-    const holder = core.a().create(Fiber) catch return Error.OutOfMemory;
+    const holder = core.a().create(Fiber) catch @panic("cordis: out of memory");
     holder.* = fiber;
     parent_bag.append(core.gpa, .{
         .label = "ctx.plugin()",
@@ -746,12 +857,12 @@ fn startPlugin(ctx: *Context, plugin: *const Plugin, config: ?Value) Error!Fiber
                 f.dispose();
             }
         }.run),
-    }) catch return Error.OutOfMemory;
+    }) catch @panic("cordis: out of memory");
 
     const key = @intFromPtr(plugin);
-    const result = core.runtimes.getOrPut(key) catch return Error.OutOfMemory;
+    const result = core.runtimes.getOrPut(key) catch @panic("cordis: out of memory");
     if (!result.found_existing) result.value_ptr.* = .empty;
-    result.value_ptr.append(core.gpa, id) catch return Error.OutOfMemory;
+    result.value_ptr.append(core.gpa, id) catch @panic("cordis: out of memory");
 
     core.queue(id);
     return fiber;

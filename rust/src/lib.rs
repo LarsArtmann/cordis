@@ -29,10 +29,10 @@ mod fiber;
 mod plugin;
 mod service;
 
-pub use context::{Context, Disposer, Filter};
-pub use events::{value, EventOptions, Listener, Next, Value};
+pub use context::{Context, Disposer, Filter, Guard};
+pub use events::{event_name, service_name, value, EventOptions, Listener, Next, Value};
 pub use fiber::{EffectMeta, Fiber, FiberState};
-pub use plugin::{plugin, start, Plugin, Registry, Runtime};
+pub use plugin::{plugin, plugin_type_id, start, start_fn, FnPlugin, Plugin, Registry, Runtime};
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -80,4 +80,5 @@ impl fmt::Display for Error {
 
 impl StdError for Error {}
 
-pub(crate) type Result<T> = std::result::Result<T, Error>;
+/// The crate wide result type.
+pub type Result<T> = std::result::Result<T, Error>;
