@@ -92,9 +92,26 @@ Short- and mid-term actionable tasks. Long-term direction lives in
 - [ ] Add a `golangci-lint` job to `ports.yml` (clean locally, unenforced
       in CI) and consider `-count=3` on the Go test step as the flake
       canary
+- [ ] Run the golden test twice in CI (determinism canary)
+- [ ] CI job running `nix flake check -L` remotely
 - [ ] PORTS.md: cross-port API comparison table (typed service/event/
       plugin forms side by side)
 - [ ] AGENTS.md: Zig 0.16 std gotchas (`std.Io.Dir.cwd`,
       `ArrayListUnmanaged .empty`, anonymous non-zig imports → WriteFiles
       + `@embedFile`)
 - [ ] Root README: CI badges + port pitch with golden-test mention
+
+## Quality extras (from the 2026-09-04 Pareto plan)
+
+Full breakdown: `docs/planning/2026-09-04_15-42_ship-parity-ecosystem-pareto-plan.md`.
+
+- [ ] Benchmark skeletons: drain-queue throughput (Go first, then
+      Rust/Zig stubs) with a results table
+- [ ] Property test: LIFO rollback order under randomized registration
+      sequences (Go)
+- [ ] Parity-matrix generator from FEATURES.md (drift alarm vs ROADMAP)
+- [ ] Releases: tag `go/v0.1.0`, bump+tag Rust `v0.2.0`, note the Zig
+      version
+- [ ] `zig build -femit-docs` pass; fix broken doc comments
+- [ ] Stale-LSP/`errors.AsType` sweep verification (builds clean)
+- [ ] Weekly "run all three suites + flake check" cadence note in AGENTS.md
