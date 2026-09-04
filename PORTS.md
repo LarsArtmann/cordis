@@ -20,5 +20,16 @@ All three ports share one architecture:
   freely re-enter the framework.
 - **Realm keyed services.** `isolate` creates service realms backed by
   per-realm keys, the counterpart of the realm symbols upstream.
+- **Native-max API layer.** The primary service and event APIs are keyed by
+  type identity (Go `reflect` + generics, Rust `type_name`, Zig
+  `@typeName`); named/string forms remain for dynamic names and the
+  `internal/` event namespace. Plugin definitions use each language's
+  native form: Go generics (`NewPlugin[C]`), a Rust trait with an
+  associated `Config` (plus `FnPlugin` closures), a Zig comptime
+  constructor (`TypedPlugin`). See `ROADMAP.md` for the documented
+  divergences.
+- **One golden scenario, three runners.** `golden/scenario.txt` is executed
+  by the Go, Rust and Zig test suites; each must emit the exact trace in
+  `golden/expected.txt`, pinning the shared semantics across ports.
 
 See [ROADMAP.md](../ROADMAP.md) for the parity matrix and planned work.

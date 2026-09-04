@@ -14,8 +14,79 @@
         "aarch64-darwin"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
+      # The live working tree (not the committed git tree), so checks see
+      # uncommitted port changes too. Vendored/build directories are
+      # excluded to keep the store copy small and deterministic.
+      source = builtins.path {
+        path = ./.;
+        name = "cordis-source";
+        filter =
+          path: type:
+          !builtins.elem (baseNameOf path) [
+            ".git"
+            "node_modules"
+            "target"
+            ".zig-cache"
+            "dist"
+            ".turbo"
+          ];
+      };
     in
     {
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          go = pkgs.runCommand "cordis-go-tests" {
+            nativeBuildInputs = [
+              pkgs.go
+              pkgs.gcc
+            ];
+          } ''
+            export GOCACHE="$TMPDIR/go-build"
+            export HOME="$TMPDIR"
+            cp -r ${source}/go cordis-go
+            cp -r ${source}/golden golden
+            chmod -R u+w cordis-go
+            cd cordis-go
+            go vet ./...
+            go test -race -count=1 ./...
+            touch $out
+          '';
+
+          rust = pkgs.runCommand "cordis-rust-tests" {
+            nativeBuildInputs = with pkgs; [
+              rustc
+              cargo
+              clippy
+              gcc
+            ];
+          } ''
+            export CARGO_HOME="$TMPDIR/cargo"
+            export CARGO_TARGET_DIR="$TMPDIR/target"
+            cp -r ${source}/rust cordis-rust
+            cp -r ${source}/golden golden
+            chmod -R u+w cordis-rust
+            cd cordis-rust
+            cargo clippy --offline --all-targets -- --deny warnings
+            cargo test --offline
+            touch $out
+          '';
+
+          zig = pkgs.runCommand "cordis-zig-tests" {
+            nativeBuildInputs = [ pkgs.zig ];
+          } ''
+            cp -r ${source} cordis
+            chmod -R u+w cordis
+            cd cordis/zig
+            zig build test --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
+            touch $out
+          '';
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let
