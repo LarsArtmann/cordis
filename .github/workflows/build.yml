@@ -7,6 +7,7 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out
@@ -24,6 +25,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     permissions:
       id-token: write
@@ -55,6 +57,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     strategy:
       fail-fast: false
