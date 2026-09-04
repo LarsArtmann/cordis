@@ -82,6 +82,10 @@ func TestIntervalFuncDispose(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	d()
+	// Ticks run on their own goroutine: let an in-flight callback finish
+	// before sampling the baseline, otherwise its increment would land
+	// inside the quiet window and look like a tick after disposal.
+	time.Sleep(60 * time.Millisecond)
 	baseline := calls.Load()
 	time.Sleep(40 * time.Millisecond)
 	if calls.Load() != baseline {
