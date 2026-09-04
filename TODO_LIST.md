@@ -87,8 +87,13 @@ Short- and mid-term actionable tasks. Long-term direction lives in
 - [x] `FEATURES.md` and `docs/DOMAIN_LANGUAGE.md`
 - [x] Cross-language golden scenario test (one spec, three runners; see
       `golden/README.md`)
-- [ ] Push the branch and confirm the first green `ports.yml` run; record
-      the run URL here
+- [x] Push the branch and confirm the first green `ports.yml` run; record
+      the run URL here — GREEN: run
+      https://github.com/LarsArtmann/cordis/actions/runs/33877878539
+      (session work, `f175630`) and
+      https://github.com/LarsArtmann/cordis/actions/runs/33879875106
+      (Pareto plan push, `5d5a4de`), go/rust/zig jobs all success
+      (2026-09-04)
 - [ ] Add a `golangci-lint` job to `ports.yml` (clean locally, unenforced
       in CI) and consider `-count=3` on the Go test step as the flake
       canary
