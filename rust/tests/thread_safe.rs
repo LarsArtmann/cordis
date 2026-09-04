@@ -46,7 +46,6 @@ fn threads_share_one_tree() {
                     }
                 });
                 let fiber = start_fn(&ctx, &plugin, i).expect("start");
-                let _ = fiber.restart();
                 ctx.emit_named("tick", &[value(i)]);
                 received.fetch_add(1, Ordering::SeqCst);
                 fiber.dispose();

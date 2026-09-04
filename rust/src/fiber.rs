@@ -173,6 +173,7 @@ impl Fiber {
                 if let Some(runtime) = core.runtimes.get_mut(&runtime_id) {
                     runtime.fibers.retain(|id| *id != fiber.id);
                     if runtime.fibers.is_empty() {
+                        eprintln!("REMOVED runtime {} at fiber {}", runtime_id, fiber.id.0);
                         core.runtimes.remove(&runtime_id);
                     }
                 }
@@ -497,7 +498,8 @@ fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
         let runtime_id = f.runtime.expect("plugin fiber");
         let (runtime_name, apply) = {
             let c = core.borrow();
-            let runtime = c.runtimes.get(&runtime_id).expect("runtime");
+            eprintln!("LOAD fiber {:?} runtime {} queue {:?} disposeflag {}", id, runtime_id, c.dirty, fiber.borrow().disposed);
+            let runtime = c.runtimes.get(&runtime_id).unwrap_or_else(|| panic!("runtime {} missing, have {:?}", runtime_id, c.runtimes.keys().collect::<Vec<_>>()));
             (runtime.name.clone(), Rc::clone(&runtime.apply))
         };
         (f.ctx.clone(), f.config.clone(), apply, runtime_name)

@@ -328,8 +328,12 @@ fn start_inner(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value
     {
         let mut core = ctx.core.borrow_mut();
         core.runtimes
-            .get_mut(&runtime_id)
-            .expect("runtime")
+            .entry(runtime_id)
+            .or_insert_with(|| RuntimeData {
+                name: base.name.clone(),
+                apply: Rc::clone(&base.apply),
+                fibers: Vec::new(),
+            })
             .fibers
             .push(id);
         core.queue(id);
