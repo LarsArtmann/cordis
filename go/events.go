@@ -49,7 +49,9 @@ const (
 	// Args: (name string, value any).
 	EventService = "internal/service"
 	// EventUpdate intercepts config updates as a waterfall.
-	// Args: (config any, noSave bool, next func(...any) any).
+	// Args: (*Fiber, config any, noSave bool, next func(...any) any).
+	// The fiber identifies the updating fiber so a single global listener can
+	// route the update, mirroring the fiber bound listener context upstream.
 	EventUpdate = "internal/update"
 	// EventGet intercepts failed service lookups as a waterfall, needed by
 	// the loader and hmr ports. Args: (name string, *GetError,
