@@ -106,3 +106,14 @@ impl<T> MaybeSendSync for T {}
 pub trait MaybeSendSync: Send + Sync {}
 #[cfg(feature = "thread-safe")]
 impl<T: Send + Sync> MaybeSendSync for T {}
+
+/// The `Send` requirement for closures stored in the tree.
+#[cfg(not(feature = "thread-safe"))]
+pub trait MaybeSend {}
+#[cfg(not(feature = "thread-safe"))]
+impl<T> MaybeSend for T {}
+
+#[cfg(feature = "thread-safe")]
+pub trait MaybeSend: Send {}
+#[cfg(feature = "thread-safe")]
+impl<T: Send> MaybeSend for T {}

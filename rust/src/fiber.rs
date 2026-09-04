@@ -242,7 +242,7 @@ impl Context {
     /// Attach a cleanup to the current effect scope: the enclosing effect
     /// body while one runs, otherwise the fiber itself. Cleanups run on
     /// rollback, last in, first out.
-    pub fn attach(&self, cleanup: impl FnMut() + 'static) -> crate::Result<Disposer> {
+    pub fn attach(&self, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = (|| {
             self.fiber().assert_active()?;
