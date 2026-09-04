@@ -51,6 +51,7 @@ type Entry struct {
 	parent *EntryGroup
 
 	opts     EntryOptions
+	reg      Registration
 	ctx      *cordis.Context
 	fiber    *cordis.Fiber
 	err      error
@@ -161,7 +162,8 @@ func (e *Entry) update(opts EntryOptions, create, force bool) error {
 
 // reconcile brings a live entry in line with new options. Scope defining
 // fields (name, inject, intercept, isolate) require a fresh fiber; a config
-// change restarts the existing fiber in place.
+// change decodes the raw config through the registration and restarts the
+// existing fiber in place.
 func (e *Entry) reconcile(legacy, next EntryOptions) error {
 	if legacy.Name != next.Name ||
 		!mapsEqual(legacy.Inject, next.Inject) ||
@@ -172,7 +174,19 @@ func (e *Entry) reconcile(legacy, next EntryOptions) error {
 	}
 	if !reflect.DeepEqual(legacy.Config, next.Config) {
 		if f := e.Fiber(); f != nil {
-			return f.Update(next.Config)
+			cfg := next.Config
+			if e.reg.Decode != nil {
+				decoded, err := e.reg.Decode(next.Config)
+				if err != nil {
+					t := e.parent.tree
+					t.mu.Lock()
+					e.err = err
+					t.mu.Unlock()
+					return err
+				}
+				cfg = decoded
+			}
+			return f.Update(cfg)
 		}
 	}
 	return nil
@@ -188,6 +202,9 @@ func (e *Entry) init() error {
 	}
 	handle, raw, err := t.resolveFor(e, e.opts.Name)
 	if err == nil {
+		t.mu.Lock()
+		e.reg = raw
+		t.mu.Unlock()
 		cfg := e.opts.Config
 		if raw.Decode != nil {
 			cfg, err = raw.Decode(e.opts.Config)

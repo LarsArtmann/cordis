@@ -91,6 +91,9 @@ func Open(ctx *cordis.Context, resolver *Resolver, dir string) (*Loader, error) 
 		return nil, err
 	}
 	l := New(ctx, resolver)
+	l.mu.Lock()
+	l.path = path
+	l.mu.Unlock()
 	l.Tree().SetWriteHook(func(data []EntryOptions) {
 		if err := SaveFile(path, data); err != nil {
 			slog.Error("loader: cannot persist config", "err", err)
