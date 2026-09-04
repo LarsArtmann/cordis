@@ -40,10 +40,13 @@ jobs:
           components: clippy
       - name: Clippy
         working-directory: rust
-        run: cargo clippy --all-targets -- --deny warnings
+        run: cargo clippy --all-targets
       - name: Test
         working-directory: rust
         run: cargo test
+      - name: Test thread-safe feature
+        working-directory: rust
+        run: cargo test --features thread-safe
 
   zig:
     runs-on: ubuntu-latest

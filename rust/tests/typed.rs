@@ -308,3 +308,56 @@ fn guard_explicit_dispose() {
     guard.dispose();
     assert!(ctx.try_get::<Database>().is_none());
 }
+
+mod intercept_validation {
+    use cordis::{plugin, start_fn, value, Context, Error};
+
+    #[test]
+    fn intercept_scopes_override_configs() {
+        let ctx = Context::new();
+        assert!(ctx.intercepted("log").is_none());
+        let scope = ctx.intercept("log", value("debug".to_string()));
+        assert_eq!(
+            scope
+                .intercepted("log")
+                .unwrap()
+                .downcast_ref::<String>()
+                .unwrap(),
+            "debug"
+        );
+        assert!(ctx.intercepted("log").is_none());
+    }
+
+    #[test]
+    fn validation_gates_start() {
+        let ctx = Context::new();
+        let p = plugin("validated", |_ctx: &Context, config: &i32| {
+            let _ = *config;
+            Ok(())
+        })
+        .validate(|config| {
+            if *config < 0 {
+                vec!["config must be non-negative".to_string()]
+            } else {
+                Vec::new()
+            }
+        });
+        let err = start_fn(&ctx, &p, -1).unwrap_err();
+        assert!(matches!(err, Error::Validation(_)));
+        start_fn(&ctx, &p, 1).expect("valid config starts");
+    }
+
+    #[test]
+    fn typed_update_replaces_config() {
+        let ctx = Context::new();
+        let seen = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
+        let seen2 = std::sync::Arc::clone(&seen);
+        let p = plugin("upd", move |_ctx: &Context, config: &i32| {
+            seen2.store(*config, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        });
+        let fiber = start_fn(&ctx, &p, 1).expect("start");
+        fiber.update_config(5).expect("update");
+        assert_eq!(seen.load(std::sync::atomic::Ordering::SeqCst), 5);
+    }
+}

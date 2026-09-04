@@ -6,10 +6,11 @@
 //! Both start through their `start` functions and share one runtime and
 //! registry per identity.
 
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use crate::sync::Rc;
+#[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
 use std::sync::{LazyLock, Mutex, OnceLock};
 
@@ -118,6 +119,12 @@ pub fn start<P: Plugin + 'static>(ctx: &Context, plugin: P, config: P::Config) -
 /// The closure form of a plugin, built by [`plugin`].
 pub struct FnPlugin<C: crate::sync::Shared> {
     pub(crate) base: Rc<PluginBase>,
+        #[cfg(not(feature = "thread-safe"))]
+    pub(crate) validator:
+        Option<Rc<dyn Fn(&C) -> Vec<String>>>,
+    #[cfg(feature = "thread-safe")]
+    pub(crate) validator:
+        Option<Rc<dyn Fn(&C) -> Vec<String> + Send + Sync>>,
     _marker: PhantomData<fn() -> C>,
 }
 
@@ -144,11 +151,24 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
     pub fn id(&self) -> u64 {
         self.base.id
     }
+
+    /// Attach a config validator: it runs before every start (including
+    /// fiber updates that re-run the body through the loader). Returning
+    /// issues fails the start with [`crate::Error::Validation`].
+    pub fn validate(
+        mut self,
+        #[allow(clippy::redundant_closure)]
+        f: impl Fn(&C) -> Vec<String> + crate::sync::MaybeSendSync + 'static,
+    ) -> FnPlugin<C> {
+        self.validator = Some(Rc::new(f));
+        self
+    }
 }
 
 impl<C: crate::sync::Shared> Clone for FnPlugin<C> {
     fn clone(&self) -> Self {
         FnPlugin {
+        validator: None,
             base: Rc::clone(&self.base),
             _marker: PhantomData,
         }
@@ -166,6 +186,7 @@ where
     F: Fn(&Context, &C) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static,
 {
     FnPlugin {
+        validator: None,
         base: Rc::new(PluginBase {
             id: next_plugin_id(),
             name: name.to_string(),
@@ -189,6 +210,12 @@ where
 /// Start a closure plugin on `ctx` with the given config and return the new
 /// fiber.
 pub fn start_fn<C: crate::sync::Shared>(ctx: &Context, plugin: &FnPlugin<C>, config: C) -> crate::Result<Fiber> {
+    if let Some(validate) = &plugin.validator {
+        let issues = validate(&config);
+        if !issues.is_empty() {
+            return Err(crate::Error::Validation(issues.join("; ")));
+        }
+    }
     start_base(ctx, Rc::clone(&plugin.base), Rc::new(config))
 }
 

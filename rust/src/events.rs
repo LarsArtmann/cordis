@@ -4,6 +4,7 @@
 use std::any::Any;
 use crate::sync::RefCell;
 use crate::sync::Rc;
+#[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, Disposer};
