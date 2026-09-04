@@ -1,30 +1,30 @@
-import { Context, Fiber } from 'cordis'
-import Loader from '@cordisjs/plugin-loader'
-import Logger from '@cordisjs/plugin-logger-console'
-import { writeFileSync, readFileSync, unlinkSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { expect, describe, it, beforeAll, afterAll, afterEach } from 'vitest'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { Context, Fiber } from "cordis";
+import Loader from "@cordisjs/plugin-loader";
+import Logger from "@cordisjs/plugin-logger-console";
+import { writeFileSync, readFileSync, unlinkSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { expect, describe, it, beforeAll, afterAll, afterEach } from "vitest";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const testDir = dirname(fileURLToPath(import.meta.url))
+const testDir = dirname(fileURLToPath(import.meta.url));
 
 // Helper: read and backup a file, returning restore function
 function backupFile(filename: string) {
-  const path = resolve(testDir, filename)
-  const original = readFileSync(path, 'utf-8')
+  const path = resolve(testDir, filename);
+  const original = readFileSync(path, "utf-8");
   return {
     path,
     original,
     modify(replaceFn: (content: string) => string) {
-      writeFileSync(path, replaceFn(original))
+      writeFileSync(path, replaceFn(original));
     },
     write(content: string) {
-      writeFileSync(path, content)
+      writeFileSync(path, content);
     },
     restore() {
-      writeFileSync(path, original)
+      writeFileSync(path, original);
     },
-  }
+  };
 }
 
 // Helper: wait for a condition
@@ -32,296 +32,295 @@ function waitFor(condFn: () => boolean | any, timeout = 8000, interval = 100): P
   return new Promise<void>((resolve, reject) => {
     const check = setInterval(() => {
       if (condFn()) {
-        clearInterval(check)
-        resolve()
+        clearInterval(check);
+        resolve();
       }
-    }, interval)
+    }, interval);
     setTimeout(() => {
-      clearInterval(check)
-      reject(new Error('waitFor timed out'))
-    }, timeout)
-  })
+      clearInterval(check);
+      reject(new Error("waitFor timed out"));
+    }, timeout);
+  });
 }
 
 // Helper: wait for an event to fire
 function waitForEvent(ctx: Context, event: string, timeout = 8000): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const dispose = ctx.on(event as any, (...args: any[]) => {
-      dispose()
-      resolve(args)
-    })
+      dispose();
+      resolve(args);
+    });
     setTimeout(() => {
-      dispose()
-      reject(new Error(`waitForEvent(${event}) timed out`))
-    }, timeout)
-  })
+      dispose();
+      reject(new Error(`waitForEvent(${event}) timed out`));
+    }, timeout);
+  });
 }
 
 async function createContext(configFile: string): Promise<{ ctx: Context; fiber: Fiber<Context> }> {
-  const ctx = new Context()
-  await ctx.plugin(Logger)
-  const fiber = await ctx.plugin(Loader)
+  const ctx = new Context();
+  await ctx.plugin(Logger);
+  const fiber = await ctx.plugin(Loader);
   await ctx.loader.create({
-    name: '@cordisjs/plugin-include',
+    name: "@cordisjs/plugin-include",
     config: {
       path: pathToFileURL(resolve(testDir, configFile)).href,
     },
-  })
-  await waitFor(() => ctx.hmr, 5000)
-  await new Promise(r => setTimeout(r, 500))
-  return { ctx, fiber }
+  });
+  await waitFor(() => ctx.hmr, 5000);
+  await new Promise((r) => setTimeout(r, 500));
+  return { ctx, fiber };
 }
 
 // Settle time after file restore, to let any triggered HMR finish
-const SETTLE_MS = 500
+const SETTLE_MS = 500;
 
-describe('HMR', () => {
+describe("HMR", () => {
   // ===== Basic single plugin tests =====
-  describe('basic single plugin', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const plugin = backupFile('plugin.ts')
+  describe("basic single plugin", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const plugin = backupFile("plugin.ts");
 
     beforeAll(async () => {
-      plugin.restore()
-      const result = await createContext('cordis.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      plugin.restore();
+      const result = await createContext("cordis.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      plugin.restore()
+      plugin.restore();
       // Wait for any HMR triggered by restore to settle
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should load plugin and respond to events', () => {
-      const value = ctx.bail('hmr-test/get-value')
-      expect(value).to.equal('initial')
-    })
+    it("should load plugin and respond to events", () => {
+      const value = ctx.bail("hmr-test/get-value");
+      expect(value).to.equal("initial");
+    });
 
-    it('should reload plugin when file changes', async () => {
+    it("should reload plugin when file changes", async () => {
+      let disposed = false;
+      ctx.on("hmr-test/disposed", () => {
+        disposed = true;
+      });
 
-      let disposed = false
-      ctx.on('hmr-test/disposed', () => { disposed = true })
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'modified'"));
 
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'modified'"))
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "modified");
 
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'modified')
+      expect(ctx.bail("hmr-test/get-value")).to.equal("modified");
+      expect(disposed).to.be.true;
+    }, 10000);
 
-      expect(ctx.bail('hmr-test/get-value')).to.equal('modified')
-      expect(disposed).to.be.true
-    }, 10000)
-
-    it('should handle reverting file back to original', async () => {
-
+    it("should handle reverting file back to original", async () => {
       // First change it
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'to-revert'"))
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'to-revert')
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'to-revert'"));
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "to-revert");
 
       // Then revert
-      plugin.restore()
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'initial')
+      plugin.restore();
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "initial");
 
-      expect(ctx.bail('hmr-test/get-value')).to.equal('initial')
-    }, 10000)
+      expect(ctx.bail("hmr-test/get-value")).to.equal("initial");
+    }, 10000);
 
-    it('should emit hmr/reload event on reload', async () => {
+    it("should emit hmr/reload event on reload", async () => {
+      const reloadPromise = waitForEvent(ctx, "hmr/reload");
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'event-test'"));
 
-      const reloadPromise = waitForEvent(ctx, 'hmr/reload')
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'event-test'"))
-
-      const [reloads] = await reloadPromise
-      expect(reloads).to.be.instanceOf(Map)
-      expect(reloads.size).to.be.greaterThan(0)
+      const [reloads] = await reloadPromise;
+      expect(reloads).to.be.instanceOf(Map);
+      expect(reloads.size).to.be.greaterThan(0);
 
       for (const [, reload] of reloads) {
-        expect(reload).to.have.property('filename')
+        expect(reload).to.have.property("filename");
       }
-    }, 10000)
+    }, 10000);
 
-    it('should properly dispose old plugin effects on reload', async () => {
+    it("should properly dispose old plugin effects on reload", async () => {
+      let disposeCount = 0;
+      ctx.on("hmr-test/disposed", () => {
+        disposeCount++;
+      });
 
-      let disposeCount = 0
-      ctx.on('hmr-test/disposed', () => { disposeCount++ })
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'dispose-test-1'"));
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "dispose-test-1");
 
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'dispose-test-1'"))
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'dispose-test-1')
+      const countAfterFirst = disposeCount;
 
-      const countAfterFirst = disposeCount
+      plugin.write(plugin.original.replace("value = 'initial'", "value = 'dispose-test-2'"));
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "dispose-test-2");
 
-      plugin.write(plugin.original.replace("value = 'initial'", "value = 'dispose-test-2'"))
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'dispose-test-2')
-
-      expect(disposeCount).to.be.greaterThan(countAfterFirst)
-    }, 10000)
-  })
+      expect(disposeCount).to.be.greaterThan(countAfterFirst);
+    }, 10000);
+  });
 
   // ===== Multiple plugins =====
-  describe('multiple plugins', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const pluginA = backupFile('plugin-a.ts')
-    const pluginB = backupFile('plugin-b.ts')
+  describe("multiple plugins", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const pluginA = backupFile("plugin-a.ts");
+    const pluginB = backupFile("plugin-b.ts");
 
     beforeAll(async () => {
-      pluginA.restore()
-      pluginB.restore()
-      const result = await createContext('cordis-multi.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      pluginA.restore();
+      pluginB.restore();
+      const result = await createContext("cordis-multi.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      pluginA.restore()
-      pluginB.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      pluginA.restore();
+      pluginB.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should load multiple plugins', () => {
-      expect(ctx.bail('hmr-test/get-a')).to.equal('alpha')
-      expect(ctx.bail('hmr-test/get-b')).to.equal('beta')
-    })
+    it("should load multiple plugins", () => {
+      expect(ctx.bail("hmr-test/get-a")).to.equal("alpha");
+      expect(ctx.bail("hmr-test/get-b")).to.equal("beta");
+    });
 
-    it('should reload changed plugin without affecting others', async () => {
-
+    it("should reload changed plugin without affecting others", async () => {
       // modify only plugin A
-      pluginA.modify(c => c.replace("value = 'alpha'", "value = 'alpha-v2'"))
+      pluginA.modify((c) => c.replace("value = 'alpha'", "value = 'alpha-v2'"));
 
-      await waitFor(() => ctx.bail('hmr-test/get-a') === 'alpha-v2')
+      await waitFor(() => ctx.bail("hmr-test/get-a") === "alpha-v2");
 
-      expect(ctx.bail('hmr-test/get-a')).to.equal('alpha-v2')
+      expect(ctx.bail("hmr-test/get-a")).to.equal("alpha-v2");
       // plugin B should remain unchanged
-      expect(ctx.bail('hmr-test/get-b')).to.equal('beta')
-    }, 10000)
+      expect(ctx.bail("hmr-test/get-b")).to.equal("beta");
+    }, 10000);
 
-    it('should handle simultaneous changes to both plugins', async () => {
+    it("should handle simultaneous changes to both plugins", async () => {
+      pluginA.modify((c) => c.replace("value = 'alpha'", "value = 'alpha-v3'"));
+      pluginB.modify((c) => c.replace("value = 'beta'", "value = 'beta-v3'"));
 
-      pluginA.modify(c => c.replace("value = 'alpha'", "value = 'alpha-v3'"))
-      pluginB.modify(c => c.replace("value = 'beta'", "value = 'beta-v3'"))
+      await waitFor(
+        () => ctx.bail("hmr-test/get-a") === "alpha-v3" && ctx.bail("hmr-test/get-b") === "beta-v3",
+      );
 
-      await waitFor(() =>
-        ctx.bail('hmr-test/get-a') === 'alpha-v3' &&
-        ctx.bail('hmr-test/get-b') === 'beta-v3',
-      )
-
-      expect(ctx.bail('hmr-test/get-a')).to.equal('alpha-v3')
-      expect(ctx.bail('hmr-test/get-b')).to.equal('beta-v3')
-    }, 10000)
-  })
+      expect(ctx.bail("hmr-test/get-a")).to.equal("alpha-v3");
+      expect(ctx.bail("hmr-test/get-b")).to.equal("beta-v3");
+    }, 10000);
+  });
 
   // ===== Dependency chain =====
-  describe('dependency chain', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const dep = backupFile('dep.ts')
-    const pluginDep = backupFile('plugin-dep.ts')
+  describe("dependency chain", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const dep = backupFile("dep.ts");
+    const pluginDep = backupFile("plugin-dep.ts");
 
     beforeAll(async () => {
-      dep.restore()
-      pluginDep.restore()
-      const result = await createContext('cordis-dep.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      dep.restore();
+      pluginDep.restore();
+      const result = await createContext("cordis-dep.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      dep.restore()
-      pluginDep.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      dep.restore();
+      pluginDep.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should load plugin with dependency', () => {
-      expect(ctx.bail('hmr-test/get-dep')).to.equal('original-shared')
-    })
+    it("should load plugin with dependency", () => {
+      expect(ctx.bail("hmr-test/get-dep")).to.equal("original-shared");
+    });
 
-    it('should reload plugin when its dependency changes', async () => {
+    it("should reload plugin when its dependency changes", async () => {
+      let disposed = false;
+      ctx.on("hmr-test/disposed-dep", () => {
+        disposed = true;
+      });
 
-      let disposed = false
-      ctx.on('hmr-test/disposed-dep', () => { disposed = true })
+      dep.modify((c) =>
+        c.replace("sharedValue = 'original-shared'", "sharedValue = 'updated-shared'"),
+      );
 
-      dep.modify(c => c.replace("sharedValue = 'original-shared'", "sharedValue = 'updated-shared'"))
+      await waitFor(() => ctx.bail("hmr-test/get-dep") === "updated-shared");
 
-      await waitFor(() => ctx.bail('hmr-test/get-dep') === 'updated-shared')
+      expect(ctx.bail("hmr-test/get-dep")).to.equal("updated-shared");
+      expect(disposed).to.be.true;
+    }, 10000);
 
-      expect(ctx.bail('hmr-test/get-dep')).to.equal('updated-shared')
-      expect(disposed).to.be.true
-    }, 10000)
-
-    it('should reload plugin when plugin file itself changes', async () => {
-
-      pluginDep.modify(c => c.replace(
-        "ctx.on('hmr-test/get-dep', () => sharedValue)",
-        "ctx.on('hmr-test/get-dep', () => 'prefix:' + sharedValue)",
-      ))
+    it("should reload plugin when plugin file itself changes", async () => {
+      pluginDep.modify((c) =>
+        c.replace(
+          "ctx.on('hmr-test/get-dep', () => sharedValue)",
+          "ctx.on('hmr-test/get-dep', () => 'prefix:' + sharedValue)",
+        ),
+      );
 
       await waitFor(() => {
-        const v = ctx.bail('hmr-test/get-dep')
-        return typeof v === 'string' && v.startsWith('prefix:')
-      })
+        const v = ctx.bail("hmr-test/get-dep");
+        return typeof v === "string" && v.startsWith("prefix:");
+      });
 
-      expect(ctx.bail('hmr-test/get-dep')).to.equal('prefix:original-shared')
-    }, 10000)
-  })
+      expect(ctx.bail("hmr-test/get-dep")).to.equal("prefix:original-shared");
+    }, 10000);
+  });
 
   // ===== Import error rollback =====
-  describe('import error rollback', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const pluginError = backupFile('plugin-error.ts')
+  describe("import error rollback", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const pluginError = backupFile("plugin-error.ts");
 
     beforeAll(async () => {
-      pluginError.restore()
-      const result = await createContext('cordis-error.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      pluginError.restore();
+      const result = await createContext("cordis-error.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      pluginError.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      pluginError.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should load plugin normally', () => {
-      expect(ctx.bail('hmr-test/get-error')).to.equal('ok')
-    })
+    it("should load plugin normally", () => {
+      expect(ctx.bail("hmr-test/get-error")).to.equal("ok");
+    });
 
-    it('should rollback on syntax error and keep old plugin working', async () => {
-
+    it("should rollback on syntax error and keep old plugin working", async () => {
       pluginError.write(`
         import { Context } from 'cordis'
         export const name = 'plugin-error'
         export function apply(ctx: Context {{{ BROKEN
-      `)
+      `);
 
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 2000));
 
       // the old plugin should still be functional after rollback
-      expect(ctx.bail('hmr-test/get-error')).to.equal('ok')
-    }, 10000)
+      expect(ctx.bail("hmr-test/get-error")).to.equal("ok");
+    }, 10000);
 
-    it('should recover after fixing the error', async () => {
-
+    it("should recover after fixing the error", async () => {
       pluginError.write(`
 import { Context } from 'cordis'
 
@@ -332,110 +331,110 @@ export let value = 'recovered'
 export function apply(ctx: Context) {
   ctx.on('hmr-test/get-error', () => value)
 }
-`)
+`);
 
-      await waitFor(() => ctx.bail('hmr-test/get-error') === 'recovered')
+      await waitFor(() => ctx.bail("hmr-test/get-error") === "recovered");
 
-      expect(ctx.bail('hmr-test/get-error')).to.equal('recovered')
-    }, 10000)
-  })
+      expect(ctx.bail("hmr-test/get-error")).to.equal("recovered");
+    }, 10000);
+  });
 
   // ===== Debounce =====
-  describe('debounce', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const plugin = backupFile('plugin.ts')
+  describe("debounce", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const plugin = backupFile("plugin.ts");
 
     beforeAll(async () => {
-      plugin.restore()
-      const result = await createContext('cordis.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      plugin.restore();
+      const result = await createContext("cordis.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      plugin.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      plugin.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should batch rapid changes within debounce window', async () => {
-
-      let reloadCount = 0
-      ctx.on('hmr/reload', () => { reloadCount++ })
+    it("should batch rapid changes within debounce window", async () => {
+      let reloadCount = 0;
+      ctx.on("hmr/reload", () => {
+        reloadCount++;
+      });
 
       // rapid changes within debounce window (50ms)
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'v1'"))
-      await new Promise(r => setTimeout(r, 10))
-      plugin.write(plugin.original.replace("value = 'initial'", "value = 'v2'"))
-      await new Promise(r => setTimeout(r, 10))
-      plugin.write(plugin.original.replace("value = 'initial'", "value = 'v3'"))
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'v1'"));
+      await new Promise((r) => setTimeout(r, 10));
+      plugin.write(plugin.original.replace("value = 'initial'", "value = 'v2'"));
+      await new Promise((r) => setTimeout(r, 10));
+      plugin.write(plugin.original.replace("value = 'initial'", "value = 'v3'"));
 
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'v3')
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "v3");
 
       // debounce=50ms, writes are 10ms apart → should batch
-      expect(reloadCount).to.be.lessThanOrEqual(2)
-    }, 10000)
-  })
+      expect(reloadCount).to.be.lessThanOrEqual(2);
+    }, 10000);
+  });
 
   // ===== Config file reload =====
-  describe('config file changes', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const configPath = resolve(testDir, 'cordis.yml')
-    const configBackup = readFileSync(configPath, 'utf-8')
-    const plugin = backupFile('plugin.ts')
+  describe("config file changes", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const configPath = resolve(testDir, "cordis.yml");
+    const configBackup = readFileSync(configPath, "utf-8");
+    const plugin = backupFile("plugin.ts");
 
     beforeAll(async () => {
-      plugin.restore()
-      writeFileSync(configPath, configBackup)
-      const result = await createContext('cordis.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      plugin.restore();
+      writeFileSync(configPath, configBackup);
+      const result = await createContext("cordis.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      plugin.restore()
-      writeFileSync(configPath, configBackup)
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      plugin.restore();
+      writeFileSync(configPath, configBackup);
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should handle config file update to disable plugin', async () => {
-
-      expect(ctx.bail('hmr-test/get-value')).to.equal('initial')
+    it("should handle config file update to disable plugin", async () => {
+      expect(ctx.bail("hmr-test/get-value")).to.equal("initial");
 
       // Disable the test plugin via config
       const disabledConfig = configBackup.replace(
-        '- id: test\n  name: ./plugin',
-        '- id: test\n  name: ./plugin\n  disabled: true',
-      )
-      writeFileSync(configPath, disabledConfig)
+        "- id: test\n  name: ./plugin",
+        "- id: test\n  name: ./plugin\n  disabled: true",
+      );
+      writeFileSync(configPath, disabledConfig);
 
       // wait for config reload
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 2000));
 
       // plugin should be disabled
-      const value = ctx.bail('hmr-test/get-value')
-      expect(value).to.not.equal('initial')
-    }, 10000)
-  })
+      const value = ctx.bail("hmr-test/get-value");
+      expect(value).to.not.equal("initial");
+    }, 10000);
+  });
 
   // ===== Service plugin HMR =====
-  describe('plugin with service registration', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
+  describe("plugin with service registration", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
 
-    const pluginPath = resolve(testDir, 'plugin-service.ts')
-    const configPath = resolve(testDir, 'cordis-service.yml')
+    const pluginPath = resolve(testDir, "plugin-service.ts");
+    const configPath = resolve(testDir, "cordis-service.yml");
 
     const servicePluginContent = `
 import { Context, Service } from 'cordis'
@@ -459,11 +458,13 @@ class MyService extends Service {
 }
 
 export default MyService
-`
+`;
 
     beforeAll(() => {
-      writeFileSync(pluginPath, servicePluginContent)
-      writeFileSync(configPath, `- id: timer
+      writeFileSync(pluginPath, servicePluginContent);
+      writeFileSync(
+        configPath,
+        `- id: timer
   name: '@cordisjs/plugin-timer'
 - id: hmr
   name: '@cordisjs/plugin-hmr'
@@ -473,147 +474,148 @@ export default MyService
     debounce: 50
 - id: my-service
   name: ./plugin-service
-`)
-    })
+`,
+      );
+    });
 
     afterEach(async () => {
-      writeFileSync(pluginPath, servicePluginContent)
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      writeFileSync(pluginPath, servicePluginContent);
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-      try { unlinkSync(pluginPath) } catch {}
-      try { unlinkSync(configPath) } catch {}
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+      try {
+        unlinkSync(pluginPath);
+      } catch {}
+      try {
+        unlinkSync(configPath);
+      } catch {}
+    });
 
-    it('should load service plugin', async () => {
-      const result = await createContext('cordis-service.yml')
-      ctx = result.ctx
-      fiber = result.fiber
+    it("should load service plugin", async () => {
+      const result = await createContext("cordis-service.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
 
-      await waitFor(() => ctx.myService)
-      expect(ctx.myService.getValue()).to.equal('service-v1')
-    }, 10000)
+      await waitFor(() => ctx.myService);
+      expect(ctx.myService.getValue()).to.equal("service-v1");
+    }, 10000);
 
-    it('should reload service plugin on change', async () => {
+    it("should reload service plugin on change", async () => {
+      const content = readFileSync(pluginPath, "utf-8");
+      writeFileSync(pluginPath, content.replace("data = 'service-v1'", "data = 'service-v2'"));
 
-      const content = readFileSync(pluginPath, 'utf-8')
-      writeFileSync(pluginPath, content.replace("data = 'service-v1'", "data = 'service-v2'"))
-
-      await waitFor(() => ctx.myService?.getValue() === 'service-v2')
-      expect(ctx.myService.getValue()).to.equal('service-v2')
-    }, 10000)
-  })
+      await waitFor(() => ctx.myService?.getValue() === "service-v2");
+      expect(ctx.myService.getValue()).to.equal("service-v2");
+    }, 10000);
+  });
 
   // ===== Fiber/entry re-association =====
-  describe('fiber and entry re-association', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const plugin = backupFile('plugin.ts')
+  describe("fiber and entry re-association", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const plugin = backupFile("plugin.ts");
 
     beforeAll(async () => {
-      plugin.restore()
-      const result = await createContext('cordis.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      plugin.restore();
+      const result = await createContext("cordis.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      plugin.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      plugin.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should maintain entry association after reload', async () => {
-
-      let entryId: string | undefined
+    it("should maintain entry association after reload", async () => {
+      let entryId: string | undefined;
       for (const entry of ctx.loader.entries()) {
-        if (entry.options.name === './plugin') {
-          entryId = entry.id
-          break
+        if (entry.options.name === "./plugin") {
+          entryId = entry.id;
+          break;
         }
       }
-      expect(entryId).to.be.ok
+      expect(entryId).to.be.ok;
 
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'entry-test'"))
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'entry-test')
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'entry-test'"));
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "entry-test");
 
-      let found = false
+      let found = false;
       for (const entry of ctx.loader.entries()) {
         if (entry.id === entryId) {
-          found = true
-          expect(entry.fiber).to.be.ok
-          break
+          found = true;
+          expect(entry.fiber).to.be.ok;
+          break;
         }
       }
-      expect(found).to.be.true
-    }, 10000)
-  })
+      expect(found).to.be.true;
+    }, 10000);
+  });
 
   // ===== Rapid successive reloads =====
-  describe('rapid successive reloads', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const plugin = backupFile('plugin.ts')
+  describe("rapid successive reloads", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const plugin = backupFile("plugin.ts");
 
     beforeAll(async () => {
-      plugin.restore()
-      const result = await createContext('cordis.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      plugin.restore();
+      const result = await createContext("cordis.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterAll(async () => {
-      plugin.restore()
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      plugin.restore();
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should handle many rapid reloads without crashing', async () => {
-
+    it("should handle many rapid reloads without crashing", async () => {
       for (let i = 0; i < 5; i++) {
-        plugin.write(plugin.original.replace("value = 'initial'", `value = 'v${i}'`))
-        await new Promise(r => setTimeout(r, 200))
+        plugin.write(plugin.original.replace("value = 'initial'", `value = 'v${i}'`));
+        await new Promise((r) => setTimeout(r, 200));
       }
 
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'v4')
-      expect(ctx.bail('hmr-test/get-value')).to.equal('v4')
-    }, 20000)
-  })
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "v4");
+      expect(ctx.bail("hmr-test/get-value")).to.equal("v4");
+    }, 20000);
+  });
 
   // ===== Event handler addition/removal =====
-  describe('event handler changes', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const pluginEv = backupFile('plugin-event.ts')
+  describe("event handler changes", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const pluginEv = backupFile("plugin-event.ts");
 
     beforeAll(async () => {
-      pluginEv.restore()
-      const result = await createContext('cordis-event.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      pluginEv.restore();
+      const result = await createContext("cordis-event.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      pluginEv.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      pluginEv.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should register new event handlers after reload', async () => {
-
-      expect(ctx.bail('hmr-test/get-event')).to.equal('initial')
-      expect(ctx.bail('hmr-test/get-extra')).to.be.undefined
+    it("should register new event handlers after reload", async () => {
+      expect(ctx.bail("hmr-test/get-event")).to.equal("initial");
+      expect(ctx.bail("hmr-test/get-extra")).to.be.undefined;
 
       pluginEv.write(`
 import { Context } from 'cordis'
@@ -628,16 +630,15 @@ export function apply(ctx: Context) {
     ctx.root.emit('hmr-test/disposed-event')
   })
 }
-`)
+`);
 
-      await waitFor(() => ctx.bail('hmr-test/get-event') === 'with-extra')
+      await waitFor(() => ctx.bail("hmr-test/get-event") === "with-extra");
 
-      expect(ctx.bail('hmr-test/get-event')).to.equal('with-extra')
-      expect(ctx.bail('hmr-test/get-extra')).to.equal('extra-data')
-    }, 10000)
+      expect(ctx.bail("hmr-test/get-event")).to.equal("with-extra");
+      expect(ctx.bail("hmr-test/get-extra")).to.equal("extra-data");
+    }, 10000);
 
-    it('should remove old event handlers after reload', async () => {
-
+    it("should remove old event handlers after reload", async () => {
       // First add extra handler
       pluginEv.write(`
 import { Context } from 'cordis'
@@ -652,76 +653,75 @@ export function apply(ctx: Context) {
     ctx.root.emit('hmr-test/disposed-event')
   })
 }
-`)
-      await waitFor(() => ctx.bail('hmr-test/get-extra') === 'extra-data')
+`);
+      await waitFor(() => ctx.bail("hmr-test/get-extra") === "extra-data");
 
       // Then restore original (no extra handler)
-      pluginEv.restore()
+      pluginEv.restore();
 
-      await waitFor(() => ctx.bail('hmr-test/get-event') === 'initial')
+      await waitFor(() => ctx.bail("hmr-test/get-event") === "initial");
 
-      expect(ctx.bail('hmr-test/get-event')).to.equal('initial')
-      expect(ctx.bail('hmr-test/get-extra')).to.be.undefined
-    }, 10000)
-  })
+      expect(ctx.bail("hmr-test/get-event")).to.equal("initial");
+      expect(ctx.bail("hmr-test/get-extra")).to.be.undefined;
+    }, 10000);
+  });
 
   // ===== getLinked =====
-  describe('getLinked', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
+  describe("getLinked", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
 
     beforeAll(async () => {
-      const result = await createContext('cordis-dep.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      const result = await createContext("cordis-dep.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should return linked dependencies for a loaded file', async () => {
-      const pluginDepUrl = pathToFileURL(resolve(testDir, 'plugin-dep.ts')).href
-      const linked = await ctx.hmr.getLinked(pluginDepUrl)
+    it("should return linked dependencies for a loaded file", async () => {
+      const pluginDepUrl = pathToFileURL(resolve(testDir, "plugin-dep.ts")).href;
+      const linked = await ctx.hmr.getLinked(pluginDepUrl);
 
-      expect(linked).to.be.an('array')
-      const depUrl = pathToFileURL(resolve(testDir, 'dep.ts')).href
-      expect(linked).to.include(depUrl)
-    })
+      expect(linked).to.be.an("array");
+      const depUrl = pathToFileURL(resolve(testDir, "dep.ts")).href;
+      expect(linked).to.include(depUrl);
+    });
 
-    it('should return empty array for unknown file', async () => {
-      const linked = await ctx.hmr.getLinked(pathToFileURL('/nonexistent/file.ts').href)
-      expect(linked).to.deep.equal([])
-    })
-  })
+    it("should return empty array for unknown file", async () => {
+      const linked = await ctx.hmr.getLinked(pathToFileURL("/nonexistent/file.ts").href);
+      expect(linked).to.deep.equal([]);
+    });
+  });
 
   // ===== Runtime error in apply =====
-  describe('runtime error in plugin apply', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const pluginError = backupFile('plugin-error.ts')
+  describe("runtime error in plugin apply", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const pluginError = backupFile("plugin-error.ts");
 
     beforeAll(async () => {
-      pluginError.restore()
-      const result = await createContext('cordis-error.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      pluginError.restore();
+      const result = await createContext("cordis-error.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      pluginError.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      pluginError.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should handle apply error gracefully without crashing', async () => {
-
-      expect(ctx.bail('hmr-test/get-error')).to.equal('ok')
+    it("should handle apply error gracefully without crashing", async () => {
+      expect(ctx.bail("hmr-test/get-error")).to.equal("ok");
 
       // Write a plugin that imports fine but throws in apply.
       // Note: apply errors are handled by the fiber system (internal/error),
@@ -737,12 +737,12 @@ export let value = 'should-not-see'
 export function apply(ctx: Context) {
   throw new Error('intentional apply error')
 }
-`)
+`);
 
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 2000));
 
       // HMR itself should still be alive and functional
-      expect(ctx.hmr).to.be.ok
+      expect(ctx.hmr).to.be.ok;
 
       // Recover by writing a valid plugin
       pluginError.write(`
@@ -755,46 +755,45 @@ export let value = 'recovered-from-error'
 export function apply(ctx: Context) {
   ctx.on('hmr-test/get-error', () => value)
 }
-`)
+`);
 
-      await waitFor(() => ctx.bail('hmr-test/get-error') === 'recovered-from-error')
-      expect(ctx.bail('hmr-test/get-error')).to.equal('recovered-from-error')
-    }, 15000)
-  })
+      await waitFor(() => ctx.bail("hmr-test/get-error") === "recovered-from-error");
+      expect(ctx.bail("hmr-test/get-error")).to.equal("recovered-from-error");
+    }, 15000);
+  });
 
   // ===== Stash clearing =====
-  describe('stash management', () => {
-    let ctx: Context
-    let fiber: Fiber<Context>
-    const plugin = backupFile('plugin.ts')
+  describe("stash management", () => {
+    let ctx: Context;
+    let fiber: Fiber<Context>;
+    const plugin = backupFile("plugin.ts");
 
     beforeAll(async () => {
-      plugin.restore()
-      const result = await createContext('cordis.yml')
-      ctx = result.ctx
-      fiber = result.fiber
-    }, 10000)
+      plugin.restore();
+      const result = await createContext("cordis.yml");
+      ctx = result.ctx;
+      fiber = result.fiber;
+    }, 10000);
 
     afterEach(async () => {
-      plugin.restore()
-      await new Promise(r => setTimeout(r, SETTLE_MS))
-    })
+      plugin.restore();
+      await new Promise((r) => setTimeout(r, SETTLE_MS));
+    });
 
     afterAll(async () => {
-      fiber?.dispose()
-      await new Promise(r => setTimeout(r, 200))
-    })
+      fiber?.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+    });
 
-    it('should clear stashed files after successful reload', async () => {
-
-      plugin.modify(c => c.replace("value = 'initial'", "value = 'stash-test'"))
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'stash-test')
+    it("should clear stashed files after successful reload", async () => {
+      plugin.modify((c) => c.replace("value = 'initial'", "value = 'stash-test'"));
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "stash-test");
 
       // After successful reload, changing the same file again should work
-      plugin.write(plugin.original.replace("value = 'initial'", "value = 'stash-test-2'"))
-      await waitFor(() => ctx.bail('hmr-test/get-value') === 'stash-test-2')
+      plugin.write(plugin.original.replace("value = 'initial'", "value = 'stash-test-2'"));
+      await waitFor(() => ctx.bail("hmr-test/get-value") === "stash-test-2");
 
-      expect(ctx.bail('hmr-test/get-value')).to.equal('stash-test-2')
-    }, 10000)
-  })
-})
+      expect(ctx.bail("hmr-test/get-value")).to.equal("stash-test-2");
+    }, 10000);
+  });
+});

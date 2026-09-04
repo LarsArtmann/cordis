@@ -1,9 +1,9 @@
-import { Context } from 'cordis'
+import { Context } from "cordis";
 
-export const name = 'plugin-error'
+export const name = "plugin-error";
 
-export let value = 'ok'
+export let value = "ok";
 
 export function apply(ctx: Context) {
-  ctx.on('hmr-test/get-error', () => value)
+  ctx.on("hmr-test/get-error", () => value);
 }

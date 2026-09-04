@@ -32,12 +32,12 @@ memory-safe languages. **Go is the flagship port** and the reference
 implementation; Rust and Zig follow its architecture. The TypeScript original
 remains intact in [`packages/`](packages/).
 
-| Language | Directory | Status | Test command |
-| -------- | --------- | ------ | ------------ |
-| Go | [`go/`](go/) | Core complete: full lifecycle, all five event dispatch modes, isolation realms, registry, logger; race-tested, ~85% coverage | `cd go && go test ./...` |
-| Rust | [`rust/`](rust/) | Foundation: contexts, fibers, effects, events, services, isolation, inject reactivity | `cd rust && cargo test` |
-| Zig | [`zig/`](zig/) | Foundation: contexts, fibers, events, services, isolation, inject reactivity | `cd zig && zig build test` |
-| TypeScript | [`packages/`](packages/) | Reference implementation | `yarn test` (see [core](packages/core/README.md)) |
+| Language   | Directory                | Status                                                                                                                       | Test command                                      |
+| ---------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Go         | [`go/`](go/)             | Core complete: full lifecycle, all five event dispatch modes, isolation realms, registry, logger; race-tested, ~85% coverage | `cd go && go test ./...`                          |
+| Rust       | [`rust/`](rust/)         | Foundation: contexts, fibers, effects, events, services, isolation, inject reactivity                                        | `cd rust && cargo test`                           |
+| Zig        | [`zig/`](zig/)           | Foundation: contexts, fibers, events, services, isolation, inject reactivity                                                 | `cd zig && zig build test`                        |
+| TypeScript | [`packages/`](packages/) | Reference implementation                                                                                                     | `yarn test` (see [core](packages/core/README.md)) |
 
 See [ROADMAP.md](ROADMAP.md) for the full parity matrix.
 

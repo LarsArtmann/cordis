@@ -1,12 +1,12 @@
-import { Context } from 'cordis'
+import { Context } from "cordis";
 
-export const name = 'plugin-a'
+export const name = "plugin-a";
 
-export let value = 'alpha'
+export let value = "alpha";
 
 export function apply(ctx: Context) {
-  ctx.on('hmr-test/get-a', () => value)
+  ctx.on("hmr-test/get-a", () => value);
   ctx.effect(() => () => {
-    ctx.root.emit('hmr-test/disposed-a')
-  })
+    ctx.root.emit("hmr-test/disposed-a");
+  });
 }

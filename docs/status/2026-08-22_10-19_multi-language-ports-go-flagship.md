@@ -10,8 +10,8 @@
 
 All three ports exist, build, and pass their parity suites. **But the ports
 are currently too faithful to the TypeScript original.** The user directive
-for everything that follows: *use each language's native features to the
-max, do not port TypeScript 1:1.* The current APIs carry TS-isms (stringly
+for everything that follows: _use each language's native features to the
+max, do not port TypeScript 1:1._ The current APIs carry TS-isms (stringly
 named untyped events, string-keyed services, `any`-typed values, no stdlib
 `context.Context`, no `slog`, `Rc<dyn Any>` ceremony in Rust, disabled RAII)
 that must be replaced with native designs. Semantics parity (fiber
@@ -269,6 +269,6 @@ Native-max redesign (Go flagship first, then propagate):
 
 ---
 
-*Report written per status-report skill; user explicitly requested Markdown
+_Report written per status-report skill; user explicitly requested Markdown
 over the skill's HTML dashboard default. Not committed — waiting for
-instructions.*
+instructions._

@@ -1,129 +1,140 @@
-import { Context, Inject, Service } from 'cordis'
-import { defineProperty, Dict, isNullable } from 'cosmokit'
-import { ModuleLoader } from './internal.ts'
-import { Entry, EntryOptions } from './config/entry.ts'
-import isolate from './config/isolate.ts'
-import { EntryTree } from './config/tree.ts'
+import { Context, Inject, Service } from "cordis";
+import { defineProperty, Dict, isNullable } from "cosmokit";
+import { ModuleLoader } from "./internal.ts";
+import { Entry, EntryOptions } from "./config/entry.ts";
+import isolate from "./config/isolate.ts";
+import { EntryTree } from "./config/tree.ts";
 
-export * from './config/entry.ts'
-export * from './config/group.ts'
-export * from './config/isolate.ts'
-export * from './config/tree.ts'
-export * from './config/utils.ts'
-export * from './internal.ts'
+export * from "./config/entry.ts";
+export * from "./config/group.ts";
+export * from "./config/isolate.ts";
+export * from "./config/tree.ts";
+export * from "./config/utils.ts";
+export * from "./internal.ts";
 
-declare module 'cordis' {
+declare module "cordis" {
   interface Events {
-    'exit'(signal: NodeJS.Signals): Promise<void>
-    'loader/config-update'(): void
-    'loader/entry-init'(entry: Entry): void
-    'loader/partial-dispose'(entry: Entry, legacy: Partial<EntryOptions>, active: boolean): void
-    'loader/patch-context'(entry: Entry, next: () => void): void
+    exit(signal: NodeJS.Signals): Promise<void>;
+    "loader/config-update"(): void;
+    "loader/entry-init"(entry: Entry): void;
+    "loader/partial-dispose"(entry: Entry, legacy: Partial<EntryOptions>, active: boolean): void;
+    "loader/patch-context"(entry: Entry, next: () => void): void;
   }
 
   interface Context {
-    loader: Loader
+    loader: Loader;
   }
 
   interface EnvData {
-    startTime?: number
+    startTime?: number;
   }
 
   interface Fiber {
-    entry?: Entry
+    entry?: Entry;
   }
 }
 
 export namespace Loader {
   export interface Config {
-    baseUrl?: string
+    baseUrl?: string;
   }
 
   export interface Intercept {
-    await?: boolean
+    await?: boolean;
   }
 }
 
 export class Loader extends EntryTree {
-  declare [Service.config]: Loader.Intercept
+  declare [Service.config]: Loader.Intercept;
 
   public envData = process.env.CORDIS_SHARED
     ? JSON.parse(process.env.CORDIS_SHARED)
-    : { startTime: Date.now() }
+    : { startTime: Date.now() };
 
-  public name = 'loader'
-  public internal = ModuleLoader.fromInternal()
+  public name = "loader";
+  public internal = ModuleLoader.fromInternal();
 
-  public builtins: Dict<any> = Object.create(null)
+  public builtins: Dict<any> = Object.create(null);
 
-  constructor(ctx: Context, public config: Loader.Config = {}) {
-    super(ctx)
+  constructor(
+    ctx: Context,
+    public config: Loader.Config = {},
+  ) {
+    super(ctx);
     if (config.baseUrl) {
-      this.ctx.baseUrl = config.baseUrl
+      this.ctx.baseUrl = config.baseUrl;
     }
-    const self = this
+    const self = this;
 
     defineProperty(this, Service.tracker, {
-      associate: 'loader',
-      property: 'ctx',
+      associate: "loader",
+      property: "ctx",
       noShadow: true,
-    })
+    });
 
-    ctx.reflect.provide('loader', this, this[Service.check])
+    ctx.reflect.provide("loader", this, this[Service.check]);
 
-    ctx.on('internal/update', function (config, noSave, next) {
-      if (!this.entry || noSave || this.parent.fiber?.entry === this.entry) return next()
-      const unparse = this.runtime?.Config?.['simplify']
-      this.entry.options.config = unparse ? unparse(config) : config
-      this.entry.parent.tree.write()
-      return next()
-    }, { global: true, prepend: true })
+    ctx.on(
+      "internal/update",
+      function (config, noSave, next) {
+        if (!this.entry || noSave || this.parent.fiber?.entry === this.entry) return next();
+        const unparse = this.runtime?.Config?.["simplify"];
+        this.entry.options.config = unparse ? unparse(config) : config;
+        this.entry.parent.tree.write();
+        return next();
+      },
+      { global: true, prepend: true },
+    );
 
-    ctx.on('internal/update', function (config, _, next) {
-      if (!this.entry || this.parent.fiber?.entry === this.entry) return next()
-      self.showLog(this.entry, 'reload')
-      return next()
-    }, { global: true })
+    ctx.on(
+      "internal/update",
+      function (config, _, next) {
+        if (!this.entry || this.parent.fiber?.entry === this.entry) return next();
+        self.showLog(this.entry, "reload");
+        return next();
+      },
+      { global: true },
+    );
 
-    ctx.on('internal/plugin', (fiber) => {
+    ctx.on("internal/plugin", (fiber) => {
       // 1. set `fiber.entry`
       if (fiber.parent[Entry.key] && !fiber.entry) {
-        fiber.entry = fiber.parent[Entry.key]
+        fiber.entry = fiber.parent[Entry.key];
         // FIXME merge config
-        Inject.resolve(fiber.entry!.options.inject, fiber.inject)
+        Inject.resolve(fiber.entry!.options.inject, fiber.inject);
       }
 
       // 2. handle self-dispose
       // We only care about `ctx.fiber.dispose()`, so we need to filter out other cases.
 
       // case 1: fiber is created
-      if (fiber.uid) return
+      if (fiber.uid) return;
 
       // case 2: fiber is not tracked by loader
-      if (!fiber.entry) return
+      if (!fiber.entry) return;
 
       // case 3: fiber is a child plugin under the entry (not the entry's root fiber)
-      if (fiber.parent.fiber?.entry === fiber.entry) return
+      if (fiber.parent.fiber?.entry === fiber.entry) return;
 
       // case 4: fiber is disposed on behalf of plugin deletion (such as plugin hmr)
       // self-dispose: ctx.fiber.dispose() -> fiber / runtime dispose -> delete(plugin)
       // plugin hmr: delete(plugin) -> runtime dispose -> fiber dispose
-      if (!ctx.registry.has(fiber.runtime!.callback)) return
+      if (!ctx.registry.has(fiber.runtime!.callback)) return;
 
       // case 5: the entry's tree is being disposed
-      if (!fiber.entry.parent.tree.ctx.fiber.uid) return
+      if (!fiber.entry.parent.tree.ctx.fiber.uid) return;
 
-      this.showLog(fiber.entry, 'unload')
+      this.showLog(fiber.entry, "unload");
 
       // case 6: fiber is disposed by loader behavior
       // such as inject checker, config file update, ancestor group disable
-      if (fiber.entry.disabled) return
+      if (fiber.entry.disabled) return;
 
-      fiber.entry.options.disabled = true
-      fiber.entry.parent.tree.write()
-    })
+      fiber.entry.options.disabled = true;
+      fiber.entry.parent.tree.write();
+    });
 
-    ctx.plugin(isolate)
+    ctx.plugin(isolate);
   }
 
   write() {
@@ -131,36 +142,35 @@ export class Loader extends EntryTree {
   }
 
   [Service.check]() {
-    const config: Loader.Intercept = Service.prototype[Service.resolveConfig].call(this)
-    if (config.await && this.getTasks().length) return false
-    return true
+    const config: Loader.Intercept = Service.prototype[Service.resolveConfig].call(this);
+    if (config.await && this.getTasks().length) return false;
+    return true;
   }
 
   showLog(entry: Entry, type: string) {
-    if (entry.options.group || !entry.parent.tree.enableLogs) return
-    this.ctx.root.logger?.('loader').info('%s plugin %C', type, entry.options.name)
+    if (entry.options.group || !entry.parent.tree.enableLogs) return;
+    this.ctx.root.logger?.("loader").info("%s plugin %C", type, entry.options.name);
   }
 
   locate(fiber = this.ctx.fiber) {
     while (1) {
-      if (fiber.entry) return fiber.entry.id
-      const next = fiber.parent.fiber
-      if (fiber === next) return
-      fiber = next
+      if (fiber.entry) return fiber.entry.id;
+      const next = fiber.parent.fiber;
+      if (fiber === next) return;
+      fiber = next;
     }
   }
 
-  exit() {
-  }
+  exit() {}
 
   unwrapExports(exports: any) {
-    if (isNullable(exports)) return exports
-    exports = exports.default ?? exports
+    if (isNullable(exports)) return exports;
+    exports = exports.default ?? exports;
     // https://github.com/evanw/esbuild/issues/2623
     // https://esbuild.github.io/content-types/#default-interop
-    if (!exports.__esModule) return exports
-    return exports.default ?? exports
+    if (!exports.__esModule) return exports;
+    return exports.default ?? exports;
   }
 }
 
-export default Loader
+export default Loader;

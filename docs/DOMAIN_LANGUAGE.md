@@ -6,9 +6,9 @@ docs; use them consistently in code, commits and discussions.
 
 ## Core concepts
 
-**Cordis** — a meta-framework of *spatiotemporal composability*: the
-*spatial* dimension is which services exist where (scopes, realms); the
-*temporal* dimension is which code runs when (fibers reacting to the
+**Cordis** — a meta-framework of _spatiotemporal composability_: the
+_spatial_ dimension is which services exist where (scopes, realms); the
+_temporal_ dimension is which code runs when (fibers reacting to the
 service set).
 
 **Context** — a scope in the context tree. Carries services, event
@@ -23,8 +23,8 @@ Definitions: Go `NewPlugin[C]`; Rust `Plugin` trait (associated `Config`)
 or `plugin()` closure (`FnPlugin`); Zig `TypedPlugin` comptime constructor
 or runtime `Plugin` value; TypeScript function/object with `apply`.
 
-**Fiber** — one instance of a running plugin: an *effect scope with a
-lifecycle*. When a fiber leaves the active state, everything it
+**Fiber** — one instance of a running plugin: an _effect scope with a
+lifecycle_. When a fiber leaves the active state, everything it
 registered rolls back; when its dependencies return, the same fiber
 instance reloads in place. The set of running code is a pure function of
 the set of available services.
@@ -60,7 +60,7 @@ mutations into one such transaction.
 look it up (`get`) or declare a hard dependency (`inject`).
 
 **Typed service** — the primary service form in the ports: the service
-name derives from the value's *type identity* (Go `ServiceName[T]` /
+name derives from the value's _type identity_ (Go `ServiceName[T]` /
 reflect, Rust `type_name`, Zig `@typeName`), so provider and consumers
 cannot drift apart on a hand written string. Named services remain for
 dynamic names (loader, hmr) and cross-realm contracts.

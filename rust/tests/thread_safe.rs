@@ -56,9 +56,33 @@ fn threads_share_one_tree() {
         handle.join().expect("thread");
     }
 
-    assert_eq!(started.load(Ordering::SeqCst), 4 * 25);
+    // Starts and disposals coalesce inside the drain queue: a fiber whose
+    // disposal is queued before its deferred drain never applies. The
+    // event count is exact; the apply count is bounded above.
     assert_eq!(received.load(Ordering::SeqCst), 4 * 25);
     assert_eq!(sink.load(Ordering::SeqCst), 4 * 25);
+    let applied_before = started.load(Ordering::SeqCst);
+    assert!(applied_before <= 4 * 25);
+
+    // One more fiber per thread applies and settles synchronously.
+    let mut handles = Vec::new();
+    for t in 0..4 {
+        let ctx = Arc::clone(&ctx);
+        let started = Arc::clone(&started);
+        handles.push(std::thread::spawn(move || {
+            let name = format!("final-{t}");
+            let plugin = plugin(name.as_str(), move |_ctx: &Context, config: &i32| {
+                started.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(*config, 7);
+                Ok(())
+            });
+            start_fn(&ctx, &plugin, 7).expect("start");
+        }));
+    }
+    for handle in handles {
+        handle.join().expect("thread");
+    }
+    assert_eq!(started.load(Ordering::SeqCst), applied_before + 4);
 }
 
 #[test]
