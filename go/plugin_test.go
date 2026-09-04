@@ -317,3 +317,48 @@ func captureErrors(ctx *Context) *[]error {
 	}))
 	return errs
 }
+
+func TestStartAnyAndInjectSpec(t *testing.T) {
+	type Config struct{ N int }
+	seen := ""
+	p := NewPlugin("erased", func(ctx *Context, c Config) error {
+		cfg, ok := ctx.Intercepted("dep")
+		if ok {
+			seen = cfg.(string)
+		}
+		if c.N != 7 {
+			t.Fatalf("config = %+v, want N=7", c)
+		}
+		return nil
+	})
+	InjectSpec(p, map[string]any{"dep": "hello", "nildep": nil})
+	if len(p.base.inject) != 2 {
+		t.Fatalf("inject deps = %v, want 2 entries", p.base.inject)
+	}
+	if p.base.injectConfig["dep"] != "hello" {
+		t.Fatalf("inject config = %v", p.base.injectConfig)
+	}
+
+	ctx := New()
+	if _, err := ctx.Provide("nildep", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctx.Provide("dep", "service"); err != nil {
+		t.Fatal(err)
+	}
+	f, err := StartAny(ctx, p, Config{N: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Await()
+	if state := f.State(); state != StateActive {
+		t.Fatalf("state = %s, want active", state)
+	}
+	if seen != "hello" {
+		t.Fatalf("Intercepted dep = %q, want hello", seen)
+	}
+
+	if _, err := StartAny(ctx, nil, nil); err == nil {
+		t.Fatal("StartAny(nil) succeeded")
+	}
+}

@@ -623,8 +623,8 @@ func (f *Fiber) Update(config any) error {
 
 	next := func(args ...any) any {
 		c.mu.Lock()
-		if len(args) > 0 {
-			f.config = args[0]
+		if len(args) > 1 {
+			f.config = args[1]
 		}
 		f.err = nil
 		f.restartRequested = true
@@ -632,7 +632,7 @@ func (f *Fiber) Update(config any) error {
 		c.queue(f)
 		return nil
 	}
-	f.ctx.Waterfall(EventUpdate, config, false, next)
+	f.ctx.Waterfall(EventUpdate, f, config, false, next)
 	return nil
 }
 

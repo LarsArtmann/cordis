@@ -2,8 +2,10 @@ package cordis
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -127,6 +129,34 @@ func Start[C any](ctx *Context, plugin *Plugin[C], config C) (*Fiber, error) {
 		return nil, fmt.Errorf("invalid plugin, expect function or object with an apply method, received %T", plugin)
 	}
 	return startPlugin(ctx, plugin.base, config)
+}
+
+// StartAny is the type-erased form of Start. It starts a plugin through its
+// PluginHandle with an arbitrary config value, for callers that resolve
+// plugins dynamically (the loader and hmr ports).
+func StartAny(ctx *Context, plugin PluginHandle, config any) (*Fiber, error) {
+	if plugin == nil || plugin.handle() == nil {
+		return nil, fmt.Errorf("invalid plugin, expect function or object with an apply method, received %T", plugin)
+	}
+	return startPlugin(ctx, plugin.handle(), config)
+}
+
+// InjectSpec declares entry-style inject options on a type-erased plugin.
+// A nil spec value declares a plain dependency; a non-nil value declares a
+// dependency together with a configuration override, visible to the plugin
+// through Context.Intercepted. It mirrors object style inject entries
+// upstream and must be called before the first Start.
+func InjectSpec(plugin PluginHandle, spec map[string]any) {
+	base := plugin.handle()
+	for _, name := range slices.Sorted(maps.Keys(spec)) {
+		base.inject = append(base.inject, name)
+		if cfg := spec[name]; cfg != nil {
+			if base.injectConfig == nil {
+				base.injectConfig = make(map[string]any)
+			}
+			base.injectConfig[name] = cfg
+		}
+	}
 }
 
 // Inject starts an anonymous plugin that runs fn once every service in deps
