@@ -392,5 +392,6 @@ func NewConsoleExporter(w io.Writer) *ConsoleExporter {
 
 // Export implements Exporter.
 func (e *ConsoleExporter) Export(m Message) {
-	fmt.Fprintf(e.W, "[%s] %s: %s\n", m.Type, m.Name, FormatMessage(m))
+	line := fmt.Sprintf("[%s] %s: %s\n", m.Type, m.Name, FormatMessage(m))
+	_, _ = io.WriteString(e.W, line)
 }

@@ -21,6 +21,15 @@ pub(crate) struct Impl {
 /// The type erased plugin body.
 pub(crate) type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()>>;
 
+/// The shared runtime identity and body of a plugin, used by both the
+/// closure form (FnPlugin) and the trait form (Plugin).
+pub(crate) struct PluginBase {
+    pub id: u64,
+    pub name: String,
+    pub inject: Vec<String>,
+    pub apply: ApplyFn,
+}
+
 /// A back-reference from a fiber to its registration entry in the parent
 /// fiber's effect bag.
 pub(crate) type BagEntry = (Rc<RefCell<Bag>>, Rc<RefCell<Entry>>);

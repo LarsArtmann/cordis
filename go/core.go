@@ -40,6 +40,7 @@ type core struct {
 
 	lastKey  isolateKey
 	keys     map[string]isolateKey
+	labels   map[any]isolateKey
 	hooks    map[string][]*hook
 	runtimes map[*pluginBase]*Runtime
 	store    map[isolateKey]*impl
@@ -61,6 +62,7 @@ type core struct {
 func newCore() *core {
 	c := &core{
 		keys:     make(map[string]isolateKey),
+		labels:   make(map[any]isolateKey),
 		hooks:    make(map[string][]*hook),
 		runtimes: make(map[*pluginBase]*Runtime),
 		store:    make(map[isolateKey]*impl),

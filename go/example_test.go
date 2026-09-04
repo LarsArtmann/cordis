@@ -16,20 +16,24 @@ type Database struct {
 
 func (db *Database) Query(q string) string { return "rows for " + q + " via " + db.DSN }
 
+// UserCreated is a typed event: the event name derives from the type, so
+// emitters and listeners cannot drift apart on a string.
+type UserCreated struct {
+	ID int
+}
+
 var DatabasePlugin = cordis.NewPlugin("database", func(ctx *cordis.Context, cfg DatabaseConfig) error {
-	db := &Database{DSN: cfg.DSN}
-	_, err := ctx.Provide("database", db)
+	_, err := cordis.Provide(ctx, &Database{DSN: cfg.DSN})
 	return err
 })
 
 var UserServicePlugin = cordis.NewPlugin("user-service", func(ctx *cordis.Context, _ struct{}) error {
-	db := cordis.MustGet[*Database](ctx, "database")
-	_, err := ctx.On("user-created", func(args ...any) any {
+	db := cordis.MustGet[*Database](ctx)
+	_, err := cordis.On(ctx, func(event UserCreated) {
 		fmt.Println(db.Query("SELECT * FROM users"))
-		return nil
 	})
 	return err
-}).Inject("database")
+}).Inject(cordis.ServiceName[*Database]())
 
 func Example() {
 	ctx := cordis.New()
@@ -42,7 +46,7 @@ func Example() {
 		panic(err)
 	}
 
-	ctx.Emit("user-created")
+	cordis.Emit(ctx, UserCreated{ID: 1})
 
 	// Output: rows for SELECT * FROM users via postgres://localhost/app
 }

@@ -36,7 +36,6 @@ type hook struct {
 	owner  *Context
 	fn     Listener
 	global bool
-	seq    int64
 }
 
 // Well known internal events, mirroring the Events interface upstream.
@@ -179,9 +178,7 @@ func (c *Context) Parallel(name string, args ...any) error {
 	var wg sync.WaitGroup
 	errs := make([]error, len(hooks))
 	for i, h := range hooks {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() {
 				if r := recover(); r != nil {
 					errs[i] = fmt.Errorf("%v", r)
@@ -192,7 +189,7 @@ func (c *Context) Parallel(name string, args ...any) error {
 					errs[i] = err
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	return errors.Join(errs...)

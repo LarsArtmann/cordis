@@ -210,3 +210,65 @@ impl Drop for Disposer {
         // lifetime, matching upstream semantics.
     }
 }
+
+/// An RAII wrapper around a [`Disposer`]: the registration is disposed when
+/// the guard goes out of scope. This is the native Rust form for scopes
+/// that own their effects:
+///
+/// ```
+/// # use cordis::{Context, EventOptions};
+/// # use std::rc::Rc;
+/// # #[derive(Default)] struct Conn;
+/// fn scoped(ctx: &Context) -> cordis::Result<()> {
+///     let _conn = ctx.provide(Conn::default()).map(cordis::Guard::from)?;
+///     // ... use the service ...
+///     Ok(()) // _conn disposes the service here
+/// }
+/// ```
+///
+/// Dropping a bare Disposer keeps the registration bound to the fiber; wrap
+/// it in a Guard when a scope should own it instead, and call
+/// [`Guard::detach`] to hand the registration back to the fiber.
+pub struct Guard {
+    inner: Option<Disposer>,
+}
+
+impl Guard {
+    /// Wrap a disposer.
+    pub fn new(disposer: Disposer) -> Guard {
+        Guard { inner: Some(disposer) }
+    }
+
+    /// Keep the registration for the fiber's lifetime and consume the guard
+    /// without disposing it.
+    pub fn detach(mut self) {
+        self.inner = None;
+    }
+
+    /// Dispose the registration eagerly, before the scope ends.
+    pub fn dispose(mut self) {
+        if let Some(d) = self.inner.take() {
+            d.dispose();
+        }
+    }
+}
+
+impl From<Disposer> for Guard {
+    fn from(disposer: Disposer) -> Guard {
+        Guard::new(disposer)
+    }
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        if let Some(d) = self.inner.take() {
+            d.dispose();
+        }
+    }
+}
+
+impl std::fmt::Debug for Guard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Guard").finish_non_exhaustive()
+    }
+}

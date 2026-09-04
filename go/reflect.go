@@ -102,32 +102,3 @@ func (c *Context) Has(name string) bool {
 	_, ok := co.props[name]
 	return ok
 }
-
-// Get is the statically typed variant of Context.Get. It returns an error
-// when the service is unavailable or has an unexpected type, with messages
-// mirroring the TypeScript runtime.
-func Get[T any](c *Context, name string) (T, error) {
-	var zero T
-	value, ok := c.Get(name)
-	if !ok {
-		if !c.Has(name) {
-			return zero, fmt.Errorf("cannot get property %q without inject", name)
-		}
-		return zero, fmt.Errorf("cannot get required service %q in inactive context", name)
-	}
-	typed, ok := value.(T)
-	if !ok {
-		return zero, fmt.Errorf("service %q has type %T, expected %T", name, value, zero)
-	}
-	return typed, nil
-}
-
-// MustGet is Get that panics on failure, for wiring code where a missing
-// service is a programming error.
-func MustGet[T any](c *Context, name string) T {
-	value, err := Get[T](c, name)
-	if err != nil {
-		panic(err)
-	}
-	return value
-}

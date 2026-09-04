@@ -1,6 +1,10 @@
 package cordis
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"maps"
+)
 
 // FiberState describes the lifecycle of a fiber, mirroring FiberState in the
 // TypeScript implementation.
@@ -74,6 +78,12 @@ type Fiber struct {
 	entryBag  *disposeBag
 
 	idleCh chan struct{}
+
+	// stdCtx is the stdlib context of the fiber's current activation. It is
+	// cancelled on unload and disposal and renewed on every load, giving
+	// plugin owned goroutines a uniform shutdown signal.
+	stdCtx    context.Context
+	stdCancel context.CancelCauseFunc
 }
 
 // newRootFiber creates the fiber backing a root context. The root fiber is
@@ -88,6 +98,7 @@ func newRootFiber(ctx *Context) *Fiber {
 		activeBag: newDisposeBag(ctx.core),
 		idleCh:    make(chan struct{}),
 	}
+	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
 	return f
 }
 
@@ -113,11 +124,10 @@ func newFiber(parent *Context, config any, base *pluginBase, rt *Runtime) *Fiber
 	ctx.fiber = f
 	if len(f.injectConfig) > 0 {
 		ctx.intercept = make(map[string]any, len(f.injectConfig))
-		for name, value := range f.injectConfig {
-			ctx.intercept[name] = value
-		}
+		maps.Copy(ctx.intercept, f.injectConfig)
 	}
 	f.ctx = ctx
+	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
 	return f
 }
 
@@ -186,6 +196,46 @@ func (f *Fiber) bag() *disposeBag {
 		return f.activeBag
 	}
 	return nil
+}
+
+// StdContext returns the stdlib context of the fiber's current activation.
+// It is cancelled when the fiber unloads, restarts or is disposed, and a
+// fresh one is installed on every load. Use it to propagate fiber lifetime
+// into plugin owned goroutines and I/O calls:
+//
+//	go doWork(ctx.Fiber().StdContext())
+//
+// The context of the root fiber is cancelled when the root scope restarts.
+func (f *Fiber) StdContext() context.Context {
+	f.core.mu.Lock()
+	defer f.core.mu.Unlock()
+	return f.stdCtx
+}
+
+// Done returns a channel closed when the fiber's current activation ends:
+// it unloads (a dependency disappeared), restarts or is disposed. It is the
+// select friendly view of StdContext and receives a fresh channel on every
+// reload, mirroring context.Done semantics.
+func (f *Fiber) Done() <-chan struct{} {
+	return f.StdContext().Done()
+}
+
+// renewStdLocked installs a fresh stdlib context, cancelling the previous
+// one. Callers must hold core.mu.
+func (f *Fiber) renewStdLocked() {
+	if f.stdCancel != nil {
+		f.stdCancel(nil)
+	}
+	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
+}
+
+// cancelStdLocked cancels the stdlib context of the current activation.
+// Callers must hold core.mu. Cancelling is idempotent, so fibers that never
+// activated can call it unconditionally.
+func (f *Fiber) cancelStdLocked() {
+	if f.stdCancel != nil {
+		f.stdCancel(nil)
+	}
 }
 
 // GetEffects returns the introspection tree of live effects, mirroring
@@ -309,12 +359,14 @@ func (f *Fiber) transition() {
 		case disposed && !isActive:
 			f.setStateLocked(StateDisposed)
 			f.uid = -1
+			f.cancelStdLocked()
 			c.mu.Unlock()
 			f.settle()
 			return
 		case isActive && (restart || !wantActive):
 			f.executing = true
 			f.setStateLocked(StateUnloading)
+			f.cancelStdLocked()
 			c.mu.Unlock()
 			f.unload()
 			if wantActive {
@@ -325,6 +377,7 @@ func (f *Fiber) transition() {
 			if f.disposed {
 				f.setStateLocked(StateDisposed)
 				f.uid = -1
+				f.cancelStdLocked()
 			} else if f.state != StateFailed {
 				if wantActive {
 					f.setStateLocked(StateActive)
@@ -344,6 +397,7 @@ func (f *Fiber) transition() {
 			if f.disposed {
 				f.setStateLocked(StateDisposed)
 				f.uid = -1
+				f.cancelStdLocked()
 			} else if f.state != StateFailed {
 				f.setStateLocked(StateActive)
 			}
@@ -358,12 +412,14 @@ func (f *Fiber) transition() {
 	}
 }
 
-// unload drains the effect bag, running every cleanup in reverse order.
+// unload drains the effect bag, running every cleanup in reverse order, and
+// cancels the stdlib context of the activation.
 func (f *Fiber) unload() {
 	c := f.core
 	c.mu.Lock()
 	bag := f.activeBag
 	f.activeBag = nil
+	f.cancelStdLocked()
 	c.mu.Unlock()
 	if bag == nil {
 		return
@@ -380,6 +436,7 @@ func (f *Fiber) load() {
 	c.mu.Lock()
 	bag := newDisposeBag(c)
 	f.activeBag = bag
+	f.renewStdLocked()
 	f.setStateLocked(StateLoading)
 	apply := f.runtime.base.apply
 	config := f.config
@@ -393,6 +450,7 @@ func (f *Fiber) load() {
 	if err != nil {
 		f.err = err
 		f.activeBag = nil
+		f.cancelStdLocked()
 		c.mu.Unlock()
 		for _, item := range bag.take() {
 			item.execute(c)
@@ -526,7 +584,8 @@ func (f *Fiber) Restart() error {
 }
 
 // restartRoot implements root fiber disposal: every effect of the root scope
-// rolls back and the root starts over with an empty bag.
+// rolls back, the stdlib context rotates and the root starts over with an
+// empty bag.
 func (f *Fiber) restartRoot() {
 	c := f.core
 	c.mu.Lock()
@@ -535,6 +594,7 @@ func (f *Fiber) restartRoot() {
 	f.unload()
 	c.mu.Lock()
 	f.activeBag = newDisposeBag(c)
+	f.renewStdLocked()
 	c.mu.Unlock()
 }
 

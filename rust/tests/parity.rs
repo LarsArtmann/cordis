@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use cordis::{plugin, start, value, Context, Error, EventOptions, FiberState, Next, Value};
+use cordis::{plugin, start_fn, value, Context, Error, EventOptions, FiberState, Next, Value};
 
 fn opts() -> EventOptions {
     EventOptions::default()
@@ -25,11 +25,11 @@ fn counting_listener(calls: &Counter) -> TestListener {
 fn on_emit_dispose() {
     let ctx = Context::new();
     let calls = Rc::new(RefCell::new(0));
-    let disposer = ctx.on("test", counting_listener(&calls), opts()).unwrap();
-    ctx.emit("test", &[]);
+    let disposer = ctx.on_named("test", counting_listener(&calls), opts()).unwrap();
+    ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
     disposer.dispose();
-    ctx.emit("test", &[]);
+    ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
 }
 
@@ -37,9 +37,9 @@ fn on_emit_dispose() {
 fn once_fires_exactly_once() {
     let ctx = Context::new();
     let calls = Rc::new(RefCell::new(0));
-    let _once = ctx.once("test", counting_listener(&calls), opts()).unwrap();
-    ctx.emit("test", &[]);
-    ctx.emit("test", &[]);
+    let _once = ctx.once_named("test", counting_listener(&calls), opts()).unwrap();
+    ctx.emit_named("test", &[]);
+    ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
 }
 
@@ -49,7 +49,7 @@ fn emit_order_with_prepend() {
     let seq = Rc::new(RefCell::new(Vec::new()));
     let register = |v: i32, o: EventOptions| {
         let seq = Rc::clone(&seq);
-        ctx.on(
+        ctx.on_named(
             "test",
             Rc::new(move |_| {
                 seq.borrow_mut().push(v);
@@ -68,7 +68,7 @@ fn emit_order_with_prepend() {
             global: false,
         },
     );
-    ctx.emit("test", &[]);
+    ctx.emit_named("test", &[]);
     assert_eq!(*seq.borrow(), vec![0, 1, 2]);
 }
 
@@ -78,7 +78,7 @@ fn bail_returns_first_result() {
     let calls = Rc::new(RefCell::new(0));
     for result in [None, Some(value("bailed")), Some(value("unreachable"))] {
         let calls = Rc::clone(&calls);
-        ctx.on(
+        ctx.on_named(
             "test",
             Rc::new(move |_| {
                 *calls.borrow_mut() += 1;
@@ -102,8 +102,8 @@ fn waterfall_composes_and_short_circuits() {
         let result = next(&[value(v)]).unwrap();
         Some(value(v + *result.downcast::<i32>().unwrap()))
     });
-    ctx.on("test", Rc::clone(&add_next), opts()).unwrap();
-    ctx.on("test", add_next, opts()).unwrap();
+    ctx.on_named("test", Rc::clone(&add_next), opts()).unwrap();
+    ctx.on_named("test", add_next, opts()).unwrap();
     let terminal: Next = Rc::new(|_| Some(value(2)));
     let result = ctx.waterfall("test", vec![value(1)], terminal).unwrap();
     assert_eq!(*result.downcast::<i32>().unwrap(), 4);
@@ -112,9 +112,9 @@ fn waterfall_composes_and_short_circuits() {
 #[test]
 fn parallel_aggregates_errors() {
     let ctx = Context::new();
-    ctx.on("test", Rc::new(|_| Some(value("err-one".to_string()))), opts())
+    ctx.on_named("test", Rc::new(|_| Some(value("err-one".to_string()))), opts())
         .unwrap();
-    ctx.on("test", Rc::new(|_| Some(value("err-two".to_string()))), opts())
+    ctx.on_named("test", Rc::new(|_| Some(value("err-two".to_string()))), opts())
         .unwrap();
     let err = ctx.parallel("test", &[]).unwrap_err();
     let text = err.to_string();
@@ -126,16 +126,16 @@ fn parallel_aggregates_errors() {
 fn event_filter() {
     let ctx = Context::new();
     let calls = Rc::new(RefCell::new(0));
-    ctx.on("test", counting_listener(&calls), opts()).unwrap();
-    ctx.emit("test", &[]);
+    ctx.on_named("test", counting_listener(&calls), opts()).unwrap();
+    ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
 
     let rejecting = ctx.with_filter(Rc::new(|_| false));
-    rejecting.emit("test", &[]);
+    rejecting.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
 
     // Global listeners bypass filters.
-    ctx.on(
+    ctx.on_named(
         "global-test",
         counting_listener(&calls),
         EventOptions {
@@ -144,7 +144,7 @@ fn event_filter() {
         },
     )
     .unwrap();
-    rejecting.emit("global-test", &[]);
+    rejecting.emit_named("global-test", &[]);
     assert_eq!(*calls.borrow(), 2);
 }
 
@@ -201,7 +201,7 @@ fn effect_on_inactive_context_fails() {
             Ok(())
         }
     });
-    let fiber = start(&ctx, &p, ()).unwrap();
+    let fiber = start_fn(&ctx, &p, ()).unwrap();
     fiber.dispose();
     let inner = captured.borrow_mut().take().unwrap();
     assert_eq!(
@@ -209,10 +209,10 @@ fn effect_on_inactive_context_fails() {
         Error::InactiveEffect
     );
     assert_eq!(
-        inner.on("x", Rc::new(|_| None), opts()).unwrap_err(),
+        inner.on_named("x", Rc::new(|_| None), opts()).unwrap_err(),
         Error::InactiveEffect
     );
-    assert_eq!(start(&inner, &p, ()).unwrap_err(), Error::InactiveEffect);
+    assert_eq!(start_fn(&inner, &p, ()).unwrap_err(), Error::InactiveEffect);
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn plugin_lifecycle() {
             Ok(())
         }
     });
-    let fiber = start(&ctx, &p, "hello".to_string()).unwrap();
+    let fiber = start_fn(&ctx, &p, "hello".to_string()).unwrap();
     assert_eq!(*calls.borrow(), 1);
     assert_eq!(fiber.state(), FiberState::Active);
     assert_eq!(fiber.name(), "greeter");
@@ -249,35 +249,35 @@ fn nested_plugins_and_registry() {
     let inner = plugin("inner", {
         let calls = Rc::clone(&calls);
         move |ctx: &Context, _: &()| {
-            ctx.on("custom-event", counting_listener(&calls), opts())?;
+            ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Ok(())
         }
     });
     let mid = plugin("mid", {
         let calls = Rc::clone(&calls);
         move |ctx: &Context, _: &()| {
-            ctx.on("custom-event", counting_listener(&calls), opts())?;
-            start(ctx, &inner, ())?;
+            ctx.on_named("custom-event", counting_listener(&calls), opts())?;
+            start_fn(ctx, &inner, ())?;
             Ok(())
         }
     });
     let outer = plugin("outer", {
         let calls = Rc::clone(&calls);
         move |ctx: &Context, _: &()| {
-            ctx.on("custom-event", counting_listener(&calls), opts())?;
-            start(ctx, &mid, ())?;
+            ctx.on_named("custom-event", counting_listener(&calls), opts())?;
+            start_fn(ctx, &mid, ())?;
             Ok(())
         }
     });
 
-    let fiber = start(&ctx, &outer, ()).unwrap();
+    let fiber = start_fn(&ctx, &outer, ()).unwrap();
     assert_eq!(ctx.registry().size(), 3);
-    ctx.emit("custom-event", &[]);
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*calls.borrow(), 3);
 
     fiber.dispose();
     assert_eq!(ctx.registry().size(), 0);
-    ctx.emit("custom-event", &[]);
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*calls.borrow(), 3);
 }
 
@@ -288,21 +288,21 @@ fn registry_delete_restores_snapshot() {
     let p = plugin("p", {
         let calls = Rc::clone(&calls);
         move |ctx: &Context, _: &()| {
-            ctx.on("custom-event", counting_listener(&calls), opts())?;
+            ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Ok(())
         }
     });
-    start(&ctx, &p, ()).unwrap();
-    ctx.emit("custom-event", &[]);
+    start_fn(&ctx, &p, ()).unwrap();
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*calls.borrow(), 1);
 
     ctx.registry().delete(&p);
     assert!(!ctx.registry().has(&p));
-    ctx.emit("custom-event", &[]);
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*calls.borrow(), 1);
 
-    start(&ctx, &p, ()).unwrap();
-    ctx.emit("custom-event", &[]);
+    start_fn(&ctx, &p, ()).unwrap();
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*calls.borrow(), 2);
 }
 
@@ -313,24 +313,24 @@ fn plugin_error_rolls_back_partial_effects() {
     let faulty = plugin("faulty", {
         let calls = Rc::clone(&calls);
         move |ctx: &Context, _: &()| {
-            ctx.on("custom-event", counting_listener(&calls), opts())?;
+            ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Err(Error::Validation("boom".to_string()))
         }
     });
     let healthy = plugin("healthy", {
         let calls = Rc::clone(&calls);
         move |ctx: &Context, _: &()| {
-            ctx.on("custom-event", counting_listener(&calls), opts())?;
+            ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Ok(())
         }
     });
 
-    let faulty_fiber = start(&ctx, &faulty, ()).unwrap();
-    start(&ctx, &healthy, ()).unwrap();
+    let faulty_fiber = start_fn(&ctx, &faulty, ()).unwrap();
+    start_fn(&ctx, &healthy, ()).unwrap();
 
     assert_eq!(faulty_fiber.state(), FiberState::Failed);
     assert_eq!(ctx.logged_errors().len(), 1);
-    ctx.emit("custom-event", &[]);
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*calls.borrow(), 1);
 }
 
@@ -345,7 +345,7 @@ fn update_reinvokes_with_new_config() {
             Ok(())
         }
     });
-    let fiber = start(&ctx, &p, "hello".to_string()).unwrap();
+    let fiber = start_fn(&ctx, &p, "hello".to_string()).unwrap();
     fiber.update(value("world".to_string())).unwrap();
     assert_eq!(*msgs.borrow(), vec!["hello".to_string(), "world".to_string()]);
     assert_eq!(fiber.state(), FiberState::Active);
@@ -370,7 +370,7 @@ fn inject_reactivity() {
         .unwrap();
     assert_eq!(fiber.state(), FiberState::Pending);
 
-    let disposer = ctx.provide("foo", value(1)).unwrap();
+    let disposer = ctx.provide_named("foo", value(1)).unwrap();
     assert_eq!(fiber.state(), FiberState::Active);
     assert_eq!(*seq.borrow(), vec!["apply"]);
 
@@ -378,7 +378,7 @@ fn inject_reactivity() {
     assert_eq!(fiber.state(), FiberState::Pending);
     assert_eq!(*seq.borrow(), vec!["apply", "cleanup"]);
 
-    ctx.provide("foo", value(2)).unwrap();
+    ctx.provide_named("foo", value(2)).unwrap();
     assert_eq!(fiber.state(), FiberState::Active);
     assert_eq!(*seq.borrow(), vec!["apply", "cleanup", "apply"]);
 }
@@ -386,12 +386,12 @@ fn inject_reactivity() {
 #[test]
 fn provide_get_and_duplicate_detection() {
     let ctx = Context::new();
-    assert!(ctx.get("foo").is_none());
-    let disposer = ctx.provide("foo", value(42)).unwrap();
-    assert_eq!(*ctx.get_typed::<i32>("foo").unwrap(), 42);
-    assert!(ctx.provide("foo", value(43)).is_err());
+    assert!(ctx.get_named("foo").is_none());
+    let disposer = ctx.provide_named("foo", value(42)).unwrap();
+    assert_eq!(*ctx.get_named("foo").unwrap().downcast::<i32>().unwrap(), 42);
+    assert!(ctx.provide_named("foo", value(43)).is_err());
     disposer.dispose();
-    assert!(ctx.get("foo").is_none());
+    assert!(ctx.get_named("foo").is_none());
 }
 
 #[test]
@@ -413,14 +413,14 @@ fn isolation_realms() {
             .unwrap();
     }
 
-    ctx.provide("foo", value(100)).unwrap();
+    ctx.provide_named("foo", value(100)).unwrap();
     assert_eq!(*calls.borrow(), 1);
-    assert!(iso1.get("foo").is_none());
+    assert!(iso1.get_named("foo").is_none());
 
-    iso1.provide("foo", value(200)).unwrap();
+    iso1.provide_named("foo", value(200)).unwrap();
     assert_eq!(*calls.borrow(), 2);
-    assert!(iso2.get("foo").is_none());
-    assert_eq!(*ctx.get_typed::<i32>("foo").unwrap(), 100);
+    assert!(iso2.get_named("foo").is_none());
+    assert_eq!(*ctx.get_named("foo").unwrap().downcast::<i32>().unwrap(), 100);
 }
 
 #[test]
@@ -442,13 +442,13 @@ fn isolation_shared_label() {
             .unwrap();
     }
 
-    let disposer = iso1.provide("foo", value(200)).unwrap();
+    let disposer = iso1.provide_named("foo", value(200)).unwrap();
     assert_eq!(*calls.borrow(), 2);
-    assert_eq!(*iso2.get_typed::<i32>("foo").unwrap(), 200);
+    assert_eq!(*iso2.get_named("foo").unwrap().downcast::<i32>().unwrap(), 200);
 
     disposer.dispose();
-    assert!(iso1.get("foo").is_none());
-    assert!(iso2.get("foo").is_none());
+    assert!(iso1.get_named("foo").is_none());
+    assert!(iso2.get_named("foo").is_none());
 }
 
 #[test]
@@ -457,18 +457,18 @@ fn realm_filtered_events() {
     let isolated = ctx.isolate("foo");
     let root_calls = Rc::new(RefCell::new(0));
     let iso_calls = Rc::new(RefCell::new(0));
-    ctx.on("custom-event", counting_listener(&root_calls), opts())
+    ctx.on_named("custom-event", counting_listener(&root_calls), opts())
         .unwrap();
     isolated
-        .on("custom-event", counting_listener(&iso_calls), opts())
+        .on_named("custom-event", counting_listener(&iso_calls), opts())
         .unwrap();
 
     let emitter = isolated.with_filter(isolated.realm_filter("foo"));
-    emitter.emit("custom-event", &[]);
+    emitter.emit_named("custom-event", &[]);
     assert_eq!(*root_calls.borrow(), 0);
     assert_eq!(*iso_calls.borrow(), 1);
 
-    ctx.emit("custom-event", &[]);
+    ctx.emit_named("custom-event", &[]);
     assert_eq!(*root_calls.borrow(), 1);
     assert_eq!(*iso_calls.borrow(), 2);
 }

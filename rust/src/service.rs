@@ -1,4 +1,10 @@
 //! Service provision and lookup.
+//!
+//! The typed API ([`Context::provide`], [`Context::get`]) is the primary
+//! form: services are keyed by their type identity, resolved through the
+//! same realm machinery as named services. The named forms
+//! ([`Context::provide_named`], [`Context::get_named`]) remain for dynamic
+//! names (loader and hmr ports) and cross realm contracts.
 
 use std::any::Any;
 use std::rc::Rc;
@@ -13,11 +19,19 @@ impl Context {
     /// is bound to the context's fiber: it is withdrawn automatically when
     /// the fiber unloads, and every fiber injecting `name` is re-evaluated
     /// on both publication and withdrawal.
-    pub fn provide(&self, name: &str, v: Value) -> crate::Result<Disposer> {
+    pub fn provide_named(&self, name: &str, v: Value) -> crate::Result<Disposer> {
         core::enter(&self.core);
         let result = self.provide_inner(name, v);
         core::leave(&self.core);
         result
+    }
+
+    /// Publish `value` as the service identified by its type `T` in this
+    /// context's realm. The service is bound to the context's fiber exactly
+    /// like a named service and rolls back with it. Providing the same type
+    /// twice in one realm fails with [`crate::Error::DuplicateService`].
+    pub fn provide<T: Any>(&self, value: T) -> crate::Result<Disposer> {
+        self.provide_named(crate::events::service_name::<T>(), Rc::new(value))
     }
 
     fn provide_inner(&self, name: &str, v: Value) -> crate::Result<Disposer> {
@@ -81,7 +95,7 @@ impl Context {
 
     /// The service published under `name` in this context's realm, when its
     /// provider is active.
-    pub fn get(&self, name: &str) -> Option<Value> {
+    pub fn get_named(&self, name: &str) -> Option<Value> {
         let key = {
             let mut core = self.core.borrow_mut();
             match self.find_isolate_override(name) {
@@ -98,14 +112,24 @@ impl Context {
         Some(Rc::clone(&imp.value))
     }
 
-    /// The statically typed variant of [`Context::get`].
-    pub fn get_typed<T: Any>(&self, name: &str) -> crate::Result<Rc<T>> {
-        match self.get(name) {
+    /// The service of type `T` published in this context's realm. Fails when
+    /// the service is missing, its provider is inactive or the value has an
+    /// unexpected type.
+    pub fn get<T: Any>(&self) -> crate::Result<Rc<T>> {
+        match self.get_named(crate::events::service_name::<T>()) {
             Some(v) => v.downcast::<T>().map_err(|_| crate::Error::TypeMismatch {
-                name: name.to_string(),
+                name: crate::events::service_name::<T>().to_string(),
             }),
-            None => Err(crate::Error::MissingService(name.to_string())),
+            None => Err(crate::Error::MissingService(
+                crate::events::service_name::<T>().to_string(),
+            )),
         }
+    }
+
+    /// The service of type `T` when it is currently available, mirroring the
+    /// two value lookup of [`Context::get_named`].
+    pub fn try_get<T: Any>(&self) -> Option<Rc<T>> {
+        self.get::<T>().ok()
     }
 
     /// Whether `name` is declared as a service in this context tree.

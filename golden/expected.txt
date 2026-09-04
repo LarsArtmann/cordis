@@ -1,0 +1,48 @@
+provided config
+apply consumer config=1
+state consumer ACTIVE
+apply watcher config=2
+state watcher ACTIVE
+cleanup consumer
+cleanup watcher
+withdrawn config
+state consumer PENDING
+state watcher PENDING
+apply consumer config=1
+apply watcher config=2
+provided config
+state consumer ACTIVE
+state watcher ACTIVE
+cleanup consumer
+apply consumer config=5
+state consumer ACTIVE
+cleanup consumer
+apply consumer config=5
+state consumer ACTIVE
+cleanup consumer
+disposed consumer
+state consumer DISPOSED
+cleanup watcher
+withdrawn config
+apply stacker config=0
+state stacker ACTIVE
+cleanup stacker#3
+cleanup stacker#2
+cleanup stacker#1
+disposed stacker
+state stacker DISPOSED
+provided config
+apply isolated-watcher config=9
+state isolated-watcher ACTIVE
+state watcher PENDING
+cleanup isolated-watcher
+withdrawn config
+state isolated-watcher PENDING
+apply watcher config=2
+provided config
+apply tail config=0
+state tail ACTIVE
+cleanup tail
+cleanup watcher
+root-restarted
+state tail DISPOSED

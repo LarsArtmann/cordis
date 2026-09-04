@@ -131,8 +131,9 @@ func Start[C any](ctx *Context, plugin *Plugin[C], config C) (*Fiber, error) {
 
 // Inject starts an anonymous plugin that runs fn once every service in deps
 // is available, mirroring ctx.inject upstream. The fiber reloads whenever
-// the dependency set becomes complete again after losing a dependency.
-func (c *Context) Inject(deps []string, fn func(ctx *Context) error) *Fiber {
+// the dependency set becomes complete again after losing a dependency. It
+// returns the new fiber, or the error that prevented it from starting.
+func (c *Context) Inject(deps []string, fn func(ctx *Context) error) (*Fiber, error) {
 	base := &pluginBase{
 		name:   funcName(fn),
 		inject: deps,
@@ -140,12 +141,7 @@ func (c *Context) Inject(deps []string, fn func(ctx *Context) error) *Fiber {
 			return fn(ctx)
 		},
 	}
-	fiber, err := startPlugin(c, base, nil)
-	if err != nil {
-		c.core.logError("root", err)
-		return nil
-	}
-	return fiber
+	return startPlugin(c, base, nil)
 }
 
 func startPlugin(ctx *Context, base *pluginBase, config any) (*Fiber, error) {
