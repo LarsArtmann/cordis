@@ -3,6 +3,7 @@
 use crate::sync::RefCell;
 use std::collections::HashSet;
 use crate::sync::Rc;
+#[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, ContextData, Disposer};
@@ -179,7 +180,6 @@ impl Fiber {
                 if let Some(runtime) = core.runtimes.get_mut(&runtime_id) {
                     runtime.fibers.retain(|id| *id != fiber.id);
                     if runtime.fibers.is_empty() {
-                        eprintln!("REMOVED runtime {} at fiber {}", runtime_id, fiber.id.0);
                         core.runtimes.remove(&runtime_id);
                     }
                 }
@@ -224,6 +224,11 @@ impl Fiber {
     /// Replace the fiber's config and restart it. The restart settles through
     /// the drain queue, so cascading dependency updates never observe torn
     /// states.
+    /// Typed variant of [`Fiber::update`]: replaces the config with `C`.
+    pub fn update_config<C: crate::sync::Shared>(&self, config: C) -> crate::Result<()> {
+        self.update(crate::events::value(config))
+    }
+
     pub fn update(&self, config: crate::events::Value) -> crate::Result<()> {
         self.assert_active()?;
         core_enter_leave(self, |fiber| {
@@ -324,6 +329,7 @@ pub(crate) fn new_fiber(
             parent: Some(Rc::clone(&parent.data)),
             fiber: id,
             isolate: None,
+            intercept: None,
             filter: None,
             collect: None,
         }),
@@ -359,6 +365,7 @@ pub(crate) fn link_fiber_ctx(core: &Rc<RefCell<Core>>, id: FiberId) {
             parent: Some(Rc::clone(&f.ctx.data)),
             fiber: id,
             isolate: None,
+            intercept: None,
             filter: None,
             collect: None,
         }),

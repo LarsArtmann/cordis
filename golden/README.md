@@ -11,7 +11,19 @@ executes the script and emits a canonical trace:
 | Rust   | `rust/tests/golden.rs` |
 | Zig    | `zig/tests/golden.zig` |
 
-The trace must equal `expected.txt` byte for byte in every language. A
+## Scenarios
+
+| Scenario | Spec | Expected trace | Pins |
+| --- | --- | --- | --- |
+| #1 lifecycle | `scenario.txt` | `expected.txt` | fiber lifecycle, inject reactivity, LIFO rollback, isolation realms, root restart |
+| #2 events | `scenario-events.txt` | `expected-events.txt` | dispatch order, realm filters, global listeners |
+| #3 cascade | `scenario-cascade.txt` | `expected-cascade.txt` | nested plugin disposal order, registry delete, registry size |
+
+Regenerate an expected file with
+`GOLDEN_UPDATE=1 go test -run 'TestGolden.*' ./...` from `go/`, then
+re-verify the Rust and Zig runners.
+
+The trace must equal the scenario's expected file byte for byte in every language. A
 divergence means one port's semantics drifted; fix the port, never the
 golden file, unless the scenario itself changes (in which case regenerate
 `expected.txt` with every runner and commit all three results).

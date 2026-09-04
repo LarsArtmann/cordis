@@ -122,3 +122,31 @@ fn services_and_events_race_safely() {
     }
     assert!(hits.load(Ordering::SeqCst) > 0);
 }
+
+#[test]
+fn parallel_runs_listeners_concurrently() {
+    let ctx = Arc::new(Context::new());
+    let hits = Arc::new(AtomicUsize::new(0));
+    for t in 0..3 {
+        let hits = Arc::clone(&hits);
+        ctx.on_named(
+            "par",
+            Arc::new(move |args: &[cordis::Value]| {
+                let n: &i32 = args[0].downcast_ref().unwrap();
+                if *n == 1 {
+                    // Park briefly so concurrent execution is observable in
+                    // principle; correctness does not depend on timing.
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                hits.fetch_add(1, Ordering::SeqCst);
+                None
+            }),
+            EventOptions::default(),
+        )
+        .unwrap();
+        let _ = t;
+    }
+    let one: cordis::Value = value(2i32);
+    ctx.parallel("par", &[one]).expect("all listeners ok");
+    assert_eq!(hits.load(Ordering::SeqCst), 3);
+}

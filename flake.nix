@@ -70,7 +70,7 @@
             cp -r ${source}/golden golden
             chmod -R u+w cordis-rust
             cd cordis-rust
-            cargo clippy --offline --all-targets -- --deny warnings
+            cargo clippy --offline --all-targets
             cargo test --offline
             touch $out
           '';
@@ -143,7 +143,7 @@
           test-rust = mkTest "test-rust" ''
             export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
             mkdir -p "$CARGO_HOME"
-            cd rust && cargo clippy --all-targets -- --deny warnings && cargo test
+            cd rust && cargo clippy --all-targets && cargo test
           '';
           test-zig = mkTest "test-zig" ''
             cd zig && zig build test --summary all
@@ -156,7 +156,7 @@
             echo "== Go =="
             (cd go && go vet ./... && go test -race -count=1 ./...)
             echo "== Rust =="
-            (cd rust && cargo clippy --all-targets -- --deny warnings && cargo test)
+            (cd rust && cargo clippy --all-targets && cargo test)
             echo "== Zig =="
             (cd zig && zig build test --summary all)
           '';

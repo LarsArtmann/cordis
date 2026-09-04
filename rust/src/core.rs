@@ -4,6 +4,7 @@
 use crate::sync::RefCell;
 use std::collections::{HashMap, VecDeque};
 use crate::sync::Rc;
+#[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
 
 use crate::context::Context;

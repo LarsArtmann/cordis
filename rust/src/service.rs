@@ -6,8 +6,8 @@
 //! ([`Context::provide_named`], [`Context::get_named`]) remain for dynamic
 //! names (loader and hmr ports) and cross realm contracts.
 
-use std::any::Any;
 use crate::sync::Rc;
+#[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, Disposer};

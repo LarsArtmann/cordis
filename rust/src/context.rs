@@ -2,10 +2,12 @@
 
 use crate::sync::RefCell;
 use crate::sync::Rc;
+#[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
-/// # use std::cell::RefCell;
 
 use crate::core::{Bag, Core, IsolateKey};
+use crate::events::Value;
+use std::collections::HashMap;
 
 /// Restricts which listeners receive events emitted through a context,
 /// mirroring Context.filter upstream.
@@ -27,6 +29,7 @@ pub(crate) struct ContextData {
     pub parent: Option<Rc<ContextData>>,
     pub fiber: crate::fiber::FiberId,
     pub isolate: Option<Vec<(String, IsolateKey)>>,
+    pub intercept: Option<Rc<RefCell<HashMap<String, Value>>>>,
     pub filter: Option<Filter>,
     /// The effect bag collecting registrations while an effect body runs.
     pub collect: Option<Rc<RefCell<Bag>>>,
@@ -43,6 +46,7 @@ impl Context {
                 parent: None,
                 fiber: crate::fiber::FiberId(0),
                 isolate: None,
+                intercept: None,
                 filter: None,
                 collect: None,
             }),
@@ -60,6 +64,7 @@ impl Context {
                 parent: Some(Rc::clone(&self.data)),
                 fiber: self.data.fiber,
                 isolate: None,
+                intercept: None,
                 filter: None,
                 collect: None,
             }),
@@ -87,10 +92,45 @@ impl Context {
                 parent: Some(Rc::clone(&self.data)),
                 fiber: self.data.fiber,
                 isolate: Some(vec![(name.to_string(), key)]),
+                intercept: None,
                 filter: None,
                 collect: None,
             }),
         }
+    }
+
+    /// A child scope overriding the configuration of the named service,
+    /// mirroring ctx.intercept upstream. Read the override back with
+    /// [`Context::intercepted`].
+    pub fn intercept(&self, name: &str, config: Value) -> Context {
+        let mut map = HashMap::new();
+        map.insert(name.to_string(), config);
+        Context {
+            core: Rc::clone(&self.core),
+            data: Rc::new(ContextData {
+                parent: Some(Rc::clone(&self.data)),
+                fiber: self.data.fiber,
+                isolate: None,
+                intercept: Some(Rc::new(RefCell::new(map))),
+                filter: None,
+                collect: None,
+            }),
+        }
+    }
+
+    /// The nearest configuration override for `name` in the scope chain,
+    /// mirroring ctx.intercepted upstream.
+    pub fn intercepted(&self, name: &str) -> Option<Value> {
+        let mut data = Some(Rc::clone(&self.data));
+        while let Some(d) = data {
+            if let Some(map) = &d.intercept {
+                if let Some(value) = map.borrow().get(name) {
+                    return Some(Rc::clone(value));
+                }
+            }
+            data = d.parent.clone();
+        }
+        None
     }
 
     /// A child scope with an event emission filter.
@@ -101,6 +141,7 @@ impl Context {
                 parent: Some(Rc::clone(&self.data)),
                 fiber: self.data.fiber,
                 isolate: None,
+                intercept: None,
                 filter: Some(filter),
                 collect: None,
             }),
@@ -167,6 +208,7 @@ impl Context {
                 parent: Some(Rc::clone(&self.data)),
                 fiber: self.data.fiber,
                 isolate: None,
+                intercept: None,
                 filter: None,
                 collect: Some(bag),
             }),
