@@ -194,6 +194,18 @@ func (t *Tree) Update(id string, opts EntryOptions) error {
 	return nil
 }
 
+// Refresh disposes the entry's fiber and starts a fresh one from the
+// current resolver registration, preserving the entry's options and
+// identity. It is the dispose+relink step of a hot swap: a swapped plugin
+// implementation is picked up without touching config or entry id.
+func (t *Tree) Refresh(id string) error {
+	e, err := t.Resolve(id)
+	if err != nil {
+		return err
+	}
+	return e.refresh()
+}
+
 // Replace overwrites the entry's options wholesale and reconciles it.
 func (t *Tree) Replace(id string, opts EntryOptions) error {
 	e, err := t.Resolve(id)

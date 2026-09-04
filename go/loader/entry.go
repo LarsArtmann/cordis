@@ -192,6 +192,14 @@ func (e *Entry) reconcile(legacy, next EntryOptions) error {
 	return nil
 }
 
+// refresh re-resolves the plugin from the resolver and restarts the entry
+// from scratch, preserving its options. A swap of the entry's registration
+// becomes visible here: init resolves the new implementation.
+func (e *Entry) refresh() error {
+	e.dispose()
+	return e.init()
+}
+
 // init resolves the plugin, builds the entry context and starts the fiber.
 // Failures are recorded on the entry and returned; the entry stays in the
 // store either way, mirroring the upstream init error path.
