@@ -19,8 +19,10 @@ jobs:
         working-directory: go
         run: go vet ./...
       - name: Lint
-        working-directory: go
-        run: golangci-lint run
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          working-directory: go
+          version: v2.13.1
       - name: Test
         working-directory: go
         run: go test -race -count=3 ./...
