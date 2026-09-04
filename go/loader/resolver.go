@@ -70,6 +70,23 @@ func (r *Resolver) MustRegister(name string, reg Registration) {
 	}
 }
 
+// Replace swaps the registration for name and returns the previous one.
+// found reports whether name was registered before; when false, name is
+// newly registered and previous is the zero value. Replace is the
+// hot-reload primitive: swapping in a fresh implementation keeps the name
+// stable for running entries, and the returned previous registration lets
+// callers roll a failed swap back.
+func (r *Resolver) Replace(name string, reg Registration) (previous Registration, found bool, err error) {
+	if reg.New == nil {
+		return Registration{}, false, fmt.Errorf("loader: plugin %q registered without a factory", name)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	previous, found = r.entries[name]
+	r.entries[name] = reg
+	return previous, found, nil
+}
+
 // RegisterType registers a plugin with a typed apply function and a decoder
 // that normalizes raw config into C. It is the common case:
 //
