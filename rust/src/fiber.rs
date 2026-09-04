@@ -1,8 +1,9 @@
 //! Fibers: effect scopes with a lifecycle, and the transition state machine.
 
-use std::cell::RefCell;
+use crate::sync::RefCell;
 use std::collections::HashSet;
-use std::rc::Rc;
+use crate::sync::Rc;
+use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, ContextData, Disposer};
 use crate::core::{Bag, Core};

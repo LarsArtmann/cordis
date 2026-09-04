@@ -452,6 +452,22 @@ fn isolation_shared_label() {
 }
 
 #[test]
+fn isolation_shared_labels_are_collision_free() {
+    let ctx = Context::new();
+    // With the previous "{name}\0{label}" synthetic key these two distinct
+    // pairs collapsed into one realm.
+    let a = ctx.isolate_shared("foo\0bar", "baz");
+    let b = ctx.isolate_shared("foo", "bar\0baz");
+
+    a.provide_named("foo", value(1)).unwrap();
+    assert!(b.get_named("foo").is_none(), "distinct (name, label) pairs must denote distinct realms");
+
+    // Equal pairs still share one realm.
+    let a2 = ctx.isolate_shared("foo\0bar", "baz");
+    assert!(a2.get_named("foo").is_some(), "equal pairs must share the realm");
+}
+
+#[test]
 fn realm_filtered_events() {
     let ctx = Context::new();
     let isolated = ctx.isolate("foo");

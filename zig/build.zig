@@ -29,9 +29,13 @@ pub fn build(b: *std.Build) void {
     const golden_files = b.addWriteFiles();
     _ = golden_files.addCopyFile(b.path("../golden/scenario.txt"), "scenario.txt");
     _ = golden_files.addCopyFile(b.path("../golden/expected.txt"), "expected.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/scenario-events.txt"), "scenario-events.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/expected-events.txt"), "expected-events.txt");
     const golden_data = golden_files.add("golden_data.zig",
         \\pub const scenario = @embedFile("scenario.txt");
         \\pub const expected = @embedFile("expected.txt");
+        \\pub const scenario_events = @embedFile("scenario-events.txt");
+        \\pub const expected_events = @embedFile("expected-events.txt");
         \\
     );
     const golden_data_mod = b.createModule(.{ .root_source_file = golden_data });

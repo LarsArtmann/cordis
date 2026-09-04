@@ -78,8 +78,22 @@ pub const Listener = struct {
 };
 
 /// Restricts which listeners receive events emitted through a context,
-/// mirroring Context.filter upstream.
-pub const FilterFn = *const fn (emitter: *const Context, listener_owner: *const Context) bool;
+/// mirroring Context.filter upstream. Build one with a data pointer and a
+/// typed call, like Listener.
+pub const Filter = struct {
+    ctx: *anyopaque,
+    call: *const fn (ctx: *anyopaque, emitter: *const Context, listener_owner: *const Context) bool,
+
+    /// Build a Filter from a typed function and a typed data pointer.
+    pub fn bind(comptime T: type, data: *T, comptime f: *const fn (*T, *const Context, *const Context) bool) Filter {
+        const wrapper = struct {
+            fn call(raw: *anyopaque, emitter: *const Context, listener_owner: *const Context) bool {
+                return f(@ptrCast(@alignCast(raw)), emitter, listener_owner);
+            }
+        };
+        return .{ .ctx = @ptrCast(data), .call = &wrapper.call };
+    }
+};
 
 const Hook = struct {
     owner: *Context,
@@ -129,7 +143,7 @@ pub fn TypedPlugin(
     comptime inject: []const []const u8,
 ) type {
     return struct {
-        const view = Plugin{ .name = name, .inject = inject, .apply = bridge };
+        pub const view = Plugin{ .name = name, .inject = inject, .apply = bridge };
 
         fn bridge(_: *const Plugin, ctx: *Context, raw: ?Value) Error!void {
             const config: *const Config = @ptrCast(@alignCast(raw.?));
@@ -163,10 +177,81 @@ const Cleanup = struct {
 
 const Entry = struct {
     label: []const u8,
-    cleanup: ?Cleanup,
+    cleanup: ?*Cleanup = null,
+    node: ?*EffectNode = null,
 };
 
 const Bag = std.ArrayList(Entry);
+
+/// A named effect scope: its entries dispose together, last in, first out.
+const EffectNode = struct {
+    label: []const u8,
+    entries: Bag = .empty,
+    disposed: bool = false,
+};
+
+/// An early disposal handle for one registration (a listener, a service or
+/// an effect scope). Disposing is idempotent and also runs when the owning
+/// scope later rolls back: the shared done flag is set exactly once.
+pub const Disposer = struct {
+    cleanup: *Cleanup,
+    core: *Core,
+
+    pub fn dispose(self: Disposer) void {
+        if (self.cleanup.done) return;
+        self.cleanup.done = true;
+        self.core.enter();
+        defer self.core.leave();
+        self.cleanup.call(self.cleanup.ctx);
+    }
+};
+
+/// A handle to one effect scope. Dispose it early to roll back everything
+/// the scope registered; disposal is idempotent.
+pub const Effect = struct {
+    node: *EffectNode,
+    core: *Core,
+
+    pub fn dispose(self: Effect) void {
+        self.core.enter();
+        defer self.core.leave();
+        self.core.disposeNode(self.node);
+    }
+};
+
+/// A labeled snapshot of one effect scope for introspection.
+pub const EffectMeta = struct {
+    label: []const u8,
+    disposed: bool,
+    children: []const EffectMeta,
+};
+
+/// A read view over the plugin registry of one context tree.
+pub const Registry = struct {
+    core: *Core,
+
+    /// How many distinct plugins have live or pending fibers.
+    pub fn size(self: Registry) usize {
+        return self.core.runtimes.count();
+    }
+
+    /// Whether `plugin` has any fiber in this tree.
+    pub fn has(self: Registry, plugin: *const Plugin) bool {
+        return self.core.runtimes.contains(@intFromPtr(plugin));
+    }
+
+    /// Dispose every fiber of `plugin` and remove it from the registry.
+    pub fn delete(self: Registry, plugin: *const Plugin) void {
+        self.core.enter();
+        defer self.core.leave();
+        const key = @intFromPtr(plugin);
+        const list = self.core.runtimes.getPtr(key) orelse return;
+        for (list.items) |id| {
+            (Fiber{ .core = self.core, .id = id }).dispose();
+        }
+        _ = self.core.runtimes.remove(key);
+    }
+};
 
 const FiberData = struct {
     uid: i64,
@@ -262,6 +347,7 @@ pub const Core = struct {
     hooks: std.StringHashMap(std.ArrayList(Hook)),
     store: std.AutoHashMap(u64, Impl),
     keys: std.StringHashMap(u64),
+    labels: std.HashMap(PairKey, u64, PairContext, 80),
     last_key: u64,
     fibers: std.ArrayList(?*FiberData),
     runtimes: std.AutoHashMap(usize, std.ArrayList(usize)),
@@ -272,6 +358,22 @@ pub const Core = struct {
     errors: std.ArrayList([]const u8),
 
     const Impl = struct { fiber: usize, val: Value };
+
+    /// A (name, label) shared-isolate identity, hashed by content so no
+    /// string formatting can ever make two distinct pairs collide.
+    const PairKey = struct { name: []const u8, label: []const u8 };
+    const PairContext = struct {
+        pub fn hash(_: PairContext, k: PairKey) u64 {
+            var h = std.hash.Wyhash.init(0);
+            h.update(k.name);
+            h.update(&.{0});
+            h.update(k.label);
+            return h.final();
+        }
+        pub fn eql(_: PairContext, x: PairKey, y: PairKey) bool {
+            return std.mem.eql(u8, x.name, y.name) and std.mem.eql(u8, x.label, y.label);
+        }
+    };
 
     /// The arena allocator owning every context, fiber and plugin of this
     /// tree. Exposed for plugin code that needs tree-lifetime allocations.
@@ -318,6 +420,18 @@ pub const Core = struct {
 
     fn freshKey(self: *Core) u64 {
         self.last_key += 1;
+        return self.last_key;
+    }
+
+    fn sharedKey(self: *Core, name: []const u8, label: []const u8) u64 {
+        const key = PairKey{ .name = name, .label = label };
+        if (self.labels.get(key)) |k| return k;
+        self.last_key += 1;
+        const owned = PairKey{
+            .name = self.a().dupe(u8, name) catch @panic("cordis: out of memory"),
+            .label = self.a().dupe(u8, label) catch @panic("cordis: out of memory"),
+        };
+        self.labels.put(owned, self.last_key) catch @panic("cordis: out of memory");
         return self.last_key;
     }
 
@@ -430,7 +544,11 @@ pub const Core = struct {
             // Iterate by pointer: the done flag must persist on the stored
             // entry so deinit never double-runs a cleanup.
             const entry = &bag.items[i];
-            if (entry.cleanup) |*cleanup| {
+            if (entry.node) |node| {
+                self.disposeNode(node);
+                continue;
+            }
+            if (entry.cleanup) |cleanup| {
                 if (cleanup.done) continue;
                 cleanup.done = true;
                 self.enter();
@@ -438,6 +556,46 @@ pub const Core = struct {
                 self.leave();
             }
         }
+    }
+
+    /// Dispose one effect scope's registrations, last in, first out.
+    /// Idempotent; safe to call again during a parent rollback.
+    fn disposeNode(self: *Core, node: *EffectNode) void {
+        if (!node.disposed) {
+            node.disposed = true;
+            self.runBag(&node.entries);
+        }
+        node.entries.deinit(self.gpa);
+        node.entries = .empty;
+    }
+
+    fn metaFromBag(self: *Core, bag: *Bag) []const EffectMeta {
+        var list: std.ArrayList(EffectMeta) = .empty;
+        for (bag.items) |*entry| {
+            if (entry.node) |node| {
+                const children = self.metaFromBag(&node.entries);
+                list.append(self.a(), .{
+                    .label = node.label,
+                    .disposed = node.disposed,
+                    .children = children,
+                }) catch @panic("cordis: out of memory");
+            } else if (entry.cleanup) |cleanup| {
+                list.append(self.a(), .{
+                    .label = entry.label,
+                    .disposed = cleanup.done,
+                    .children = &.{},
+                }) catch @panic("cordis: out of memory");
+            }
+        }
+        return list.toOwnedSlice(self.a()) catch @panic("cordis: out of memory");
+    }
+
+    /// Allocate a shared cleanup on the arena so a Disposer can mark it
+    /// done before the owning bag runs.
+    fn bindCleanup(self: *Core, comptime T: type, data: *T, comptime f: *const fn (*T) void) *Cleanup {
+        const c = self.a().create(Cleanup) catch @panic("cordis: out of memory");
+        c.* = Cleanup.bind(T, data, f);
+        return c;
     }
 
     fn load(self: *Core, id: usize) void {
@@ -466,7 +624,7 @@ pub const Context = struct {
     parent: ?*Context,
     fiber: usize,
     realm: ?struct { name: []const u8, key: u64 },
-    filter: ?FilterFn,
+    filter: ?Filter,
     collect: ?*Bag,
 
     /// Create a root context with its own registry, event bus and service
@@ -480,6 +638,7 @@ pub const Context = struct {
             .hooks = std.StringHashMap(std.ArrayList(Hook)).init(gpa),
             .store = std.AutoHashMap(u64, Core.Impl).init(gpa),
             .keys = std.StringHashMap(u64).init(gpa),
+            .labels = std.HashMap(Core.PairKey, u64, Core.PairContext, 80).init(gpa),
             .last_key = 0,
             .fibers = .empty,
             .runtimes = std.AutoHashMap(usize, std.ArrayList(usize)).init(gpa),
@@ -531,6 +690,7 @@ pub const Context = struct {
         core.hooks.deinit();
         core.store.deinit();
         core.keys.deinit();
+        core.labels.deinit();
         var rt_it = core.runtimes.iterator();
         while (rt_it.next()) |e| e.value_ptr.deinit(gpa);
         core.runtimes.deinit();
@@ -558,28 +718,34 @@ pub const Context = struct {
     /// A child scope sharing a realm with every other scope created with
     /// the same label, mirroring ctx.isolate(name, label).
     pub fn isolateShared(self: *Context, name: []const u8, label: []const u8) *Context {
-        const synthetic = std.fmt.allocPrint(self.core.a(), "{s}\x00{s}", .{ name, label }) catch @panic("cordis: out of memory");
         const child = self.extend();
-        child.realm = .{ .name = name, .key = self.core.rootKey(synthetic) };
+        child.realm = .{ .name = name, .key = self.core.sharedKey(name, label) };
         return child;
     }
 
     /// A child scope with an event emission filter.
-    pub fn withFilter(self: *Context, filter: FilterFn) *Context {
+    pub fn withFilter(self: *Context, filter: Filter) *Context {
         const child = self.extend();
         child.filter = filter;
         return child;
     }
 
-    /// A static realm filter for `name`: matches listeners in the same
-    /// realm as `realm_ctx`. Bind with `realmFilter(&ctx, "foo")`.
-    pub fn realmFilter(realm_ctx: *Context, comptime name: []const u8) FilterFn {
-        _ = realm_ctx;
-        return struct {
-            fn filter(emitter: *const Context, listener_owner: *const Context) bool {
-                return emitter.isolateKey(name) == listener_owner.isolateKey(name);
+    /// A realm filter for `name`: matches listeners in the same realm as
+    /// `realm_ctx`. Works with runtime event names; the filter state lives
+    /// in the tree's arena.
+    pub fn realmFilter(self: *Context, realm_ctx: *Context, name: []const u8) Filter {
+        const Holder = struct {
+            realm_ctx: *Context,
+            name: []const u8,
+
+            fn call(h: *@This(), _: *const Context, listener_owner: *const Context) bool {
+                return listener_owner.isolateKey(h.name) == h.realm_ctx.isolateKey(h.name);
             }
-        }.filter;
+        };
+        const holder = self.core.a().create(Holder) catch @panic("cordis: out of memory");
+        const owned = self.core.a().dupe(u8, name) catch @panic("cordis: out of memory");
+        holder.* = .{ .realm_ctx = realm_ctx, .name = owned };
+        return Filter.bind(Holder, holder, Holder.call);
     }
 
     /// Resolve the realm key of `name` through the scope chain.
@@ -619,7 +785,7 @@ pub const Context = struct {
     /// application events; string names remain for the framework's internal
     /// namespace. The subscription is bound to this context's fiber and
     /// rolls back with it.
-    pub fn onNamed(self: *Context, name: []const u8, listener: Listener) Error!void {
+    pub fn onNamed(self: *Context, name: []const u8, listener: Listener) Error!Disposer {
         self.core.enter();
         defer self.core.leave();
         try self.assertActive();
@@ -641,25 +807,62 @@ pub const Context = struct {
         }) catch @panic("cordis: out of memory");
         const Removal = @TypeOf(removal.*);
         removal.* = .{ .list = list, .listener = listener };
-        bag.append(self.core.gpa, .{
-            .label = "ctx.on()",
-            .cleanup = Cleanup.bind(Removal, removal, struct {
-                fn run(r: *Removal) void {
-                    for (r.list.items, 0..) |h, i| {
-                        if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
-                            _ = r.list.orderedRemove(i);
-                            return;
-                        }
+        const cleanup = self.core.bindCleanup(Removal, removal, struct {
+            fn run(r: *Removal) void {
+                for (r.list.items, 0..) |h, i| {
+                    if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
+                        _ = r.list.orderedRemove(i);
+                        return;
                     }
                 }
-            }.run),
+            }
+        }.run);
+        bag.append(self.core.gpa, .{ .label = "ctx.on()", .cleanup = cleanup }) catch @panic("cordis: out of memory");
+        return .{ .cleanup = cleanup, .core = self.core };
+    }
+
+    /// Subscribe to `name` as a global listener: exempt from every emission
+    /// filter, mirroring the Global option of the Go and Rust ports.
+    pub fn onGlobal(self: *Context, name: []const u8, listener: Listener) Error!Disposer {
+        self.core.enter();
+        defer self.core.leave();
+        try self.assertActive();
+        const bag = self.currentBag() orelse return Error.InactiveEffect;
+
+        const list = blk: {
+            const result = self.core.hooks.getOrPut(name) catch @panic("cordis: out of memory");
+            if (!result.found_existing) {
+                result.key_ptr.* = self.core.a().dupe(u8, name) catch @panic("cordis: out of memory");
+                result.value_ptr.* = .empty;
+            }
+            break :blk result.value_ptr;
+        };
+        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = true }) catch @panic("cordis: out of memory");
+
+        const removal = self.core.a().create(struct {
+            list: *std.ArrayList(Hook),
+            listener: Listener,
         }) catch @panic("cordis: out of memory");
+        const Removal = @TypeOf(removal.*);
+        removal.* = .{ .list = list, .listener = listener };
+        const cleanup = self.core.bindCleanup(Removal, removal, struct {
+            fn run(r: *Removal) void {
+                for (r.list.items, 0..) |h, i| {
+                    if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
+                        _ = r.list.orderedRemove(i);
+                        return;
+                    }
+                }
+            }
+        }.run);
+        bag.append(self.core.gpa, .{ .label = "ctx.onGlobal()", .cleanup = cleanup }) catch @panic("cordis: out of memory");
+        return .{ .cleanup = cleanup, .core = self.core };
     }
 
     fn visible(self: *Context, hook: Hook) bool {
         if (hook.global) return true;
         const filter = self.filter orelse return true;
-        return filter(self, hook.owner);
+        return filter.call(filter.ctx, self, hook.owner);
     }
 
     /// Attach a labeled cleanup to the current effect scope: the enclosing
@@ -677,7 +880,108 @@ pub const Context = struct {
         const Child = @typeInfo(Data).pointer.child;
         bag.append(self.core.gpa, .{
             .label = "ctx.attach()",
-            .cleanup = Cleanup.bind(Child, data, f),
+            .cleanup = self.core.bindCleanup(Child, data, f),
+        }) catch @panic("cordis: out of memory");
+    }
+
+    /// Run `f` inside a named effect scope: registrations made through the
+    /// sub-context passed to `f` collect into the scope and roll back
+    /// together, last in, first out, on error or early disposal.
+    pub fn effect(self: *Context, label: []const u8, data: anytype, comptime f: *const fn (*Context, @TypeOf(data)) Error!void) Error!Effect {
+        self.core.enter();
+        defer self.core.leave();
+        try self.assertActive();
+        const parent = self.currentBag() orelse return Error.InactiveEffect;
+        const node = self.core.a().create(EffectNode) catch @panic("cordis: out of memory");
+        node.* = .{ .label = self.core.a().dupe(u8, label) catch @panic("cordis: out of memory") };
+        parent.append(self.core.gpa, .{ .label = node.label, .node = node }) catch @panic("cordis: out of memory");
+        const sub = self.core.a().create(Context) catch @panic("cordis: out of memory");
+        sub.* = self.*;
+        sub.collect = &node.entries;
+        f(sub, data) catch |err| {
+            self.core.disposeNode(node);
+            return err;
+        };
+        return .{ .node = node, .core = self.core };
+    }
+
+    /// A labeled introspection snapshot of this fiber's effect scopes,
+    /// outermost first.
+    pub fn effects(self: *Context) []const EffectMeta {
+        const bag = self.currentBag() orelse return &.{};
+        return self.core.metaFromBag(bag);
+    }
+
+    /// The plugin registry view of this context tree.
+    pub fn registry(self: *Context) Registry {
+        return .{ .core = self.core };
+    }
+
+    /// Subscribe to the event type E for exactly one delivery: after the
+    /// first matching emission the subscription removes itself. Rolls back
+    /// with the owning scope like `onTyped`.
+    pub fn onceTyped(self: *Context, comptime E: type, data: anytype, comptime f: *const fn (@TypeOf(data), E) void) Error!void {
+        self.core.enter();
+        defer self.core.leave();
+        try self.assertActive();
+        const bag = self.currentBag() orelse return Error.InactiveEffect;
+        const Data = @TypeOf(data);
+        if (@typeInfo(Data) != .pointer) @compileError("cordis.onceTyped expects a pointer to the listener data, got " ++ @typeName(Data));
+
+        const Holder = struct {
+            list: *std.ArrayList(Hook),
+            listener: Listener,
+            data: Data,
+            fired: bool = false,
+
+            fn call(raw: *anyopaque, args: []const Value) ?Value {
+                const h: *@This() = @ptrCast(@alignCast(raw));
+                if (h.fired) return null;
+                h.fired = true;
+                for (h.list.items, 0..) |hook, i| {
+                    if (hook.listener.ctx == h.listener.ctx and hook.listener.call == h.listener.call) {
+                        _ = h.list.orderedRemove(i);
+                        break;
+                    }
+                }
+                const event: *const E = @ptrCast(@alignCast(args[0]));
+                f(h.data, event.*);
+                return null;
+            }
+        };
+
+        const name = @typeName(E);
+        const list = blk: {
+            const result = self.core.hooks.getOrPut(name) catch @panic("cordis: out of memory");
+            if (!result.found_existing) {
+                result.key_ptr.* = self.core.a().dupe(u8, name) catch @panic("cordis: out of memory");
+                result.value_ptr.* = .empty;
+            }
+            break :blk result.value_ptr;
+        };
+        const holder = self.core.a().create(Holder) catch @panic("cordis: out of memory");
+        const listener = Listener{ .ctx = @ptrCast(holder), .call = &Holder.call };
+        holder.* = .{ .list = list, .listener = listener, .data = data };
+        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = false }) catch @panic("cordis: out of memory");
+
+        const removal = self.core.a().create(struct {
+            list: *std.ArrayList(Hook),
+            listener: Listener,
+        }) catch @panic("cordis: out of memory");
+        const Removal = @TypeOf(removal.*);
+        removal.* = .{ .list = list, .listener = listener };
+        bag.append(self.core.gpa, .{
+            .label = "ctx.once()",
+            .cleanup = self.core.bindCleanup(Removal, removal, struct {
+                fn run(r: *Removal) void {
+                    for (r.list.items, 0..) |h, i| {
+                        if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
+                            _ = r.list.orderedRemove(i);
+                            return;
+                        }
+                    }
+                }
+            }.run),
         }) catch @panic("cordis: out of memory");
     }
 
@@ -708,11 +1012,86 @@ pub const Context = struct {
         return null;
     }
 
+    /// The serial dispatch mode: listeners run one at a time and the first
+    /// non-null result stops the chain, mirroring ctx.serial upstream.
+    /// Identical to `bail`, which is the synchronous counterpart.
+    pub fn serial(self: *Context, name: []const u8, args: []const Value) ?Value {
+        return self.bail(name, args);
+    }
+
+    /// A chain continuation handed to waterfall listeners: the listener
+    /// calls `invoke` with the transformed arguments to run the rest of the
+    /// chain; not calling it short-circuits the composition.
+    pub const Next = struct {
+        ctx: *Context,
+        name: []const u8,
+        hooks: []Hook,
+        index: usize,
+        terminal: *const fn (args: []const Value) ?Value,
+
+        /// Run the remaining chain over `args`, falling through to the
+        /// terminal function when every listener has run.
+        pub fn invoke(self: *Next, args: []const Value) ?Value {
+            if (self.index >= self.hooks.len) {
+                return self.terminal(args);
+            }
+            return self.ctx.waterfallStep(self, args);
+        }
+    };
+
+    fn waterfallStep(self: *Context, next: *Next, args: []const Value) ?Value {
+        const hook = next.hooks[next.index];
+        const sub = self.core.a().create(Next) catch @panic("cordis: out of memory");
+        sub.* = .{ .ctx = next.ctx, .name = next.name, .hooks = next.hooks, .index = next.index + 1, .terminal = next.terminal };
+        var full: std.ArrayListUnmanaged(Value) = .empty;
+        defer full.deinit(self.core.gpa);
+        full.appendSlice(self.core.gpa, args) catch @panic("cordis: out of memory");
+        full.append(self.core.gpa, @ptrCast(sub)) catch @panic("cordis: out of memory");
+        if (!self.visible(hook)) {
+            return sub.invoke(args);
+        }
+        return hook.listener.call(hook.listener.ctx, full.items);
+    }
+
+    /// The waterfall dispatch mode: every listener receives the arguments
+    /// followed by a `*Next`; calling `Next.invoke` runs the rest of the
+    /// chain over (possibly transformed) arguments. A listener that does
+    /// not invoke next short-circuits, mirroring ctx.waterfall upstream.
+    /// When no listener is registered the terminal runs unchanged.
+    pub fn waterfall(self: *Context, name: []const u8, args: []const Value, terminal: *const fn (args: []const Value) ?Value) ?Value {
+        const list = self.core.hooks.getPtr(name) orelse return terminal(args);
+        var hooks: std.ArrayList(Hook) = .empty;
+        defer hooks.deinit(self.core.gpa);
+        for (list.items) |hook| {
+            if (self.visible(hook)) hooks.append(self.core.gpa, hook) catch @panic("cordis: out of memory");
+        }
+        if (hooks.items.len == 0) return terminal(args);
+        const owned = self.core.a().dupe(Hook, hooks.items) catch @panic("cordis: out of memory");
+        const next = self.core.a().create(Next) catch @panic("cordis: out of memory");
+        next.* = .{ .ctx = self, .name = name, .hooks = owned, .index = 0, .terminal = terminal };
+        return self.waterfallStep(next, args);
+    }
+
+    /// The parallel dispatch mode. This tree is single-threaded, so all
+    /// matching listeners run synchronously in registration order; the
+    /// mode exists for API parity with the Go and Rust ports.
+    pub fn parallel(self: *Context, name: []const u8, args: []const Value) void {
+        self.emitNamed(name, args);
+    }
+
+    /// Run `f` as one framework transaction: fiber transitions triggered
+    /// inside are coalesced and settle after `f` returns.
+    pub fn batch(self: *Context, data: anytype, comptime f: *const fn (@TypeOf(data)) void) void {
+        self.core.enter();
+        defer self.core.leave();
+        f(data);
+    }
+
     /// Publish `val` under the string `name` in this context's service
     /// realm. Prefer `provide` (typed); string names remain for dynamic
     /// service names. Bound to the context's fiber and withdrawn
     /// automatically when it unloads.
-    pub fn provideNamed(self: *Context, name: []const u8, val: Value) Error!void {
+    pub fn provideNamed(self: *Context, name: []const u8, val: Value) Error!Disposer {
         self.core.enter();
         defer self.core.leave();
         try self.assertActive();
@@ -729,17 +1108,16 @@ pub const Context = struct {
         }) catch @panic("cordis: out of memory");
         const Removal = @TypeOf(removal.*);
         removal.* = .{ .core = self.core, .ctx = self, .key = key, .name = name };
-        bag.append(self.core.gpa, .{
-            .label = "ctx.provide()",
-            .cleanup = Cleanup.bind(Removal, removal, struct {
-                fn run(r: *Removal) void {
-                    _ = r.core.store.remove(r.key);
-                    r.core.notifyDependents(r.ctx, r.name);
-                }
-            }.run),
-        }) catch @panic("cordis: out of memory");
+        const cleanup = self.core.bindCleanup(Removal, removal, struct {
+            fn run(r: *Removal) void {
+                _ = r.core.store.remove(r.key);
+                r.core.notifyDependents(r.ctx, r.name);
+            }
+        }.run);
+        bag.append(self.core.gpa, .{ .label = "ctx.provide()", .cleanup = cleanup }) catch @panic("cordis: out of memory");
 
         self.core.notifyDependents(self, name);
+        return .{ .cleanup = cleanup, .core = self.core };
     }
 
     /// The service published under the string `name` in this context's
@@ -763,7 +1141,7 @@ pub const Context = struct {
     /// providers and consumers cannot drift apart on a hand written string;
     /// the value must outlive the registration (static or arena allocated).
     /// Isolate the typed service with `isolate(@typeName(T))`.
-    pub fn provide(self: *Context, ptr: anytype) Error!void {
+    pub fn provide(self: *Context, ptr: anytype) Error!Disposer {
         const P = @TypeOf(ptr);
         if (@typeInfo(P) != .pointer) @compileError("cordis.provide expects a pointer, got " ++ @typeName(P));
         const T = @typeInfo(P).pointer.child;
@@ -782,7 +1160,7 @@ pub const Context = struct {
     /// fully typed. `data` is passed to `f` unchanged and must outlive the
     /// subscription; the subscription is bound to this context's fiber and
     /// rolls back with it.
-    pub fn onTyped(self: *Context, comptime E: type, data: anytype, comptime f: *const fn (@TypeOf(data), E) void) Error!void {
+    pub fn onTyped(self: *Context, comptime E: type, data: anytype, comptime f: *const fn (@TypeOf(data), E) void) Error!Disposer {
         const Data = @TypeOf(data);
         if (@typeInfo(Data) != .pointer) @compileError("cordis.onTyped expects a pointer to the listener data, got " ++ @typeName(Data));
         const wrapper = struct {
@@ -852,7 +1230,7 @@ fn startPlugin(ctx: *Context, plugin: *const Plugin, config: ?Value) Error!Fiber
     holder.* = fiber;
     parent_bag.append(core.gpa, .{
         .label = "ctx.plugin()",
-        .cleanup = Cleanup.bind(Fiber, holder, struct {
+        .cleanup = core.bindCleanup(Fiber, holder, struct {
             fn run(f: *Fiber) void {
                 f.dispose();
             }

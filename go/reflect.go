@@ -22,43 +22,71 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 		chk = check[0]
 	}
 
-	co.mu.Lock()
-	if t, ok := co.props[name]; ok && t != propService {
-		co.mu.Unlock()
-		return nil, fmt.Errorf("property %q is already declared as accessor", name)
-	}
-	co.props[name] = propService
-	key := c.isolateKeyLocked(co, name)
-	if old := co.store[key]; old != nil {
-		co.mu.Unlock()
-		return nil, fmt.Errorf("service %q has been registered at <%s>", name, old.fiber.Name())
-	}
-	im := &impl{name: name, key: key, fiber: c.fiber, value: value, check: chk}
-	co.store[key] = im
-	co.bumpGenerationLocked()
-	co.mu.Unlock()
-
-	dispose, err := c.registerCleanup(fmt.Sprintf("ctx.provide(%q)", name), func() {
+	store := func() (Disposer, error) {
 		co.mu.Lock()
-		if co.store[key] == im {
-			delete(co.store, key)
-			co.bumpGenerationLocked()
+		if t, ok := co.props[name]; ok && t != propService {
+			co.mu.Unlock()
+			return nil, fmt.Errorf("property %q is already declared as accessor", name)
 		}
-		co.mu.Unlock()
-		co.notifyDependents(c, name)
-		c.emitService(name, nil)
-	})
-	if err != nil {
-		co.mu.Lock()
-		delete(co.store, key)
+		co.props[name] = propService
+		key := c.isolateKeyLocked(co, name)
+		if old := co.store[key]; old != nil {
+			co.mu.Unlock()
+			return nil, fmt.Errorf("service %q has been registered at <%s>", name, old.fiber.Name())
+		}
+		im := &impl{name: name, key: key, fiber: c.fiber, value: value, check: chk}
+		co.store[key] = im
 		co.bumpGenerationLocked()
 		co.mu.Unlock()
-		return nil, err
+
+		dispose, err := c.registerCleanup(fmt.Sprintf("ctx.provide(%q)", name), func() {
+			co.mu.Lock()
+			if co.store[key] == im {
+				delete(co.store, key)
+				co.bumpGenerationLocked()
+			}
+			co.mu.Unlock()
+			co.notifyDependents(c, name)
+			c.emitService(name, nil)
+		})
+		if err != nil {
+			co.mu.Lock()
+			delete(co.store, key)
+			co.bumpGenerationLocked()
+			co.mu.Unlock()
+			return nil, err
+		}
+
+		co.notifyDependents(c, name)
+		c.emitService(name, value)
+		return dispose, nil
 	}
 
-	co.notifyDependents(c, name)
-	c.emitService(name, value)
-	return dispose, nil
+	// The EventSet interception can veto or observe the registration; with
+	// no interceptor registered this is a direct store.
+	co.mu.Lock()
+	n := len(co.hooks[EventSet])
+	co.mu.Unlock()
+	if n == 0 {
+		return store()
+	}
+	result := c.Waterfall(EventSet, name, value, func(...any) any {
+		dispose, err := store()
+		if err != nil {
+			return err
+		}
+		return dispose
+	})
+	switch r := result.(type) {
+	case error:
+		return nil, r
+	case Disposer:
+		return r, nil
+	case nil:
+		return nil, fmt.Errorf("cordis: internal/set interception returned no disposer")
+	default:
+		return nil, fmt.Errorf("cordis: internal/set interception returned %T", result)
+	}
 }
 
 // emitService fires EventService scoped to the realm of name, mirroring the
@@ -71,6 +99,14 @@ func (c *Context) emitService(name string, value any) {
 // second return value is false when the service is missing, its provider is
 // not active or its check function rejects it.
 func (c *Context) Get(name string) (any, bool) {
+	value, ok := c.get(name)
+	if ok {
+		return value, true
+	}
+	return c.interceptGet(name)
+}
+
+func (c *Context) get(name string) (any, bool) {
 	co := c.core
 	co.mu.Lock()
 	key := c.isolateKeyLocked(co, name)

@@ -2,17 +2,21 @@
 //! modes (emit, parallel, serial, bail, waterfall).
 
 use std::any::Any;
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::sync::RefCell;
+use crate::sync::Rc;
+use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, Disposer};
 use crate::core::{self, Bag, Core};
 
 /// A type erased event argument or service value.
+#[cfg(not(feature = "thread-safe"))]
 pub type Value = Rc<dyn Any>;
+#[cfg(feature = "thread-safe")]
+pub type Value = std::sync::Arc<dyn Any + Send + Sync>;
 
 /// Build a Value from any payload.
-pub fn value<T: Any>(v: T) -> Value {
+pub fn value<T: crate::sync::Shared>(v: T) -> Value {
     Rc::new(v)
 }
 
@@ -36,7 +40,10 @@ pub type Next = Rc<dyn Fn(&[Value]) -> Option<Value>>;
 
 /// An event listener. The return value matters for the bail, serial and
 /// waterfall modes and is ignored by emit and parallel.
+#[cfg(not(feature = "thread-safe"))]
 pub type Listener = Rc<dyn Fn(&[Value]) -> Option<Value>>;
+#[cfg(feature = "thread-safe")]
+pub type Listener = std::sync::Arc<dyn Fn(&[Value]) -> Option<Value> + Send + Sync>;
 
 pub(crate) struct Hook {
     pub owner: Context,
@@ -114,15 +121,15 @@ impl Context {
     /// Subscribe to the string event `name`, removing the listener after the
     /// first delivery.
     pub fn once_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
-        let holder: Rc<std::cell::RefCell<Option<Disposer>>> = Rc::new(std::cell::RefCell::new(None));
-        let fired = Rc::new(std::cell::Cell::new(false));
+        let holder: Rc<RefCell<Option<Disposer>>> = Rc::new(RefCell::new(None));
+        let fired = std::sync::atomic::AtomicBool::new(false);
         let disposer = self.on_named(
             name,
             Rc::new({
                 let holder = Rc::clone(&holder);
                 let fired = Rc::clone(&fired);
                 move |args| {
-                    if fired.replace(true) {
+                    if fired.swap(true, std::sync::atomic::Ordering::SeqCst) {
                         return None;
                     }
                     if let Some(d) = holder.borrow_mut().take() {
@@ -213,20 +220,20 @@ impl Context {
     /// # Panics
     /// When a listener for `E` receives an argument of another type; this
     /// indicates mixed typed and untyped use of the same event name.
-    pub fn on<E: Any>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn on<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.on_named(event_name::<E>(), typed_listener(listener), options)
     }
 
     /// Subscribe to the event type `E`, removing the listener after the
     /// first delivery.
-    pub fn once<E: Any>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn once<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.once_named(event_name::<E>(), typed_listener(listener), options)
     }
 
     /// Deliver `event` synchronously to every listener registered for its
     /// type `E`, in registration order, applying this context's emission
     /// filter.
-    pub fn emit<E: Any>(&self, event: E) {
+    pub fn emit<E: crate::sync::Shared>(self: &Self, event: E) {
         self.emit_named(event_name::<E>(), &[value(event)]);
     }
 
@@ -274,7 +281,7 @@ fn remove_hook(core: &mut Core, name: &str, hook: &Rc<Hook>) {
 }
 
 /// Wrap a typed listener into the type erased Listener shape.
-fn typed_listener<E: Any>(listener: impl Fn(&E) + 'static) -> Listener {
+fn typed_listener<E: crate::sync::Shared>(listener: impl Fn(&E) + crate::sync::MaybeSendSync) -> Listener {
     Rc::new(move |args: &[Value]| {
         let first = args
             .first()

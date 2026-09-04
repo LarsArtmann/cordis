@@ -3,6 +3,7 @@ package cordis
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -50,7 +51,79 @@ const (
 	// EventUpdate intercepts config updates as a waterfall.
 	// Args: (config any, noSave bool, next func(...any) any).
 	EventUpdate = "internal/update"
+	// EventGet intercepts failed service lookups as a waterfall, needed by
+	// the loader and hmr ports. Args: (name string, *GetError,
+	// next func(...any) any). The terminal returns a *GetResult; a listener
+	// may supply its own by not calling next.
+	EventGet = "internal/get"
+	// EventSet intercepts service registration as a waterfall, needed by
+	// the loader and hmr ports. Args: (name string, value any,
+	// next func(...any) any). A listener vetoes the registration by
+	// returning a non-nil error instead of calling next.
+	EventSet = "internal/set"
+	// EventListener intercepts listener registration via Bail: the first
+	// non-nil result replaces the registration and must be a Disposer.
+	// Args: (name string, listener Listener, prepend bool).
+	EventListener = "internal/listener"
+	// EventDispatch observes every non-internal event dispatch. Args:
+	// (mode string, name string, args []any).
+	EventDispatch = "internal/dispatch"
 )
+
+// GetResult is the terminal value of the EventGet waterfall.
+type GetResult struct {
+	Value any
+	OK    bool
+}
+
+// GetError describes a failed service lookup handed to EventGet listeners.
+type GetError struct {
+	Name    string
+	Message string
+}
+
+func (e *GetError) Error() string { return e.Message }
+
+// interceptGet runs the EventGet waterfall around a failed lookup. It is a
+// no-op passthrough when no interceptor is registered.
+func (c *Context) interceptGet(name string) (any, bool) {
+	c.core.mu.Lock()
+	n := len(c.core.hooks[EventGet])
+	c.core.mu.Unlock()
+	if n == 0 {
+		return nil, false
+	}
+	result := c.Waterfall(EventGet, name, &GetError{
+		Name:    name,
+		Message: fmt.Sprintf("cannot get property %q without inject", name),
+	}, func(a ...any) any {
+		if len(a) > 0 {
+			if r, ok := a[0].(*GetResult); ok {
+				return r
+			}
+		}
+		return &GetResult{}
+	})
+	if res, ok := result.(*GetResult); ok {
+		return res.Value, res.OK
+	}
+	return result, result != nil
+}
+
+// notifyDispatch emits EventDispatch for non-internal dispatches when an
+// observer is registered.
+func (c *Context) notifyDispatch(mode, name string, args []any) {
+	if strings.HasPrefix(name, "internal/") {
+		return
+	}
+	c.core.mu.Lock()
+	n := len(c.core.hooks[EventDispatch])
+	c.core.mu.Unlock()
+	if n == 0 {
+		return
+	}
+	c.Emit(EventDispatch, mode, name, args)
+}
 
 // On subscribes listener to name. The subscription is bound to the context's
 // fiber: it is removed automatically when the fiber unloads or is disposed.
@@ -65,6 +138,15 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 	}
 
 	h := &hook{owner: c, fn: listener, global: options.global}
+
+	// The EventListener interception can replace the registration entirely:
+	// its first non-nil Bail result must be a Disposer.
+	if result := c.Bail(EventListener, name, listener, options.prepend); result != nil {
+		if d, ok := result.(Disposer); ok {
+			return d, nil
+		}
+		return nil, fmt.Errorf("cordis: internal/listener interception returned %T, expected Disposer", result)
+	}
 
 	c.core.mu.Lock()
 	if options.prepend {
@@ -162,6 +244,7 @@ func (c *Context) resolveHooks(name string) []*hook {
 // registration order. A panicking listener propagates the panic to the
 // caller, mirroring ctx.emit upstream.
 func (c *Context) Emit(name string, args ...any) {
+	c.notifyDispatch("emit", name, args)
 	for _, h := range c.resolveHooks(name) {
 		h.fn(args...)
 	}
@@ -171,6 +254,7 @@ func (c *Context) Emit(name string, args ...any) {
 // for all of them. Listeners that return an error or panic contribute to the
 // joined error, mirroring the AggregateError of ctx.parallel upstream.
 func (c *Context) Parallel(name string, args ...any) error {
+	c.notifyDispatch("parallel", name, args)
 	hooks := c.resolveHooks(name)
 	if len(hooks) == 0 {
 		return nil
@@ -198,6 +282,7 @@ func (c *Context) Parallel(name string, args ...any) error {
 // Serial delivers name to matching listeners one at a time and returns the
 // first non-nil result, mirroring ctx.serial upstream.
 func (c *Context) Serial(name string, args ...any) any {
+	c.notifyDispatch("serial", name, args)
 	for _, h := range c.resolveHooks(name) {
 		if result := h.fn(args...); isBailed(result) {
 			return result
@@ -225,6 +310,7 @@ func (c *Context) Waterfall(name string, args ...any) any {
 	if !ok {
 		panic("cordis: Waterfall last argument must be func(...any) any")
 	}
+	c.notifyDispatch("waterfall", name, args[:len(args)-1])
 	hooks := c.resolveHooks(name)
 	callArgs := args[:len(args)-1]
 	var next func(...any) any

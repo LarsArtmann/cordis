@@ -23,6 +23,8 @@
 //! on the roadmap.
 
 mod context;
+
+mod sync;
 mod core;
 mod events;
 mod fiber;

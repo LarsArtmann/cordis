@@ -1,0 +1,34 @@
+# cordis golden scenario v2 — events, filters and global listeners
+#
+# Executed verbatim by the Go, Rust and Zig runners. The trace each runner
+# emits must match golden/expected-events.txt exactly in every language,
+# which pins event dispatch parity: registration order, realm filtering and
+# global listener exemption.
+#
+# Ops (beyond scenario v1):
+#   on <event>                       root listener
+#   on-global <event>                filter-exempt listener
+#   on-isolated <event> realm=<l>    listener in an isolated realm
+#   emit <event> payload=<n>         unfiltered emission from the root
+#   emit-filtered <event> realm=<l> payload=<n>
+#                                    emission through an isolated scope
+#                                    with a realm filter
+#
+# Every listener traces "fired <event> <who> payload=<n>" where <who> is
+# root, global or realm=<label>. Regenerate expected-events.txt with
+# GOLDEN_UPDATE=1 go test -run TestGoldenEvents ./... then re-verify the
+# Rust and Zig runners.
+
+on ping
+on-global ping
+on-isolated ping realm=tenant-a
+
+emit ping payload=1
+
+emit-filtered ping realm=tenant-a payload=2
+
+on-isolated ping realm=tenant-b
+
+emit-filtered ping realm=tenant-b payload=3
+
+emit ping payload=4

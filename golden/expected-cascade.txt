@@ -1,0 +1,27 @@
+provided config
+apply parent config=1
+apply child config=2
+registry-size 3
+state parent ACTIVE
+state child ACTIVE
+registry-size 3
+cleanup parent
+cleanup child
+disposed parent
+state parent DISPOSED
+state child DISPOSED
+registry-size 1
+withdrawn config
+registry-size 0
+provided config
+apply sibling-a config=3
+apply sibling-a config=4
+apply sibling-b config=5
+state sibling-b ACTIVE
+registry-size 3
+cleanup sibling-a
+cleanup sibling-a
+deleted sibling-a
+state sibling-a DISPOSED
+state sibling-b ACTIVE
+registry-size 2
