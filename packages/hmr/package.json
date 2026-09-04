@@ -50,15 +50,15 @@
     "@cordisjs/plugin-loader": "^1.0.0-rc.6",
     "@cordisjs/plugin-timer": "^1.1.3",
     "@types/babel__code-frame": "^7.27.0",
-    "@types/picomatch": "^4.0.3",
+    "@types/picomatch": "^3.0.2",
     "cordis": "^4.0.0-rc.9",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.27.3"
   },
   "dependencies": {
-    "@babel/code-frame": "^8.0.0",
-    "chokidar": "^5.0.0",
+    "@babel/code-frame": "^7.29.0",
+    "chokidar": "^4.0.3",
     "cosmokit": "^1.8.1",
-    "picomatch": "^4.0.7",
+    "picomatch": "^4.0.3",
     "schemastery": "^3.18.0"
   }
 }
