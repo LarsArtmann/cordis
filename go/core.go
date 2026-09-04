@@ -1,6 +1,9 @@
 package cordis
 
-import "sync"
+import (
+	"sort"
+	"sync"
+)
 
 // isolateKey is the Go equivalent of the per-realm symbols the TypeScript
 // implementation stores in ctx[Context.isolate]. Services are stored by key,
@@ -91,15 +94,9 @@ func (c *core) nextUID() int {
 	return c.counter
 }
 
-// rootKey returns the isolate key of name in the root realm, assigning one on
-// first use. Callers must hold no locks; the key space is allocated lazily
-// exactly like `root[isolate][name] ??= Symbol(name)` upstream.
-func (c *core) rootKey(name string) isolateKey {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.rootKeyLocked(name)
-}
-
+// rootKeyLocked returns the isolate key of name in the root realm,
+// assigning one on first use, exactly like `root[isolate][name] ??=
+// Symbol(name)` upstream. Callers must hold c.mu.
 func (c *core) rootKeyLocked(name string) isolateKey {
 	key, ok := c.keys[name]
 	if !ok {
@@ -153,6 +150,8 @@ func (c *core) queue(f *Fiber) {
 
 // notifyDependents queues every fiber that injects one of names and lives in
 // the realm where the change happened, mirroring ReflectService.notify.
+// Fibers are queued in creation order (ascending uid), so sibling unload
+// order is deterministic like the insertion ordered maps upstream.
 func (c *core) notifyDependents(from *Context, names ...string) {
 	c.mu.Lock()
 	var fibers []*Fiber
@@ -163,6 +162,7 @@ func (c *core) notifyDependents(from *Context, names ...string) {
 			}
 		}
 	}
+	sort.Slice(fibers, func(i, j int) bool { return fibers[i].uid < fibers[j].uid })
 	c.mu.Unlock()
 	for _, f := range fibers {
 		c.queue(f)

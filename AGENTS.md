@@ -74,3 +74,38 @@ ROADMAP.md.
 - Plugin apply errors move the fiber to `StateFailed`, roll back partial
   effects and are routed to the logger, never thrown across the framework
   boundary.
+- Sibling notification order is deterministic (fiber creation order) in all
+  three ports; Go sorts by uid where map iteration would be random.
+
+## Native-max API layer (phase 2, landed 2026-09-04)
+
+The PRIMARY service/event APIs are type-keyed; named/string forms remain
+for dynamic names and the `internal/` event namespace:
+
+- Go: `Provide[T](ctx, v)` / `Get[T]` / `TryGet[T]` / `MustGet[T]`,
+  `On[E](ctx, func(E))` / `Once[E]` / `Emit[E]`; `ServiceName[T]()` /
+  `EventName[E]()` derive the realm-space name; named lookups are
+  `GetNamed`/`MustGetNamed` and the `Context.Provide/On/Emit` methods.
+- Go fibers own a stdlib context: `Fiber.StdContext()` (cancelled on
+  unload/restart/dispose, renewed on load) and `Fiber.Done()`.
+- Go logger bridges slog: `NewSlogHandler(ctx, name...)`, `Logger.Slog()`.
+- Rust: `provide::<T>` / `get::<T>()` / `try_get`, `on::<E>` / `once::<E>`
+  / `emit::<E>`; string forms are `*_named`; `FnPlugin` closures via
+  `plugin()` + `start_fn`, trait plugins via `impl Plugin` (associated
+  `Config`) + `start` (registry id: `plugin_type_id::<P>()`); RAII `Guard`
+  (dispose on drop, `detach()` to keep).
+- Zig: `provide(ptr)` / `getTyped(T)` / `onTyped(E, data, f)` /
+  `emitTyped(E, &event)` keyed by `@typeName`; string forms are `*Named`;
+  comptime plugins via `TypedPlugin(name, Config, apply, inject)` (the
+  returned TYPE is the registry identity); runtime `Plugin` values for
+  dynamic cases (with optional `data: ?*const anyopaque` context);
+  `Context.attach(data, f)` registers plain cleanups. Zig domain errors
+  (`Error{InactiveEffect, DuplicateService, PluginFailed}`) exclude OOM:
+  allocation failure panics (std style).
+
+Golden scenario: `golden/scenario.txt` + `expected.txt` are executed by
+`go/golden_test.go`, `rust/tests/golden.rs` and `zig/tests/golden.zig`
+(Zig embeds the files at build time). All three traces must be
+byte-identical. Regenerate with `GOLDEN_UPDATE=1` on the Go runner and
+re-verify Rust and Zig. Changing semantics? Fix the port, not the golden
+file.

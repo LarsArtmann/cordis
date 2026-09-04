@@ -25,18 +25,52 @@ its architecture.
 
 ## Planned, in priority order
 
-### Phase 2: native-max API redesign (user directive, 2026-08-22)
+### Phase 2: native-max API redesign (user directive, 2026-08-22) — LANDED 2026-09-04
 
 **Use each language's native features to the max; do not port TypeScript
 1:1.** Semantics parity stays (fiber lifecycle, drain queue, realms,
 rollback); API surfaces become native. Detailed tasks live in
-`TODO_LIST.md`; intentionally divergent designs must be documented here as
+`TODO_LIST.md`; intentionally divergent designs are documented here as
 they land.
 
-- Go: type-keyed services, typed events, stdlib `context.Context` per
-  fiber, `slog` integration
-- Rust: TypeId-keyed services and events, RAII disposers, `Plugin` trait
-- Zig: comptime plugin construction, type-keyed services/events
+Landed native APIs:
+
+- **Go**: type-keyed services (`Provide[T]`/`Get[T]`/`TryGet[T]` with
+  `ServiceName[T]`), typed events (`On[E]`/`Once[E]`/`Emit[E]` with
+  `EventName[E]`), stdlib `context.Context` per fiber
+  (`Fiber.StdContext()`/`Fiber.Done()`), slog bridge
+  (`NewSlogHandler`, `Logger.Slog`), collision-free isolate labels
+  (`map[any]isolateKey`).
+- **Rust**: typed services (`provide`/`get::<T>()`/`try_get` keyed by
+  `type_name`), typed events (`on::<E>`/`once::<E>`/`emit::<E>`), RAII
+  `Guard` (dispose on drop, `detach()` to opt out), `Plugin` trait with
+  associated `Config` (closure form preserved as `FnPlugin`/`start_fn`).
+- **Zig**: comptime plugin construction (`TypedPlugin(name, Config, apply,
+  inject)` — the type is the registry identity), typed services/events
+  keyed by `@typeName`, plain cleanup attachment (`Context.attach`),
+  domain errors split from allocation failures (OOM panics, std style).
+
+Divergences from TS behavior, by design:
+
+- Typed services and events derive their names from *type identity*
+  (reflect string / `type_name` / `@typeName`). Two distinct types with
+  identical derived names (structurally identical anonymous types, or
+  Rust's best-effort `type_name`) would share a slot; prefer named types.
+- Rust's `Plugin` trait registry identity is per *type*
+  (`plugin_type_id::<P>()`), while `FnPlugin` values are per
+  *construction* — both match "one plugin definition, one runtime".
+- Zig's `TypedPlugin` registry identity is the address of the comptime
+  view embedded in the returned type.
+- String event names are not restricted in code, but the convention is
+  that only the framework's `internal/` namespace uses them; application
+  events should be typed.
+- Sibling notification order is deterministic (creation order) in all
+  three ports, matching the insertion-ordered maps upstream; Go sorts by
+  fiber uid where its map iteration would otherwise be random.
+
+Cross-language assurance: one golden scenario (`golden/`) executed by the
+Go, Rust and Zig test suites with a byte-identical expected trace, plus
+`nix flake check` derivations running all three suites.
 
 ### Go
 
@@ -49,7 +83,6 @@ they land.
 4. Port `packages/loader` (config file driven plugin management).
 5. Port `packages/hmr` (hot module replacement).
 6. Port `packages/timer` and `packages/group` conveniences.
-7. slog.Handler adapter bridging the logger service into log/slog.
 
 ### Rust
 
@@ -71,6 +104,5 @@ they land.
 
 ### Repo
 
-1. CI jobs for Go, Rust and Zig in `.github/workflows`.
-2. Cross-language golden tests: one shared scenario file executed by every
-   port.
+1. First green `ports.yml` CI run (actions verified; requires a push).
+2. More golden scenarios covering events and the logger.
