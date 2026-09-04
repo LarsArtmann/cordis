@@ -1,9 +1,10 @@
 //! Shared mutable state of one context tree, the effect bag tree, and the
 //! drain queue that coalesces fiber state transitions.
 
-use std::cell::RefCell;
+use crate::sync::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::rc::Rc;
+use crate::sync::Rc;
+use crate::sync::BorrowExt as _;
 
 use crate::context::Context;
 use crate::events::{Hook, Value};
@@ -160,6 +161,9 @@ pub(crate) struct Core {
     pub store: HashMap<IsolateKey, Impl>,
     pub props: HashMap<String, ()>,
     pub keys: HashMap<String, IsolateKey>,
+    /// Shared-isolate label table keyed by the (name, label) pair, so no
+    /// string formatting can ever make two distinct labels collide.
+    pub labels: HashMap<(String, String), IsolateKey>,
     pub last_key: IsolateKey,
     pub fibers: Vec<Option<Rc<RefCell<FiberData>>>>,
     pub runtimes: HashMap<u64, RuntimeData>,
@@ -183,6 +187,7 @@ impl Core {
             store: HashMap::new(),
             props: HashMap::new(),
             keys: HashMap::new(),
+            labels: HashMap::new(),
             last_key: 0,
             fibers: Vec::new(),
             runtimes: HashMap::new(),
@@ -212,6 +217,18 @@ impl Core {
     pub fn fresh_key(&mut self) -> IsolateKey {
         self.last_key += 1;
         self.last_key
+    }
+
+    /// Resolve or allocate the realm key shared by every isolate created
+    /// with the same (name, label) pair.
+    pub fn shared_key(&mut self, name: &str, label: &str) -> IsolateKey {
+        *self
+            .labels
+            .entry((name.to_string(), label.to_string()))
+            .or_insert_with(|| {
+                self.last_key += 1;
+                self.last_key
+            })
     }
 
     pub fn alloc_fiber(&mut self, data: FiberData) -> FiberId {

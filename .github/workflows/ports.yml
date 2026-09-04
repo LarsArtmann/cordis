@@ -17,9 +17,17 @@ jobs:
       - name: Vet
         working-directory: go
         run: go vet ./...
+      - name: Lint
+        working-directory: go
+        run: golangci-lint run
       - name: Test
         working-directory: go
-        run: go test -race -count=1 ./...
+        run: go test -race -count=3 ./...
+      - name: Golden determinism canary (twice)
+        working-directory: go
+        run: |
+          go test -run TestGoldenScenario -count=1 ./...
+          go test -run TestGoldenScenario -count=1 ./...
 
   rust:
     runs-on: ubuntu-latest

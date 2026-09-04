@@ -1,0 +1,46 @@
+# cordis golden scenario v3 — nested plugins and registry delete cascade
+#
+# Executed verbatim by the Go, Rust and Zig runners. The trace each runner
+# emits must match golden/expected-cascade.txt exactly in every language,
+# which pins nested-plugin cascade disposal (child cleanup before parent,
+# LIFO) and registry delete parity.
+#
+# Ops (beyond scenario v1):
+#   spawn <child> parent=<plugin> [inject=<a,b,...>] [config=<int>]
+#                                    the parent's body starts <child> on its
+#                                    own context after applying
+#   delete <plugin>                 registry delete: dispose every fiber of
+#                                    the plugin and remove its runtime
+#   expect-registry-size <n>        number of live plugin runtimes
+#
+# Regenerate expected-cascade.txt with
+# GOLDEN_UPDATE=1 go test -run TestGoldenCascade ./... then re-verify the
+# Rust and Zig runners.
+
+provide config
+spawn child parent=parent inject=config config=2
+start parent inject=config config=1
+expect-registry-size 3
+expect-state parent ACTIVE
+expect-state child ACTIVE
+expect-registry-size 3
+
+dispose parent
+expect-state parent DISPOSED
+expect-state child DISPOSED
+expect-registry-size 1
+
+withdraw config
+expect-registry-size 0
+
+provide config
+start sibling-a inject=config config=3
+start sibling-a inject=config config=4
+start sibling-b inject=config config=5
+expect-state sibling-b ACTIVE
+expect-registry-size 3
+
+delete sibling-a
+expect-state sibling-a DISPOSED
+expect-state sibling-b ACTIVE
+expect-registry-size 2

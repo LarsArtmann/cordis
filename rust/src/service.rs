@@ -7,7 +7,8 @@
 //! names (loader and hmr ports) and cross realm contracts.
 
 use std::any::Any;
-use std::rc::Rc;
+use crate::sync::Rc;
+use crate::sync::BorrowExt as _;
 
 use crate::context::{Context, Disposer};
 use crate::core::{self, Bag, Impl};
@@ -30,7 +31,7 @@ impl Context {
     /// context's realm. The service is bound to the context's fiber exactly
     /// like a named service and rolls back with it. Providing the same type
     /// twice in one realm fails with [`crate::Error::DuplicateService`].
-    pub fn provide<T: Any>(&self, value: T) -> crate::Result<Disposer> {
+    pub fn provide<T: crate::sync::Shared>(&self, value: T) -> crate::Result<Disposer> {
         self.provide_named(crate::events::service_name::<T>(), Rc::new(value))
     }
 
@@ -115,7 +116,7 @@ impl Context {
     /// The service of type `T` published in this context's realm. Fails when
     /// the service is missing, its provider is inactive or the value has an
     /// unexpected type.
-    pub fn get<T: Any>(&self) -> crate::Result<Rc<T>> {
+    pub fn get<T: crate::sync::Shared>(&self) -> crate::Result<Rc<T>> {
         match self.get_named(crate::events::service_name::<T>()) {
             Some(v) => v.downcast::<T>().map_err(|_| crate::Error::TypeMismatch {
                 name: crate::events::service_name::<T>().to_string(),
@@ -128,7 +129,7 @@ impl Context {
 
     /// The service of type `T` when it is currently available, mirroring the
     /// two value lookup of [`Context::get_named`].
-    pub fn try_get<T: Any>(&self) -> Option<Rc<T>> {
+    pub fn try_get<T: crate::sync::Shared>(&self) -> Option<Rc<T>> {
         self.get::<T>().ok()
     }
 

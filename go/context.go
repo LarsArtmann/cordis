@@ -107,6 +107,14 @@ func (c *Context) realmKey(name string, label []any) isolateKey {
 	return c.core.lastKey
 }
 
+// Cleanup attaches a labeled cleanup function to the current effect scope:
+// the enclosing effect while one runs, otherwise the fiber itself. It is
+// the exported entry point for plugins (timer, loader, ...) that roll their
+// resources back with the scope that acquired them.
+func (c *Context) Cleanup(label string, run Cleanup) (Disposer, error) {
+	return c.registerCleanup(label, run)
+}
+
 // Intercept creates a child scope in which the configuration of the named
 // service is overridden, mirroring ctx.intercept(). The logger service
 // honors LoggerIntercept values; other services may read their overrides

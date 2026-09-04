@@ -9,7 +9,8 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::rc::Rc;
+use crate::sync::Rc;
+use crate::sync::BorrowExt as _;
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::context::Context;
@@ -73,9 +74,9 @@ pub fn plugin_type_id<P: Plugin + ?Sized + 'static>() -> u64 {
 /// The plugin type is the registry identity: starting `Greeter` twice
 /// creates two fibers of one runtime, addressed through
 /// [`plugin_type_id::<Greeter>()`](plugin_type_id).
-pub trait Plugin {
+pub trait Plugin: crate::sync::Shared {
     /// The statically typed configuration the plugin applies with.
-    type Config: Any;
+    type Config: crate::sync::Shared;
 
     /// The plugin name; empty falls back to the parent chain's name.
     fn name(&self) -> &str;
@@ -187,7 +188,7 @@ where
 
 /// Start a closure plugin on `ctx` with the given config and return the new
 /// fiber.
-pub fn start_fn<C: 'static>(ctx: &Context, plugin: &FnPlugin<C>, config: C) -> crate::Result<Fiber> {
+pub fn start_fn<C: crate::sync::Shared>(ctx: &Context, plugin: &FnPlugin<C>, config: C) -> crate::Result<Fiber> {
     start_base(ctx, Rc::clone(&plugin.base), Rc::new(config))
 }
 
@@ -209,7 +210,7 @@ impl Context {
 
 /// The view of every plugin runtime in a context tree.
 pub struct Registry {
-    pub(crate) core: Rc<std::cell::RefCell<crate::core::Core>>,
+    pub(crate) core: Rc<crate::sync::RefCell<crate::core::Core>>,
 }
 
 /// A handle to one plugin runtime.

@@ -1,7 +1,8 @@
 //! Context tree: scopes carrying services, listeners and effects.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::sync::RefCell;
+use crate::sync::Rc;
+use crate::sync::BorrowExt as _;
 
 use crate::core::{Bag, Core, IsolateKey};
 
@@ -71,8 +72,7 @@ impl Context {
     /// A child scope sharing a named realm with every other scope created
     /// with the same label, mirroring ctx.isolate(name, label).
     pub fn isolate_shared(&self, name: &str, label: &str) -> Context {
-        let synthetic = format!("{name}\0{label}");
-        let key = self.core.borrow_mut().root_key(&synthetic);
+        let key = self.core.borrow_mut().shared_key(name, label);
         self.isolate_with(name, key)
     }
 
@@ -178,11 +178,11 @@ impl Default for Context {
 
 /// Removes a registration ahead of time. Disposing twice is a no-op.
 pub struct Disposer {
-    inner: Option<Box<dyn FnOnce()>>,
+    inner: Option<Box<crate::sync::CleanupFn>>,
 }
 
 impl Disposer {
-    pub(crate) fn new(f: impl FnOnce() + 'static) -> Disposer {
+    pub(crate) fn new(f: impl FnOnce() + crate::sync::MaybeSendSync) -> Disposer {
         Disposer {
             inner: Some(Box::new(f)),
         }
@@ -218,6 +218,7 @@ impl Drop for Disposer {
 /// ```
 /// # use cordis::{Context, EventOptions};
 /// # use std::rc::Rc;
+use crate::sync::BorrowExt as _;
 /// # #[derive(Default)] struct Conn;
 /// fn scoped(ctx: &Context) -> cordis::Result<()> {
 ///     let _conn = ctx.provide(Conn::default()).map(cordis::Guard::from)?;

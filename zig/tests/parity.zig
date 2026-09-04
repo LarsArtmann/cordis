@@ -20,7 +20,7 @@ const Counter = struct {
 };
 
 fn onCount(ctx: *Context, name: []const u8, counter: *Counter) !void {
-    try ctx.onNamed(name, Listener.bind(Counter, counter, Counter.listener));
+    _ = try ctx.onNamed(name, Listener.bind(Counter, counter, Counter.listener));
 }
 
 test "on, emit, dispose by fiber rollback" {
@@ -57,9 +57,9 @@ test "bail returns first non-null result" {
         }
     };
     var s = S{};
-    try ctx.onNamed("test", Listener.bind(S, &s, S.first));
-    try ctx.onNamed("test", Listener.bind(S, &s, S.second));
-    try ctx.onNamed("test", Listener.bind(S, &s, S.third));
+    _ = try ctx.onNamed("test", Listener.bind(S, &s, S.first));
+    _ = try ctx.onNamed("test", Listener.bind(S, &s, S.second));
+    _ = try ctx.onNamed("test", Listener.bind(S, &s, S.third));
 
     const result = ctx.bail("test", &.{});
     try std.testing.expect(result != null);
@@ -114,14 +114,14 @@ test "plugin error rolls back partial effects" {
             _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
+            _ = try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
             return cordis.Error.PluginFailed;
         }
         fn healthy(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
             _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
+            _ = try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
         }
         var registry: *@This() = undefined;
     };
@@ -155,13 +155,13 @@ test "nested plugins cascade on dispose" {
             _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
+            _ = try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
         }
         fn applyOuter(p: *const Plugin, c: *Context, config: ?Value) cordis.Error!void {
             _ = p;
             _ = config;
             const self: *@This() = @ptrCast(@alignCast(registry));
-            try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
+            _ = try c.onNamed("custom-event", Listener.bind(@This(), self, listener));
             _ = try self.inner.start(c, null);
         }
         var registry: *@This() = undefined;
@@ -202,7 +202,7 @@ test "inject reactivity: pending, active, unload, reload" {
             const stored = c.core.a().create(i32) catch @panic("cordis: out of memory");
             stored.* = v;
             _ = self;
-            try c.provideNamed("foo", cordis.value(stored));
+            _ = try c.provideNamed("foo", cordis.value(stored));
         }
         var registry: *@This() = undefined;
     };
@@ -256,12 +256,12 @@ test "isolation realms" {
     }
 
     const v1: i32 = 100;
-    try ctx.provideNamed("foo", cordis.value(&v1));
+    _ = try ctx.provideNamed("foo", cordis.value(&v1));
     try std.testing.expectEqual(1, s.calls);
     try std.testing.expect(iso1.getNamed("foo") == null);
 
     const v2: i32 = 200;
-    try iso1.provideNamed("foo", cordis.value(&v2));
+    _ = try iso1.provideNamed("foo", cordis.value(&v2));
     try std.testing.expectEqual(2, s.calls);
     try std.testing.expect(iso2.getNamed("foo") == null);
     try std.testing.expectEqual(100, ctx.getTypedNamed(i32, "foo").?.*);
@@ -275,9 +275,26 @@ test "shared isolation label shares the realm" {
     const iso2 = ctx.isolateShared("foo", "shared");
 
     const v: i32 = 200;
-    try iso1.provideNamed("foo", cordis.value(&v));
+    _ = try iso1.provideNamed("foo", cordis.value(&v));
     try std.testing.expectEqual(200, iso2.getTypedNamed(i32, "foo").?.*);
     try std.testing.expect(ctx.getNamed("foo") == null);
+}
+
+test "shared isolation labels are collision free" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    // With the previous "{name}\x00{label}" synthetic key these two distinct
+    // pairs collapsed into one realm.
+    const a = ctx.isolateShared("foo\x00bar", "baz");
+    const b = ctx.isolateShared("foo", "bar\x00baz");
+
+    const v: i32 = 1;
+    _ = try a.provideNamed("foo", cordis.value(&v));
+    try std.testing.expect(b.getNamed("foo") == null);
+
+    const a2 = ctx.isolateShared("foo\x00bar", "baz");
+    try std.testing.expectEqual(1, a2.getTypedNamed(i32, "foo").?.*);
 }
 
 test "realm filtered events" {
@@ -290,7 +307,7 @@ test "realm filtered events" {
     try onCount(ctx, "custom-event", &root_calls);
     try onCount(isolated, "custom-event", &iso_calls);
 
-    const emitter = isolated.withFilter(Context.realmFilter(isolated, "foo"));
+    const emitter = isolated.withFilter(isolated.realmFilter(isolated, "foo"));
     emitter.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(0, root_calls.n);
     try std.testing.expectEqual(1, iso_calls.n);
