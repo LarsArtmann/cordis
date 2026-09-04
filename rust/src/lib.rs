@@ -24,7 +24,7 @@
 
 mod context;
 
-mod sync;
+pub mod sync;
 mod core;
 mod events;
 mod fiber;

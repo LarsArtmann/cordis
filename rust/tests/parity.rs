@@ -1,8 +1,8 @@
 //! Parity tests mirroring the Go port's suite, which mirrors the TypeScript
 //! core test suite.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use cordis::sync::RefCell;
+use cordis::sync::{BorrowExt as _, Rc};
 
 use cordis::{plugin, start_fn, value, Context, Error, EventOptions, FiberState, Next, Value};
 
@@ -11,7 +11,7 @@ fn opts() -> EventOptions {
 }
 
 type Counter = Rc<RefCell<i32>>;
-type TestListener = Rc<dyn Fn(&[Value]) -> Option<Value>>;
+type TestListener = cordis::Listener;
 
 fn counting_listener(calls: &Counter) -> TestListener {
     let calls = Rc::clone(calls);

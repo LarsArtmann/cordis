@@ -36,7 +36,10 @@ pub fn event_name<E: ?Sized + Any>() -> &'static str {
 }
 
 /// A chain continuation for the waterfall dispatch mode.
+#[cfg(not(feature = "thread-safe"))]
 pub type Next = Rc<dyn Fn(&[Value]) -> Option<Value>>;
+#[cfg(feature = "thread-safe")]
+pub type Next = std::sync::Arc<dyn Fn(&[Value]) -> Option<Value> + Send + Sync>;
 
 /// An event listener. The return value matters for the bail, serial and
 /// waterfall modes and is ignored by emit and parallel.
@@ -122,7 +125,7 @@ impl Context {
     /// first delivery.
     pub fn once_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
         let holder: Rc<RefCell<Option<Disposer>>> = Rc::new(RefCell::new(None));
-        let fired = std::sync::atomic::AtomicBool::new(false);
+        let fired = Rc::new(std::sync::atomic::AtomicBool::new(false));
         let disposer = self.on_named(
             name,
             Rc::new({
@@ -220,13 +223,13 @@ impl Context {
     /// # Panics
     /// When a listener for `E` receives an argument of another type; this
     /// indicates mixed typed and untyped use of the same event name.
-    pub fn on<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn on<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.on_named(event_name::<E>(), typed_listener(listener), options)
     }
 
     /// Subscribe to the event type `E`, removing the listener after the
     /// first delivery.
-    pub fn once<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + 'static, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn once<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.once_named(event_name::<E>(), typed_listener(listener), options)
     }
 
@@ -281,7 +284,7 @@ fn remove_hook(core: &mut Core, name: &str, hook: &Rc<Hook>) {
 }
 
 /// Wrap a typed listener into the type erased Listener shape.
-fn typed_listener<E: crate::sync::Shared>(listener: impl Fn(&E) + crate::sync::MaybeSendSync) -> Listener {
+fn typed_listener<E: crate::sync::Shared>(listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static) -> Listener {
     Rc::new(move |args: &[Value]| {
         let first = args
             .first()

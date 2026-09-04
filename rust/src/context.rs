@@ -3,12 +3,16 @@
 use crate::sync::RefCell;
 use crate::sync::Rc;
 use crate::sync::BorrowExt as _;
+/// # use std::cell::RefCell;
 
 use crate::core::{Bag, Core, IsolateKey};
 
 /// Restricts which listeners receive events emitted through a context,
 /// mirroring Context.filter upstream.
+#[cfg(not(feature = "thread-safe"))]
 pub type Filter = Rc<dyn Fn(&Context) -> bool>;
+#[cfg(feature = "thread-safe")]
+pub type Filter = std::sync::Arc<dyn Fn(&Context) -> bool + Send + Sync>;
 
 /// A scope in the context tree. Clone freely; clones share the same scope.
 ///
@@ -182,7 +186,7 @@ pub struct Disposer {
 }
 
 impl Disposer {
-    pub(crate) fn new(f: impl FnOnce() + crate::sync::MaybeSendSync) -> Disposer {
+    pub(crate) fn new(f: impl FnOnce() + crate::sync::MaybeSendSync + 'static) -> Disposer {
         Disposer {
             inner: Some(Box::new(f)),
         }
@@ -218,7 +222,7 @@ impl Drop for Disposer {
 /// ```
 /// # use cordis::{Context, EventOptions};
 /// # use std::rc::Rc;
-use crate::sync::BorrowExt as _;
+/// # use std::cell::RefCell;
 /// # #[derive(Default)] struct Conn;
 /// fn scoped(ctx: &Context) -> cordis::Result<()> {
 ///     let _conn = ctx.provide(Conn::default()).map(cordis::Guard::from)?;

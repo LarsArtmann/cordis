@@ -1,8 +1,8 @@
 //! Tests for the native API forms: typed services, typed events, RAII
 //! guards and the Plugin trait.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use cordis::sync::RefCell;
+use cordis::sync::{BorrowExt as _, Rc};
 
 use cordis::{
     event_name, plugin, plugin_type_id, service_name, start, start_fn, Context, EventOptions,

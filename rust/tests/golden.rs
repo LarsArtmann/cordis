@@ -3,11 +3,11 @@
 //! exactly. The Go and Zig ports ship structurally identical runners; see
 //! golden/README.md.
 
-use std::cell::RefCell;
+use cordis::sync::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::rc::Rc;
+use cordis::sync::{BorrowExt as _, Rc};
 
 use cordis::{plugin, start_fn, value, Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Value};
 

@@ -20,7 +20,10 @@ pub(crate) struct Impl {
 }
 
 /// The type erased plugin body.
+#[cfg(not(feature = "thread-safe"))]
 pub(crate) type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()>>;
+#[cfg(feature = "thread-safe")]
+pub(crate) type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()> + Send + Sync>;
 
 /// The shared runtime identity and body of a plugin, used by both the
 /// closure form (FnPlugin) and the trait form (Plugin).
@@ -43,7 +46,10 @@ pub(crate) struct RuntimeData {
 }
 
 /// A cleanup releasing one resource.
+#[cfg(not(feature = "thread-safe"))]
 pub(crate) type Cleanup = Box<dyn FnMut()>;
+#[cfg(feature = "thread-safe")]
+pub(crate) type Cleanup = Box<dyn FnMut() + Send>;
 
 /// An ordered collection of disposables owned by a fiber or by one effect
 /// inside a fiber. Disposal is always last in, first out.
@@ -330,7 +336,7 @@ pub(crate) fn leave(core: &Rc<RefCell<Core>>) {
 
 /// Run a user cleanup, catching panics into the error log and draining any
 /// transitions it triggered.
-pub(crate) fn run_cleanup(core: &Rc<RefCell<Core>>, cleanup: Box<dyn FnMut()>) {
+pub(crate) fn run_cleanup(core: &Rc<RefCell<Core>>, cleanup: Cleanup) {
     enter(core);
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(cleanup)).is_err() {
         core.borrow_mut().log_error("root", "cleanup panicked");

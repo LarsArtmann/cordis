@@ -116,12 +116,12 @@ pub fn start<P: Plugin + 'static>(ctx: &Context, plugin: P, config: P::Config) -
 }
 
 /// The closure form of a plugin, built by [`plugin`].
-pub struct FnPlugin<C: 'static> {
+pub struct FnPlugin<C: crate::sync::Shared> {
     pub(crate) base: Rc<PluginBase>,
     _marker: PhantomData<fn() -> C>,
 }
 
-impl<C: 'static> FnPlugin<C> {
+impl<C: crate::sync::Shared> FnPlugin<C> {
     /// The plugin name.
     pub fn name(&self) -> &str {
         &self.base.name
@@ -146,7 +146,7 @@ impl<C: 'static> FnPlugin<C> {
     }
 }
 
-impl<C: 'static> Clone for FnPlugin<C> {
+impl<C: crate::sync::Shared> Clone for FnPlugin<C> {
     fn clone(&self) -> Self {
         FnPlugin {
             base: Rc::clone(&self.base),
@@ -160,10 +160,10 @@ impl<C: 'static> Clone for FnPlugin<C> {
 /// decides the fiber state. Two separately created values are two distinct
 /// plugins; share one value (it is cheaply cloneable) for one registry
 /// identity.
-pub fn plugin<C, F>(name: &str, apply: F) -> FnPlugin<C>
+pub fn plugin<C: crate::sync::Shared, F>(name: &str, apply: F) -> FnPlugin<C>
 where
     C: 'static,
-    F: Fn(&Context, &C) -> crate::Result<()> + 'static,
+    F: Fn(&Context, &C) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static,
 {
     FnPlugin {
         base: Rc::new(PluginBase {
@@ -195,8 +195,8 @@ pub fn start_fn<C: crate::sync::Shared>(ctx: &Context, plugin: &FnPlugin<C>, con
 impl Context {
     /// Start an anonymous plugin that runs `f` once every service in `deps`
     /// is available, mirroring ctx.inject upstream.
-    pub fn inject(&self, deps: &[&str], f: impl Fn(&Context) -> crate::Result<()> + 'static) -> crate::Result<Fiber> {
-        let p = plugin("anonymous", move |ctx: &Context, _: &()| f(ctx)).inject(deps);
+    pub fn inject(&self, deps: &[&str], f: impl Fn(&Context) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static) -> crate::Result<Fiber> {
+        let p = plugin::<(), _>("anonymous", move |ctx: &Context, _: &()| f(ctx)).inject(deps);
         start_fn(self, &p, ())
     }
 
@@ -250,7 +250,7 @@ impl Registry {
     }
 
     /// Whether the closure plugin has at least one live fiber.
-    pub fn has<C: 'static>(&self, plugin: &FnPlugin<C>) -> bool {
+    pub fn has<C: crate::sync::Shared>(&self, plugin: &FnPlugin<C>) -> bool {
         self.has_id(plugin.base.id)
     }
 
@@ -276,7 +276,7 @@ impl Registry {
     }
 
     /// Dispose every fiber of the closure plugin and remove its runtime.
-    pub fn delete<C: 'static>(&self, plugin: &FnPlugin<C>) {
+    pub fn delete<C: crate::sync::Shared>(&self, plugin: &FnPlugin<C>) {
         self.delete_id(plugin.base.id);
     }
 }
