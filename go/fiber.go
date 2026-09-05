@@ -157,6 +157,15 @@ func (f *Fiber) State() FiberState {
 	return f.state
 }
 
+// Err returns the error that failed the fiber's last activation, or nil.
+// A fiber whose apply returned an error or panicked enters StateFailed and
+// keeps the error here for inspection.
+func (f *Fiber) Err() error {
+	f.core.mu.Lock()
+	defer f.core.mu.Unlock()
+	return f.err
+}
+
 // Name returns the plugin name, or "root" for the root fiber, mirroring the
 // name resolution upstream: unnamed fibers inherit from their parent chain.
 func (f *Fiber) Name() string {
@@ -516,6 +525,32 @@ func (f *Fiber) Await() error {
 		ch := f.idleCh
 		c.mu.Unlock()
 		<-ch
+	}
+}
+
+// AwaitContext waits until the fiber has settled, or until parent is
+// canceled, whichever comes first. It returns the fiber's activation error
+// when it settles, or the parent's cancellation error when the wait is
+// abandoned.
+func (f *Fiber) AwaitContext(parent context.Context) error {
+	c := f.core
+	for {
+		c.mu.Lock()
+		if !f.queued && !f.executing {
+			err := f.err
+			c.mu.Unlock()
+			return err
+		}
+		ch := f.idleCh
+		c.mu.Unlock()
+		select {
+		case <-ch:
+		case <-parent.Done():
+			if err := parent.Err(); err != nil {
+				return err
+			}
+			return context.Canceled
+		}
 	}
 }
 

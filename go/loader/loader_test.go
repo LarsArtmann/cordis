@@ -111,8 +111,8 @@ func TestValidationErrorsPerEntry(t *testing.T) {
 	// Validate is a dry run over the stored entries; the two broken ones
 	// are reported per entry without touching the good one.
 	for _, err := range tree.Validate() {
-		var ee *EntryError
-		if !errors.As(err, &ee) {
+		ee, ok := errors.AsType[*EntryError](err)
+		if !ok {
 			t.Fatalf("validate returned %T, want *EntryError", err)
 		}
 		if ee.ID != "unknown" && ee.ID != "badconf" {

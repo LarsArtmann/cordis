@@ -29,6 +29,26 @@ dangling home-manager symlink. Both are broken. Always run Go with
 Zig is not installed globally; use `nix run nixpkgs#zig -- ...` or the flake
 devShell.
 
+### Upstream / CI facts (learned 2026-09-04)
+
+- Upstream commits **no yarn.lock** and installs with `yarn --no-immutable`,
+  so its CI resolves floating dependency ranges on every run. To reproduce
+  TS behavior locally: `nix shell nixpkgs#nodejs_24 nixpkgs#corepack -c sh -c
+  'export PATH=/tmp/corepack-bin:$PATH; yarn install && yarn build'`.
+  Generated `yarn.lock` / `node_modules/` must never be committed.
+- Upstream main's `packages/hmr` test suite flakes (11 waitFor timeouts) —
+  an upstream cache-invalidation bug; their `3-stage-hmr` branch fixes it.
+  Do not debug the fork's Build workflow for those 11 tests; gate on Ports.
+- The `thread-safe` Rust build swaps `RefCell` for `std::sync::Mutex`
+  (non-reentrant). **Never hold a core borrow across another core borrow** —
+  nested same-thread locking deadlocks instead of panicking
+  (`Fiber::name` did exactly this). Audit every new borrow scope against
+  this rule; a deadlock shows up as a hung test suite, not an error.
+- Rust test binaries that can block need `timeout N cargo test ...` locally;
+  CI enforces `timeout-minutes` (15 Ports / 20 Build).
+- Always `git diff upstream/main -- '**/package.json'` after touching TS
+  manifests: the fork tracks upstream exactly; dep bumps belong upstream.
+
 ## Port architecture (all three languages share this)
 
 **Prime directive (user, 2026-08-22): use each language's native features to
