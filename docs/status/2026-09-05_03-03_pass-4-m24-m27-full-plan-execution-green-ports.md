@@ -25,6 +25,7 @@ clippy pay-down → release tags.
 ## a) FULLY DONE
 
 ### M15 — loader watch/reload (`82d7206`)
+
 - `PollWatcher` baseline race root-caused: baseline is now primed in the
   constructor, so the observation window starts at construction (a config
   written immediately after `Serve` is detected instead of silently
@@ -34,6 +35,7 @@ clippy pay-down → release tags.
 - Verified: `go vet`, `-race -count=3`, golangci-lint 0 issues.
 
 ### M16 — Go hmr, the killer upstream feature (`f2cd379`)
+
 - `go/hmr`: module identity via per-module generations (`Declare`,
   `Generation`), `Swap`/`SwapType` with fixed-point accept-set over the
   declared import graph, `EventReload`, all-or-nothing rollback.
@@ -44,6 +46,7 @@ clippy pay-down → release tags.
 - 9 tests mirroring the upstream scenarios, `-race -count=3` green.
 
 ### M22 — Rust snapshots, status events (`d9cc834`)
+
 - `internal/status`: `EVENT_STATUS` + `StatusChange{uid, name, old, new}`
   from a `settle_state` choke point; plugin name cached on the fiber so
   dying fibers stay identifiable after their runtime is removed.
@@ -56,6 +59,7 @@ clippy pay-down → release tags.
   named services, typed events.
 
 ### THE BIG ONE — pre-existing thread-safe deadlock root-caused and fixed (`d9cc834`)
+
 - Symptom: three CI Ports runs hung 1.5h+; locally the thread-safe suite
   froze for an hour on `parity::plugin_lifecycle`.
 - Verified pre-existing by stashing my changes and re-running on HEAD.
@@ -66,6 +70,7 @@ clippy pay-down → release tags.
   Mutex port.
 
 ### CI hardening (`3118f7d`) + missing toolchain (`87470eb`)
+
 - `timeout-minutes: 15` (Ports) / `20` (Build) — a stuck job now fails
   fast instead of hanging the workflow.
 - Second pre-existing CI bug: the Go Lint step called `golangci-lint` but
@@ -74,6 +79,7 @@ clippy pay-down → release tags.
   same as local).
 
 ### M24 — accessor/mixin derived services (`28edf62`)
+
 - `Accessor[S,V](ctx, name, get, set...)`: a derived service that appears
   with its source, disappears with it, and re-derives on source restarts
   (built on `Context.Inject`). Optional `set` gives write-back through the
@@ -85,12 +91,14 @@ clippy pay-down → release tags.
   test now lets it finish before sampling.
 
 ### M25 — callable services + tracker (`da2fc0d`)
+
 - `ProvideService[T]` publishes a service and fills an embedded
   `*ServiceMeta` (context + resolved name) — the tracker counterpart.
 - `Callable[Req,Res]` binds a func service to its context; calls resolve
   through the bound context and panics are recovered into errors.
 
 ### M26 — API polish (`4ac52be`)
+
 - `Fiber.Err()`: the activation error of a `StateFailed` fiber.
 - `Fiber.AwaitContext(parent)`: settle-or-cancel wait (plain `Await` keeps
   blocking). Test drives a genuinely mid-flight fiber via `EventPlugin`
@@ -103,6 +111,7 @@ clippy pay-down → release tags.
   dep-bump policy).
 
 ### M27 — quality batch (`567a472`, tags)
+
 - Benchmarks: start/dispose (~1.8µs), provide+dispose+get (~1.2µs), get
   (~160ns, 0 allocs), emit (~290ns), waterfall x5 (~470ns), typed event
   (~180ns).
@@ -118,12 +127,14 @@ clippy pay-down → release tags.
   bumped to 0.2.0).
 
 ### Rust clippy pay-down, round 1 (`4109656`)
+
 - 210 → 95 warnings: autofix pass (needless clones/returns, let-else,
   must_use, redundant pub(crate)), test-file allowances with justification
   (tests legitimately assert via panic), unused import cleanup.
 - Both feature modes re-verified green after every step.
 
 ### Docs harvest (`7dae817`)
+
 - TODO_LIST.md: loader/hmr/accessor/callable/snapshot/status, LIFO test,
   parity generator, releases, CI health with green-run IDs all checked
   off; stale Zig planned-list corrected via ROADMAP.
@@ -134,7 +145,7 @@ clippy pay-down → release tags.
   class: 17 missing `# Errors` doc sections, 7 long doc paragraphs,
   ~7 arithmetic-side-effect notes on guarded index math, 11 match-on-unit
   in state-machine arms, a few let-else/expect/must_use stragglers.
-- **GitHub Releases**: tags pushed, but no GitHub Release *pages* with
+- **GitHub Releases**: tags pushed, but no GitHub Release _pages_ with
   release notes (`gh release create`) — plan said "releases", delivered
   tags + versions.
 - **Green-run recording**: TODO_LIST.md records the Ports greens; the
@@ -177,7 +188,7 @@ clippy pay-down → release tags.
    trusted `Refresh`'s error return and missed `StateFailed`. Test caught
    it; re-reading the facts first would have saved a cycle.
 4. **Rollback-set bug**: the failing entry was appended to the touched
-   list *after* its refresh, so the rollback loop never restored it.
+   list _after_ its refresh, so the rollback loop never restored it.
 5. **Stash design churn in Rust** (three iterations): v1 stashed the dead
    fiber's context (restart always failed `assert_active`), v2 stashed on
    every last-fiber disposal (unbounded leak), v3 (shipped) stashes only

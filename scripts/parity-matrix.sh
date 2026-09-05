@@ -13,7 +13,9 @@ list_go() { (cd go && GOCACHE=/tmp/gocache go test -list '.*' . ./group ./timer 
 list_rust() { (cd rust && cargo test -- --list 2>/dev/null | grep -E ': test$' | cut -d: -f1); }
 list_zig() { grep -hoE 'test "[^"]+"' zig/tests/*.zig zig/src/*.zig 2>/dev/null | sed 's/.*test "//;s/"//' || true; }
 
-GO="$(list_go | sort -u)"; RUST="$(list_rust | sort -u)"; ZIG="$(list_zig | sort -u)"
+GO="$(list_go | sort -u)"
+RUST="$(list_rust | sort -u)"
+ZIG="$(list_zig | sort -u)"
 
 row_for() {
   local area="$1" go_pat="$2" rust_pat="$3" zig_pat="$4"

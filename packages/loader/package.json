@@ -41,7 +41,7 @@
   },
   "peerDependencies": {
     "cordis": "^4.0.0-rc.9",
-    "node-addon-require-builtin": "^0.1.0"
+    "node-addon-require-builtin": "^0.1.5"
   },
   "peerDependenciesMeta": {
     "node-addon-require-builtin": {

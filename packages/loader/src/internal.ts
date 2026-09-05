@@ -1,42 +1,42 @@
-import { createRequire, LoadHookContext } from "node:module";
-import { Dict } from "cosmokit";
+import { createRequire, LoadHookContext } from 'node:module'
+import { Dict } from 'cosmokit'
 
-export type ModuleFormat = "builtin" | "commonjs" | "json" | "module" | "wasm";
-export type ModuleSource = string | ArrayBuffer;
+export type ModuleFormat = 'builtin' | 'commonjs' | 'json' | 'module' | 'wasm'
+export type ModuleSource = string | ArrayBuffer
 
 export interface ResolveResult {
-  format: ModuleFormat;
-  url: string;
+  format: ModuleFormat
+  url: string
 }
 
 export interface LoadResult {
-  format: ModuleFormat;
-  source?: ModuleSource;
+  format: ModuleFormat
+  source?: ModuleSource
 }
 
-type LoadCacheData = ModuleJob; // | Function
+type LoadCacheData = ModuleJob // | Function
 
 /** @see https://github.com/nodejs/node/blob/main/lib/internal/modules/esm/module_map.js */
-interface LoadCache extends Omit<Map<string, Dict<LoadCacheData>>, "get" | "set" | "has"> {
-  get(url: string, type?: string): LoadCacheData | undefined;
-  set(url: string, type?: string, job?: LoadCacheData): this;
-  has(url: string, type?: string): boolean;
+interface LoadCache extends Omit<Map<string, Dict<LoadCacheData>>, 'get' | 'set' | 'has'> {
+  get(url: string, type?: string): LoadCacheData | undefined
+  set(url: string, type?: string, job?: LoadCacheData): this
+  has(url: string, type?: string): boolean
 }
 
 export interface ModuleWrap {
-  url: string;
-  getNamespace(): any;
+  url: string
+  getNamespace(): any
 }
 
 /** @see https://github.com/nodejs/node/blob/main/lib/internal/modules/esm/module_job.js */
 export interface ModuleJob {
-  url: string;
-  loader: ModuleLoader;
-  module?: ModuleWrap;
-  importAttributes: ImportAttributes;
-  linked: Promise<ModuleJob[]>;
-  instantiate(): Promise<void>;
-  run(): Promise<{ module: ModuleWrap }>;
+  url: string
+  loader: ModuleLoader
+  module?: ModuleWrap
+  importAttributes: ImportAttributes
+  linked: Promise<ModuleJob[]>
+  instantiate(): Promise<void>
+  run(): Promise<{ module: ModuleWrap }>
 }
 
 /**
@@ -48,40 +48,40 @@ export interface ModuleJob {
  * - resolveSync(specifier, parentURL, importAttributes) → ResolveResult
  */
 export interface ModuleLoaderV1 {
-  version: "v1";
-  loadCache: LoadCache;
-  import(specifier: string, parentURL: string, importAttributes: ImportAttributes): Promise<any>;
+  version: 'v1'
+  loadCache: LoadCache
+  import(specifier: string, parentURL: string, importAttributes: ImportAttributes): Promise<any>
   register(
     specifier: string | URL,
     parentURL?: string | URL,
     data?: any,
     transferList?: any[],
-  ): void;
+  ): void
   getModuleJobForImport(
     specifier: string,
     parentURL: string,
     importAttributes: ImportAttributes,
-  ): Promise<ModuleJob>;
+  ): Promise<ModuleJob>
   resolve(
     specifier: string,
     parentURL: string,
     importAttributes: ImportAttributes,
-  ): Promise<ResolveResult>;
+  ): Promise<ResolveResult>
   resolveSync(
     specifier: string,
     parentURL: string,
     importAttributes: ImportAttributes,
-  ): ResolveResult;
+  ): ResolveResult
   load(
     specifier: string,
-    context: Pick<LoadHookContext, "format" | "importAttributes">,
-  ): Promise<LoadResult>;
+    context: Pick<LoadHookContext, 'format' | 'importAttributes'>,
+  ): Promise<LoadResult>
 }
 
 export interface ModuleRequest {
-  specifier: string;
-  attributes?: ImportAttributes;
-  phase?: ModulePhase;
+  specifier: string
+  attributes?: ImportAttributes
+  phase?: ModulePhase
 }
 
 /** @see https://github.com/nodejs/node/blob/main/src/module_wrap.h */
@@ -90,7 +90,7 @@ export const enum ModulePhase {
   Evaluation = 2,
 }
 
-export type ModuleRequestType = unknown; // internal symbols
+export type ModuleRequestType = unknown // internal symbols
 
 /**
  * Node 24+ ModuleLoader interface.
@@ -102,48 +102,48 @@ export type ModuleRequestType = unknown; // internal symbols
  * - LoadCache became typed Map<url, { [type]: ModuleJob }> with delete only setting undefined
  */
 export interface ModuleLoaderV2 {
-  version: "v2";
-  loadCache: LoadCache;
+  version: 'v2'
+  loadCache: LoadCache
   import(
     specifier: string,
     parentURL: string,
     importAttributes: ImportAttributes,
     phase?: ModulePhase,
     isEntryPoint?: boolean,
-  ): Promise<any>;
+  ): Promise<any>
   register(
     specifier: string | URL,
     parentURL?: string | URL,
     data?: any,
     transferList?: any[],
     isInternal?: boolean,
-  ): void;
+  ): void
   getOrCreateModuleJob(
     parentURL: string,
     request: ModuleRequest,
     requestType?: ModuleRequestType,
-  ): Promise<ModuleJob>;
-  resolveSync(parentURL: string, request: ModuleRequest): ResolveResult;
+  ): Promise<ModuleJob>
+  resolveSync(parentURL: string, request: ModuleRequest): ResolveResult
   load(
     url: string,
-    context: Pick<LoadHookContext, "format" | "importAttributes">,
-  ): Promise<LoadResult>;
+    context: Pick<LoadHookContext, 'format' | 'importAttributes'>,
+  ): Promise<LoadResult>
 }
 
-export type ModuleLoader = ModuleLoaderV1 | ModuleLoaderV2;
+export type ModuleLoader = ModuleLoaderV1 | ModuleLoaderV2
 
 export namespace ModuleLoader {
-  let _cachedLoader: ModuleLoader | undefined;
+  let _cachedLoader: ModuleLoader | undefined
 
   function requireInternal(id: string): any {
-    const require = createRequire(import.meta.url);
-    if (process.execArgv.includes("--expose-internals")) {
+    const require = createRequire(import.meta.url)
+    if (process.execArgv.includes('--expose-internals')) {
       try {
-        return require(id);
+        return require(id)
       } catch {}
     }
     try {
-      return require("node-addon-require-builtin").requireBuiltin(id);
+      return require('node-addon-require-builtin').requireBuiltin(id)
     } catch {}
   }
 
@@ -159,19 +159,19 @@ export namespace ModuleLoader {
    * @returns the classified loader, or `undefined` when none is reachable or its shape is unknown.
    */
   export function fromInternal(): ModuleLoader | undefined {
-    if (_cachedLoader) return _cachedLoader;
-    const [major] = process.versions.node.split(".").map(Number);
-    if (major < 22) return;
+    if (_cachedLoader) return _cachedLoader
+    const [major] = process.versions.node.split('.').map(Number)
+    if (major < 22) return
 
-    const raw = requireInternal("internal/modules/esm/loader")?.getOrInitializeCascadedLoader();
-    if (!raw) return;
-    const version =
-      typeof raw.getOrCreateModuleJob === "function"
-        ? "v2"
-        : typeof raw.getModuleJobForImport === "function"
-          ? "v1"
-          : undefined;
-    if (!version) return;
-    return (_cachedLoader = Object.assign(raw, { version }));
+    const raw = requireInternal('internal/modules/esm/loader')?.getOrInitializeCascadedLoader()
+    if (!raw) return
+    const version
+      = typeof raw.getOrCreateModuleJob === 'function'
+        ? 'v2'
+        : typeof raw.getModuleJobForImport === 'function'
+          ? 'v1'
+          : undefined
+    if (!version) return
+    return (_cachedLoader = Object.assign(raw, { version }))
   }
 }

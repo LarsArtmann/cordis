@@ -7,3 +7,5 @@
 *.webp -text
 # Enforce consistent line endings across all platforms
 * text=auto eol=lf
+# Binary files should not be diffed or merged
+*.gz binary
