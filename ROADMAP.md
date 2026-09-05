@@ -10,18 +10,24 @@ its architecture.
 | ------------------------------------------------------ | ------------------ | --------------- | -------------------------------------- |
 | Context tree (extend)                                  | DONE               | DONE            | DONE                                   |
 | Isolation realms + shared labels                       | DONE               | DONE            | DONE                                   |
-| Intercept (per-scope service config)                   | DONE               | -               | -                                      |
+| Intercept (per-scope service config)                   | DONE               | DONE            | -                                      |
 | Effects: nested, labeled, LIFO rollback, introspection | DONE               | DONE            | partial (no labels tree introspection) |
-| Events: emit / parallel / serial / bail / waterfall    | DONE               | DONE            | emit + bail                            |
+| Events: emit / parallel / serial / bail / waterfall    | DONE               | DONE            | DONE                                   |
 | Event filters + global listeners                       | DONE               | DONE            | DONE                                   |
 | Fiber states, dispose, restart, update                 | DONE               | DONE            | DONE                                   |
 | Inject reactivity (pending / unload / reload in place) | DONE               | DONE            | DONE                                   |
 | Registry (size / has / delete, snapshot restore)       | DONE               | DONE            | -                                      |
-| Config validation                                      | DONE               | -               | -                                      |
-| Fiber Await                                            | DONE               | -               | -                                      |
-| Batch transactions                                     | DONE               | DONE            | -                                      |
+| Status events (internal/status)                        | DONE               | DONE            | -                                      |
+| Config validation                                      | DONE               | DONE            | -                                      |
+| Fiber Await (+ stdlib-context variant in Go)           | DONE               | n/a (drain settles synchronously) | -                                |
+| Batch transactions                                     | DONE               | DONE            | DONE                                   |
 | Logger service (levels, exporters, buffer)             | DONE               | -               | -                                      |
-| Concurrent access safety                               | DONE (race tested) | single-threaded | single-threaded                        |
+| Accessor / mixin derived services                      | DONE               | -               | -                                      |
+| Callable services + tracker                            | DONE               | -               | -                                      |
+| Timer (interval, debounce, throttle)                   | DONE               | -               | -                                      |
+| Loader (config entries, watch/reload)                  | DONE               | -               | -                                      |
+| HMR (implementation swap, rollback)                    | DONE               | -               | -                                      |
+| Concurrent access safety                               | DONE (race tested) | thread-safe build (Mutex) | single-threaded              |
 
 ## Planned, in priority order
 
@@ -96,13 +102,28 @@ Go, Rust and Zig test suites with a byte-identical expected trace, plus
 
 ### Zig
 
-1. Registry view (size / delete) on top of the runtime map.
-2. serial / waterfall / parallel dispatch modes.
-3. Early disposal handles (Disposer) for `on` and `provide`.
-4. Batch transactions.
-5. Effect labels exposed for introspection.
+Landed since the foundation: registry view, serial / waterfall / parallel
+dispatch modes, batch coalescing, effect labels with introspection, typed
+events, shared isolation labels.
+
+1. Snapshot/restore and status events (Rust parity).
+2. Accessor/mixin derived services (Go parity).
+3. Disposer-returning `on` / `provide` for early disposal.
+4. Loader / hmr equivalents — pending the module-layout decision.
 
 ### Repo
 
 1. First green `ports.yml` CI run (actions verified; requires a push).
 2. More golden scenarios covering events and the logger.
+
+### Release cadence
+
+- **Go** (`github.com/LarsArtmann/cordis/go`): tagged `go/v0.1.x` per
+  feature milestone; patch bumps for fixes. Module consumers upgrade via
+  `go get github.com/LarsArtmann/cordis/go@latest`.
+- **Rust** (`cordis` crate): `v0.1.x` during the foundation phase, `v0.2.0`
+  when the registry snapshot/restore and status events landed.
+- **Zig**: tagged together with the repo when the foundation phase
+  completes (0.16 build-zig test runner).
+- Cadence: cut a release whenever a milestone (M-task) lands and CI is
+  green; do not batch unrelated changes into one release.
