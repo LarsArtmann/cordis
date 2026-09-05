@@ -127,3 +127,22 @@ events, shared isolation labels.
   completes (0.16 build-zig test runner).
 - Cadence: cut a release whenever a milestone (M-task) lands and CI is
   green; do not batch unrelated changes into one release.
+
+### Kernovia convergence (2026-09-04)
+
+Kernovia (`github.com/larsartmann/kernovia`) — the compiled, statically
+typed micro-kernel that proves this calculus in production shape — now
+treats this fork as its **executable semantic oracle**: `go/v0.1.0` is
+pinned, and its golden scenarios run against Kernovia's reactive stack
+byte-exact (`pkg/testing/cordisparity` in the Kernovia repo, ADR-004).
+Scenario v1 (27 ops incl. realms skipped-with-attribution) and
+scenario-cascade (nested plugins, delete, registry-size) are green there;
+scenario-events is blocked on Kernovia's realm + dispatch work.
+
+Bidirectional feedback started: #1 (lock-free-callback regression test) and
+#2 (RequireNoResidue helper) were filed from Kernovia's port experience.
+Ongoing interest: Kernovia's loader/hmr are production-proven candidates for
+this repo's "Loader / hmr equivalents" gap — the adoption decision (Go/No-Go
+with gates) is recorded in Kernovia's ADR-004 appendix. When evaluating the
+module-layout decision, factor in a consumer that exercises the calculus
+daily.
