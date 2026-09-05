@@ -3,11 +3,11 @@
 This directory tree contains the multi-language ports of Cordis. The Go port
 is the flagship and the reference implementation for the other languages.
 
-| Language | Directory        | Status                                                                                                                                                     | Test command               |
-| -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Language | Directory        | Status                                                                                                                                                                                                                                                                                    | Test command               |
+| -------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | Go       | [`go/`](go/)     | Core complete: contexts, fibers, effects, events (all five dispatch modes), services with isolation realms, plugin registry with inject reactivity, logger, timer, group, loader (watch/reload), hmr (swap + rollback), accessor/mixin, callable services + tracker, typed inject helpers | `cd go && go test ./...`   |
-| Rust     | [`rust/`](rust/) | Core complete (single-threaded core plus a `thread-safe` Mutex build): contexts, fibers, effects, events, services, isolation, inject reactivity, validation, intercept, snapshot/restore, status events | `cd rust && cargo test`    |
-| Zig      | [`zig/`](zig/)   | Foundation: contexts, fibers, events, services, isolation, inject reactivity                                                                               | `cd zig && zig build test` |
+| Rust     | [`rust/`](rust/) | Core complete (single-threaded core plus a `thread-safe` Mutex build): contexts, fibers, effects, events, services, isolation, inject reactivity, validation, intercept, snapshot/restore, status events                                                                                  | `cd rust && cargo test`    |
+| Zig      | [`zig/`](zig/)   | Foundation: contexts, fibers, events, services, isolation, inject reactivity                                                                                                                                                                                                              | `cd zig && zig build test` |
 
 All three ports share one architecture:
 

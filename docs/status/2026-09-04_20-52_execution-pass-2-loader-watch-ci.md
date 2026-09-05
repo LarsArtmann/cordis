@@ -13,6 +13,7 @@ revert). Both pushed.
 ## Direct answers first
 
 **What did I forget?**
+
 1. To verify the CI runs after pushing `86936c6`. I pushed the toolchain
    revert and moved on to M14; the `Build` run is still **failure** (24s)
    and the `Ports` run has been **in_progress for >1h** (normal: 3–6min).
@@ -26,15 +27,16 @@ revert). Both pushed.
    (`go/loader/entry.go`).
 
 **What could I have done better?**
+
 1. Read `resolveHooks` before writing per-entry event hooks. Go hooks are
-   scoped by dispatch-context *filter*, not by owner chain, so my
+   scoped by dispatch-context _filter_, not by owner chain, so my
    per-entry `EventUpdate` hooks were effectively global. That forced a
    mid-task redesign: the `internal/update` waterfall now carries the
    updating fiber and one global tree listener routes saves. Reading the
    event-resolution source first would have produced the right design on
    the first pass.
 2. Designed the group/entry interaction against the transition machine
-   *before* coding. Three real bugs came out of not doing that fully:
+   _before_ coding. Three real bugs came out of not doing that fully:
    `host.ctx` still nil during group apply (the recovered panic then
    masked as `ErrInactiveEffect`), a double-append in `EntryGroup.Update`,
    and self-disposed fibers being tracked after their dispose event.
@@ -43,6 +45,7 @@ revert). Both pushed.
    placed after `Close`) and cost a debug cycle.
 
 **What could I still improve?**
+
 1. The auto-commit daemon raced my edits twice today (it reverted
    `watch_test.go` back to a stale version while I was fixing it), which
    produced phantom test failures and wasted cycles. Working in a branch,
@@ -58,14 +61,14 @@ revert). Both pushed.
 
 ## a) FULLY DONE
 
-| Item | Evidence |
-| --- | --- |
-| TS toolchain CI regression root-caused and reverted (`86936c6`) | `typescript ^7.0.2` (no `lib/_tsc.js`) broke yarn's builtin patch; `package.json` + loader peer dep now byte-identical to `upstream/main` (verified via `git diff upstream/main`) |
+| Item                                                               | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TS toolchain CI regression root-caused and reverted (`86936c6`)    | `typescript ^7.0.2` (no `lib/_tsc.js`) broke yarn's builtin patch; `package.json` + loader peer dep now byte-identical to `upstream/main` (verified via `git diff upstream/main`)                                                                                                                                                                                                                                                                                       |
 | **M14 Go loader package** (`go/loader`, ~1100 LOC + ~700 test LOC) | `resolver.go` (Registration + generic `RegisterType[C]` + `DecodeInto`), `entry.go` (EntryOptions/Entry lifecycle, reconcile, isolate/intercept scopes), `group.go` (EntryGroup diff, group plugin with **restart veto** — upstream semantics on Go's real-restart `Fiber.Update`), `tree.go` (store, diff APIs, Validate dry-run, self-dispose detection, Locate), `loader.go` (service, Start diff), `config.go` (JSON schema `{plugins:[...]}`, Find/Load/Save/Open) |
-| Core additions, tested | `StartAny`, `InjectSpec` (`go/plugin.go` + `TestStartAnyAndInjectSpec`); `internal/update` waterfall now carries `(*Fiber, config, noSave, next)` — no external consumers existed |
-| M14 test coverage | 12 tests: file-driven start, per-entry validation, inject wiring (pending→provide→active + Intercepted), nested group diff (in-place child update, group veto, removal cascade), isolate/intercept options, self-dispose marks disabled **and persists to file**, in-place `SetConfig` (fiber identity preserved, siblings untouched), root diff, Update/Replace merge semantics, `DecodeInto` passthrough, config round-trip |
-| Verification at M14 commit | `go vet ./...` clean; `go test -race -count=3 ./...` all four packages green; `golangci-lint run` 0 issues; committed as `c694a7f` |
-| Repo state | `main` pushed through `c694a7f`; working tree contains only the in-flight M15 files |
+| Core additions, tested                                             | `StartAny`, `InjectSpec` (`go/plugin.go` + `TestStartAnyAndInjectSpec`); `internal/update` waterfall now carries `(*Fiber, config, noSave, next)` — no external consumers existed                                                                                                                                                                                                                                                                                       |
+| M14 test coverage                                                  | 12 tests: file-driven start, per-entry validation, inject wiring (pending→provide→active + Intercepted), nested group diff (in-place child update, group veto, removal cascade), isolate/intercept options, self-dispose marks disabled **and persists to file**, in-place `SetConfig` (fiber identity preserved, siblings untouched), root diff, Update/Replace merge semantics, `DecodeInto` passthrough, config round-trip                                           |
+| Verification at M14 commit                                         | `go vet ./...` clean; `go test -race -count=3 ./...` all four packages green; `golangci-lint run` 0 issues; committed as `c694a7f`                                                                                                                                                                                                                                                                                                                                      |
+| Repo state                                                         | `main` pushed through `c694a7f`; working tree contains only the in-flight M15 files                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ## b) PARTIALLY DONE
 
@@ -88,7 +91,7 @@ revert). Both pushed.
      registration (`entry.reg`) before `Fiber.Update`; `Await` skips
      parked (StatePending) fibers to remove a deadlock class.
 2. **CI verification of `86936c6`** — pushed but unverified: `Build`
-   failed again (24s, untriaged — could be a *different* failure than the
+   failed again (24s, untriaged — could be a _different_ failure than the
    yarn one, e.g. the eslint/peer warnings becoming errors), `Ports`
    hung >1h (needs cancel/re-run).
 3. **Docs for the new packages** — loader has package docs and the
@@ -158,6 +161,7 @@ revert). Both pushed.
 ## f) NEXT — prioritized backlog (36 items)
 
 **Immediate — finish M15 (est. 1–2h)**
+
 1. Debug `TestServeReloadsOnChange`: verify the watcher fires and trace
    `Reload`→`Start`→`reconcile`→`Fiber.Update` for the served path.
 2. Re-apply (and keep) the corrected rollback-test assertions matching
@@ -169,19 +173,19 @@ revert). Both pushed.
 
 **CI trust (est. 30min)**
 5. Triage the new `Build` failure on `86936c6` (24s — read the log; if
-   peer-dependency warnings became errors, pin accordingly).
+peer-dependency warnings became errors, pin accordingly).
 6. Cancel + re-run the hung `Ports` run; add `timeout-minutes` to all
-   jobs in both workflows.
+jobs in both workflows.
 7. Record the first green `ports.yml` URL for this batch in
-   `TODO_LIST.md` (M01/M02 follow-through).
+`TODO_LIST.md` (M01/M02 follow-through).
 
 **M16 — Go hmr (est. 2–3h)**
 8. Module identity model (key, dispose+relink contract) on top of the
-   loader's entry disposal.
+loader's entry disposal.
 9. `Accept`/`Decline` API on the hmr context.
 10. Dispose+relink pipeline through `internal/plugin`/`internal/update`.
 11. Tests: module swap preserves siblings; declined update keeps old
-    module live.
+module live.
 12. Port TS hmr fixtures; parity-style assertions; docs.
 
 **M22 remainder — Rust (est. 1.5h)**
@@ -202,7 +206,7 @@ revert). Both pushed.
 23. Tracker: current calling fiber during service ops.
 24. Attribution wiring in registration paths.
 25. Tests: effects created via service attribute to the caller; tree
-    shape under attribution.
+shape under attribution.
 
 **M26 — API polish + docs (est. 1.5h)**
 26. `Fiber.Err()` accessor (apply error).
@@ -210,7 +214,7 @@ revert). Both pushed.
 28. `errors.As` → `errors.AsType` sweep in `go/errors.go`.
 29. Typed-inject sugar `Plugin.InjectTypes[T1, T2]()`.
 30. PORTS.md cross-port API table; README badges + port pitch; AGENTS.md
-    Zig 0.16 gotchas; loader/hmr sections; Batch semantics notes.
+Zig 0.16 gotchas; loader/hmr sections; Batch semantics notes.
 
 **M27 — quality batch (est. 1.5h)**
 31. `nix flake check -L` CI job; benchmark skeleton (drain throughput).
@@ -219,7 +223,7 @@ revert). Both pushed.
 34. Releases: tag `go/v0.1.0`, Rust `v0.2.0`, Zig version note.
 35. `zig build -femit-docs` pass; parity-matrix generator; cadence note.
 36. Final: full 3-language verification + actionlint + docs harvest +
-    status report.
+status report.
 
 ## g) QUESTIONS (cannot answer myself)
 
@@ -232,12 +236,12 @@ revert). Both pushed.
    May I cancel the hung run and re-run both workflows via `gh`, and do
    you want `timeout-minutes` hard limits (e.g. 15m) added to every job?
 3. **Loader/hmr layout (carried over — still unanswered):** I proceeded
-   with Go *subpackages* (`go/loader`, `go/hmr`) inside the existing
+   with Go _subpackages_ (`go/loader`, `go/hmr`) inside the existing
    single Go module, consistent with `go/timer`/`go/group`. Confirm, or
    tell me to split standalone modules before M16 builds on top.
 
 ---
 
-*Point-in-time report. Test facts measured at 20:40–20:52 CEST against
+_Point-in-time report. Test facts measured at 20:40–20:52 CEST against
 `c694a7f` + working tree (watch.go/watch_test.go uncommitted,
-entry.go/config.go/loader.go modified).*
+entry.go/config.go/loader.go modified)._

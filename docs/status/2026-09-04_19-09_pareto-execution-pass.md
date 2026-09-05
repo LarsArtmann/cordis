@@ -11,25 +11,25 @@ check -L` all checks passed, actionlint clean.
 
 ## a) FULLY DONE
 
-| Item | Evidence |
-|---|---|
-| **M02** CI hardening: golangci-lint job, `-count=3` canary, golden double-run, actionlint | `.github/workflows/ports.yml` |
-| **M03** Rust `isolate_shared` collision-free labels ((name,label) hash map) + collision tests | `rust/src/core.rs` (`shared_key`), `tests/parity.rs` |
-| **M04** Zig `isolateShared` content-hashed pair keys + collision tests | `zig/src/cordis.zig` (`PairKey`/`PairContext`), `tests/parity.zig` |
-| **M05** Zig `Context.effect` named effect scopes + `effects()` `EffectMeta` introspection, idempotent disposal, LIFO rollback | `zig/src/cordis.zig`, `tests/typed.zig` |
-| **M06** Zig `Disposer` early-disposal handles (shared done flag), `Registry` view (size/has/delete), `onceTyped`, `onGlobal` | same |
-| **M07** Golden scenario #2 — events, filters, global listeners, byte-identical in all three ports | `golden/scenario-events.txt` + runners; green in Go/Rust/Zig |
-| **M08** Golden scenario #3 — nested plugin cascade + registry delete + registry-size assertions | `golden/scenario-cascade.txt`; caught and fixed a real expectation bug during authoring |
-| **M09** Go coverage 86.7% → **90.4%**: dispatch modes, waterfall guards, typed-event panics, logger edges, interception, StdContext lifecycle, error types, InjectConfig | `go/coverage_test.go` |
-| **M10** DSL parser unit tests in all three golden runners | `golden_test.go`, `tests/golden.rs`, `tests/golden.zig` |
-| **M11** Go `timer` package: AfterFunc/Await/Interval/IntervalFunc/Throttle/Debounce, effect-scoped, race-green | `go/timer/` + tests |
-| **M12** Go `group` package: id-keyed child fibers, diffed Update, rollback with owner | `go/group/` + tests |
-| **M13** Go interception events `internal/get|set|listener|dispatch` (loader/hmr prerequisite) + `Context.Cleanup` export + tests | `go/events.go`, `go/reflect.go` |
-| **M17/M18** Rust `thread-safe` feature: `Arc<Mutex>` core, `sync::Shared`/`MaybeSendSync` bounds, lock-order invariant (Core before FiberData — fixed real deadlocks), runtime-removal race fix, multi-thread stress tests, CI job | `rust/src/sync.rs` + tests/thread_safe.rs |
-| **M21** Rust `intercept`/`intercepted` overrides, `FnPlugin::validate` gating start, `Fiber::update_config` typed update | `rust/src/context.rs`, `plugin.rs`, `fiber.rs` + tests |
-| **M23** Rust `parallel` dispatch concurrent (scoped threads) under the feature flag, sequential otherwise | `rust/src/events.rs` |
-| **M19/M20** Zig `serial`/`waterfall` (runtime-name Next chain)/`parallel`/`batch` + tests | `zig/src/cordis.zig`, 29/29 tests |
-| Docs: TODO_LIST fully re-harvested to actual state | `TODO_LIST.md` |
+| Item                                                                                                                                                                                                                               | Evidence                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **M02** CI hardening: golangci-lint job, `-count=3` canary, golden double-run, actionlint                                                                                                                                          | `.github/workflows/ports.yml`                                                           |
+| **M03** Rust `isolate_shared` collision-free labels ((name,label) hash map) + collision tests                                                                                                                                      | `rust/src/core.rs` (`shared_key`), `tests/parity.rs`                                    |
+| **M04** Zig `isolateShared` content-hashed pair keys + collision tests                                                                                                                                                             | `zig/src/cordis.zig` (`PairKey`/`PairContext`), `tests/parity.zig`                      |
+| **M05** Zig `Context.effect` named effect scopes + `effects()` `EffectMeta` introspection, idempotent disposal, LIFO rollback                                                                                                      | `zig/src/cordis.zig`, `tests/typed.zig`                                                 |
+| **M06** Zig `Disposer` early-disposal handles (shared done flag), `Registry` view (size/has/delete), `onceTyped`, `onGlobal`                                                                                                       | same                                                                                    |
+| **M07** Golden scenario #2 — events, filters, global listeners, byte-identical in all three ports                                                                                                                                  | `golden/scenario-events.txt` + runners; green in Go/Rust/Zig                            |
+| **M08** Golden scenario #3 — nested plugin cascade + registry delete + registry-size assertions                                                                                                                                    | `golden/scenario-cascade.txt`; caught and fixed a real expectation bug during authoring |
+| **M09** Go coverage 86.7% → **90.4%**: dispatch modes, waterfall guards, typed-event panics, logger edges, interception, StdContext lifecycle, error types, InjectConfig                                                           | `go/coverage_test.go`                                                                   |
+| **M10** DSL parser unit tests in all three golden runners                                                                                                                                                                          | `golden_test.go`, `tests/golden.rs`, `tests/golden.zig`                                 |
+| **M11** Go `timer` package: AfterFunc/Await/Interval/IntervalFunc/Throttle/Debounce, effect-scoped, race-green                                                                                                                     | `go/timer/` + tests                                                                     |
+| **M12** Go `group` package: id-keyed child fibers, diffed Update, rollback with owner                                                                                                                                              | `go/group/` + tests                                                                     |
+| **M13** Go interception events `internal/get                                                                                                                                                                                       | set                                                                                     |
+| **M17/M18** Rust `thread-safe` feature: `Arc<Mutex>` core, `sync::Shared`/`MaybeSendSync` bounds, lock-order invariant (Core before FiberData — fixed real deadlocks), runtime-removal race fix, multi-thread stress tests, CI job | `rust/src/sync.rs` + tests/thread_safe.rs                                               |
+| **M21** Rust `intercept`/`intercepted` overrides, `FnPlugin::validate` gating start, `Fiber::update_config` typed update                                                                                                           | `rust/src/context.rs`, `plugin.rs`, `fiber.rs` + tests                                  |
+| **M23** Rust `parallel` dispatch concurrent (scoped threads) under the feature flag, sequential otherwise                                                                                                                          | `rust/src/events.rs`                                                                    |
+| **M19/M20** Zig `serial`/`waterfall` (runtime-name Next chain)/`parallel`/`batch` + tests                                                                                                                                          | `zig/src/cordis.zig`, 29/29 tests                                                       |
+| Docs: TODO_LIST fully re-harvested to actual state                                                                                                                                                                                 | `TODO_LIST.md`                                                                          |
 
 ## b) PARTIALLY DONE
 
@@ -132,5 +132,5 @@ flake layout before M14 starts. Which shape do you want — subpackages of
 
 ---
 
-*Point-in-time snapshot. Next actions harvested into `TODO_LIST.md`;
-annotate (don't rewrite) when bringing this report current.*
+_Point-in-time snapshot. Next actions harvested into `TODO_LIST.md`;
+annotate (don't rewrite) when bringing this report current._

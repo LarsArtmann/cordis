@@ -6,28 +6,28 @@ its architecture.
 
 ## Parity matrix
 
-| Feature                                                | Go                 | Rust            | Zig                                    |
-| ------------------------------------------------------ | ------------------ | --------------- | -------------------------------------- |
-| Context tree (extend)                                  | DONE               | DONE            | DONE                                   |
-| Isolation realms + shared labels                       | DONE               | DONE            | DONE                                   |
-| Intercept (per-scope service config)                   | DONE               | DONE            | -                                      |
-| Effects: nested, labeled, LIFO rollback, introspection | DONE               | DONE            | partial (no labels tree introspection) |
-| Events: emit / parallel / serial / bail / waterfall    | DONE               | DONE            | DONE                                   |
-| Event filters + global listeners                       | DONE               | DONE            | DONE                                   |
-| Fiber states, dispose, restart, update                 | DONE               | DONE            | DONE                                   |
-| Inject reactivity (pending / unload / reload in place) | DONE               | DONE            | DONE                                   |
-| Registry (size / has / delete, snapshot restore)       | DONE               | DONE            | -                                      |
-| Status events (internal/status)                        | DONE               | DONE            | -                                      |
-| Config validation                                      | DONE               | DONE            | -                                      |
-| Fiber Await (+ stdlib-context variant in Go)           | DONE               | n/a (drain settles synchronously) | -                                |
-| Batch transactions                                     | DONE               | DONE            | DONE                                   |
-| Logger service (levels, exporters, buffer)             | DONE               | -               | -                                      |
-| Accessor / mixin derived services                      | DONE               | -               | -                                      |
-| Callable services + tracker                            | DONE               | -               | -                                      |
-| Timer (interval, debounce, throttle)                   | DONE               | -               | -                                      |
-| Loader (config entries, watch/reload)                  | DONE               | -               | -                                      |
-| HMR (implementation swap, rollback)                    | DONE               | -               | -                                      |
-| Concurrent access safety                               | DONE (race tested) | thread-safe build (Mutex) | single-threaded              |
+| Feature                                                | Go                 | Rust                              | Zig                                    |
+| ------------------------------------------------------ | ------------------ | --------------------------------- | -------------------------------------- |
+| Context tree (extend)                                  | DONE               | DONE                              | DONE                                   |
+| Isolation realms + shared labels                       | DONE               | DONE                              | DONE                                   |
+| Intercept (per-scope service config)                   | DONE               | DONE                              | -                                      |
+| Effects: nested, labeled, LIFO rollback, introspection | DONE               | DONE                              | partial (no labels tree introspection) |
+| Events: emit / parallel / serial / bail / waterfall    | DONE               | DONE                              | DONE                                   |
+| Event filters + global listeners                       | DONE               | DONE                              | DONE                                   |
+| Fiber states, dispose, restart, update                 | DONE               | DONE                              | DONE                                   |
+| Inject reactivity (pending / unload / reload in place) | DONE               | DONE                              | DONE                                   |
+| Registry (size / has / delete, snapshot restore)       | DONE               | DONE                              | -                                      |
+| Status events (internal/status)                        | DONE               | DONE                              | -                                      |
+| Config validation                                      | DONE               | DONE                              | -                                      |
+| Fiber Await (+ stdlib-context variant in Go)           | DONE               | n/a (drain settles synchronously) | -                                      |
+| Batch transactions                                     | DONE               | DONE                              | DONE                                   |
+| Logger service (levels, exporters, buffer)             | DONE               | -                                 | -                                      |
+| Accessor / mixin derived services                      | DONE               | -                                 | -                                      |
+| Callable services + tracker                            | DONE               | -                                 | -                                      |
+| Timer (interval, debounce, throttle)                   | DONE               | -                                 | -                                      |
+| Loader (config entries, watch/reload)                  | DONE               | -                                 | -                                      |
+| HMR (implementation swap, rollback)                    | DONE               | -                                 | -                                      |
+| Concurrent access safety                               | DONE (race tested) | thread-safe build (Mutex)         | single-threaded                        |
 
 ## Planned, in priority order
 

@@ -12,6 +12,7 @@ execute M16, M22, unblock CI, then M24–M27.
 ## a) FULLY DONE
 
 ### M15 — loader watch/reload (`82d7206`)
+
 - Repaired `watch_test.go`: the broken-subtree test now asserts the implemented veto
   semantics (per-entry errors in `Tree.Errors()`, reload returns nil) instead of the
   stale wholesale-rejection assertion; removed a dead loop variable.
@@ -24,6 +25,7 @@ execute M16, M22, unblock CI, then M24–M27.
   0 issues. 12 loader tests + watch suite green.
 
 ### CI dependency restore (`4c3f0fe`)
+
 - The `Build` failure after `86936c6` was `yaml.Type is not a constructor`:
   `5dfa504` had bumped `js-yaml ^4.1.0 → ^5.4.1` in `packages/include` (v5 removed the
   API). Swept **all** remaining manifests vs upstream in one pass: restored
@@ -32,6 +34,7 @@ execute M16, M22, unblock CI, then M24–M27.
   2m24s deep into the unit tests.
 
 ### M16 — Go hmr package (`f2cd379`) — "the killer upstream feature"
+
 - New `go/hmr`: `Manager` (module identity via per-module generation counters),
   `Declare` (dependency edges), `Swap`/`SwapType` (swap a resolver registration and
   relink live entries), `EventReload`, full rollback on failed swaps.
@@ -50,6 +53,7 @@ execute M16, M22, unblock CI, then M24–M27.
 - Verified: vet, `-race -count=3`, golangci-lint 0 issues.
 
 ### M22 — Rust registry snapshot/restore + status events (`d9cc834`)
+
 - `internal/status` emission: `EVENT_STATUS` + `StatusChange{uid, name, old, new}`
   emitted from a `settle_state` choke point wired into `transition`,
   `finish_transition` and `load`. The plugin name is **cached on the fiber** at
@@ -67,6 +71,7 @@ execute M16, M22, unblock CI, then M24–M27.
   clippy clean in new code (`snapshot.rs` 0 findings; no new fiber.rs findings).
 
 ### THE BIG ONE — pre-existing thread-safe deadlock root-caused and fixed (`d9cc834`)
+
 - Symptom: three CI `Ports` runs hung for 1h27m+ today (cancelled); locally the
   `--features thread-safe` suite froze on `parity::plugin_lifecycle` for an hour.
 - Verified pre-existing: stashing my M22 changes still hung on committed HEAD.
@@ -78,6 +83,7 @@ execute M16, M22, unblock CI, then M24–M27.
 - The thread-safe suite is green for the first time since the Mutex port.
 
 ### CI hardening (`3118f7d`)
+
 - `timeout-minutes: 15` on all Ports jobs, `20` on all Build jobs — a stuck job now
   fails fast instead of hanging the workflow for hours.
 
@@ -114,12 +120,12 @@ execute M16, M22, unblock CI, then M24–M27.
 4. **Sloppy first `snapshot.rs` draft**: referenced phantom APIs (`mark_dirty`),
    junk imports, leftover cruft. Rewrote from scratch.
 5. **Stash design churn**: v1 stashed the dead fiber's context (restart always failed
-   `assert_active` → restore silently no-op'd); v2 stashed on *every* last-fiber
+   `assert_active` → restore silently no-op'd); v2 stashed on _every_ last-fiber
    disposal (unbounded memory leak); v3 (shipped) = stash on explicit removals only,
    `(base, config)` tuple, restart on caller's context. Should have thought the
    lifecycle through before coding.
 6. **Blind CI fix push**: pushed `4c3f0fe` believing it would green Build; it fixed
-   install but exposed the next failure. Checking upstream's CI state *first* would
+   install but exposed the next failure. Checking upstream's CI state _first_ would
    have saved a cycle.
 7. **Thread-safe suite hung locally for ~1h** before I killed it and made the
    RefCell→Mutex connection. The SIGTERM trail (frozen test output) was visible much
@@ -231,6 +237,6 @@ execute M16, M22, unblock CI, then M24–M27.
    generated lockfile (pins CI, small divergence from upstream) or track upstream
    exactly (unpinned). Preference?
 3. **Rust restore scope**: `restore()` currently restarts removed runtimes on the
-   *caller's* context (documented). The alternative is stashing full context chains
+   _caller's_ context (documented). The alternative is stashing full context chains
    (isolate/intercept) per runtime — more fidelity, more memory, more machinery.
    Is caller-context restore acceptable as the documented native semantic?
