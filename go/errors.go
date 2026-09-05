@@ -40,11 +40,8 @@ var ErrInactiveEffect = &Error{
 
 // IsInactiveEffect reports whether err is or wraps an inactive-effect error.
 func IsInactiveEffect(err error) bool {
-	var ce *Error
-	if errors.As(err, &ce) {
-		return ce.Code == ErrCodeInactiveEffect
-	}
-	return false
+	ce, ok := errors.AsType[*Error](err)
+	return ok && ce.Code == ErrCodeInactiveEffect
 }
 
 // Issue describes a single config validation problem, mirroring a Standard
