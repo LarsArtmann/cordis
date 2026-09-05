@@ -25,6 +25,7 @@ pub fn value<T: crate::sync::Shared>(v: T) -> Value {
 /// service API stores services under this name, so lookups resolve by type
 /// identity instead of hand written strings. Pass it to `FnPlugin::inject`
 /// and `Context::isolate` to depend on, or isolate, a typed service.
+#[must_use]
 pub fn service_name<T: ?Sized + Any>() -> &'static str {
     std::any::type_name::<T>()
 }
@@ -32,6 +33,7 @@ pub fn service_name<T: ?Sized + Any>() -> &'static str {
 /// The canonical name of the typed event `E`. Typed events dispatch under
 /// this name; string event names remain for the framework's internal
 /// namespace.
+#[must_use]
 pub fn event_name<E: ?Sized + Any>() -> &'static str {
     std::any::type_name::<E>()
 }
@@ -49,7 +51,7 @@ pub type Listener = Rc<dyn Fn(&[Value]) -> Option<Value>>;
 #[cfg(feature = "thread-safe")]
 pub type Listener = std::sync::Arc<dyn Fn(&[Value]) -> Option<Value> + Send + Sync>;
 
-pub(crate) struct Hook {
+pub struct Hook {
     pub owner: Context,
     pub listener: Listener,
     pub global: bool,
@@ -94,14 +96,11 @@ impl Context {
             }
         }
 
-        let bag = match self.bag() {
-            Some(bag) => bag,
-            None => {
-                // Roll back the hook insertion.
-                let mut core = self.core.borrow_mut();
-                remove_hook(&mut core, name, &hook);
-                return Err(crate::Error::InactiveEffect);
-            }
+        let bag = if let Some(bag) = self.bag() { bag } else {
+            // Roll back the hook insertion.
+            let mut core = self.core.borrow_mut();
+            remove_hook(&mut core, name, &hook);
+            return Err(crate::Error::InactiveEffect);
         };
         let entry = Bag::push(
             &bag,
@@ -252,7 +251,7 @@ impl Context {
     /// Deliver `event` synchronously to every listener registered for its
     /// type `E`, in registration order, applying this context's emission
     /// filter.
-    pub fn emit<E: crate::sync::Shared>(self: &Self, event: E) {
+    pub fn emit<E: crate::sync::Shared>(&self, event: E) {
         self.emit_named(event_name::<E>(), &[value(event)]);
     }
 

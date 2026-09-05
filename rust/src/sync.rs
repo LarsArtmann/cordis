@@ -46,11 +46,11 @@ impl<T> BorrowExt<T> for RefCell<T> {
     type GuardMut<'a> = std::cell::RefMut<'a, T> where T: 'a;
 
     fn borrow(&self) -> Self::Guard<'_> {
-        std::cell::RefCell::borrow(self)
+        Self::borrow(self)
     }
 
     fn borrow_mut(&self) -> Self::GuardMut<'_> {
-        std::cell::RefCell::borrow_mut(self)
+        Self::borrow_mut(self)
     }
 }
 

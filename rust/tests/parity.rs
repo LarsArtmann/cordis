@@ -1,3 +1,7 @@
+// Tests legitimately assert via panic; the strict production
+// lints (unwrap/expect/indexing/arithmetic) are relaxed here.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+
 //! Parity tests mirroring the Go port's suite, which mirrors the TypeScript
 //! core test suite.
 

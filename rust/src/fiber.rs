@@ -27,7 +27,7 @@ pub struct StatusChange {
     pub new: FiberState,
 }
 
-/// The lifecycle state of a fiber, mirroring FiberState upstream.
+/// The lifecycle state of a fiber, mirroring `FiberState` upstream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FiberState {
     /// Waiting for injected services.
@@ -46,16 +46,16 @@ pub enum FiberState {
 
 /// Arena index of a fiber inside its core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct FiberId(pub usize);
+pub struct FiberId(pub usize);
 
 /// Introspection view of one registered effect.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectMeta {
     pub label: String,
-    pub children: Vec<EffectMeta>,
+    pub children: Vec<Self>,
 }
 
-pub(crate) struct FiberData {
+pub struct FiberData {
     pub id: FiberId,
     pub uid: i64,
     /// The plugin name captured at creation, so status events and dying
@@ -76,8 +76,8 @@ pub(crate) struct FiberData {
 }
 
 impl FiberData {
-    pub fn new_root(ctx: Context) -> FiberData {
-        FiberData {
+    pub fn new_root(ctx: Context) -> Self {
+        Self {
             id: FiberId(0),
             uid: 0,
             name: "root".to_string(),
@@ -119,16 +119,19 @@ impl Fiber {
     }
 
     /// The current lifecycle state.
+    #[must_use]
     pub fn state(&self) -> FiberState {
         self.data().borrow().state
     }
 
     /// The framework-wide unique id: 0 for root, -1 after disposal.
+    #[must_use]
     pub fn uid(&self) -> i64 {
         self.data().borrow().uid
     }
 
     /// The plugin name, resolved through the parent chain like upstream.
+    #[must_use]
     pub fn name(&self) -> String {
         // Lock order: Core before FiberData, everywhere. The data lookup
         // goes through the held core lock; a second self.core.borrow()
@@ -155,11 +158,13 @@ impl Fiber {
     }
 
     /// The context owned by this fiber.
+    #[must_use]
     pub fn context(&self) -> Context {
         self.data().borrow().ctx.clone()
     }
 
     /// The introspection tree of live effects.
+    #[must_use]
     pub fn effects(&self) -> Vec<EffectMeta> {
         let data = self.data();
         let f = data.borrow();
@@ -297,14 +302,14 @@ impl Context {
     /// context passed to `f` become children of this effect and roll back
     /// together, last in, first out. On error or panic everything `f`
     /// registered rolls back immediately.
-    pub fn effect(&self, label: &str, f: impl FnOnce(&Context) -> crate::Result<()>) -> crate::Result<Disposer> {
+    pub fn effect(&self, label: &str, f: impl FnOnce(&Self) -> crate::Result<()>) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = self.effect_inner(label, f);
         crate::core::leave(&self.core);
         result
     }
 
-    fn effect_inner(&self, label: &str, f: impl FnOnce(&Context) -> crate::Result<()>) -> crate::Result<Disposer> {
+    fn effect_inner(&self, label: &str, f: impl FnOnce(&Self) -> crate::Result<()>) -> crate::Result<Disposer> {
         self.fiber().assert_active()?;
         let parent = match self.bag() {
             Some(bag) => bag,
@@ -336,7 +341,7 @@ impl Context {
 }
 
 /// Create the fiber data for a plugin instance.
-pub(crate) fn new_fiber(
+pub fn new_fiber(
     parent: &Context,
     config: crate::events::Value,
     inject: &[String],
@@ -386,7 +391,7 @@ pub(crate) fn new_fiber(
 }
 
 /// Fix up the fiber context's back-reference after arena allocation.
-pub(crate) fn link_fiber_ctx(core: &Rc<RefCell<Core>>, id: FiberId) {
+pub fn link_fiber_ctx(core: &Rc<RefCell<Core>>, id: FiberId) {
     let fiber = core.borrow().fiber(id);
     let mut f = fiber.borrow_mut();
     f.id = id;
@@ -455,7 +460,7 @@ pub fn settle_state(core: &Rc<RefCell<Core>>, id: FiberId, old: FiberState) {
 
 /// One step of the fiber state machine, driven by the drain queue. User
 /// code always runs without borrows held.
-pub(crate) fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
+pub fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
     enum Action {
         None,
         Deactivate,

@@ -1,4 +1,4 @@
-//! Typed plugins, the registry, and Context::inject.
+//! Typed plugins, the registry, and `Context::inject`.
 //!
 //! A plugin is defined either by implementing the [`Plugin`] trait (the
 //! native form: a named type with an associated `Config`) or by the
@@ -130,6 +130,7 @@ pub struct FnPlugin<C: crate::sync::Shared> {
 
 impl<C: crate::sync::Shared> FnPlugin<C> {
     /// The plugin name.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.base.name
     }
@@ -140,14 +141,16 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
     ///
     /// # Panics
     /// When called after the plugin was started or cloned.
-    pub fn inject(mut self, deps: &[&str]) -> FnPlugin<C> {
+    #[must_use]
+    pub fn inject(mut self, deps: &[&str]) -> Self {
         let base = Rc::get_mut(&mut self.base)
             .expect("plugin.inject must be called before the plugin is started or shared");
-        base.inject.extend(deps.iter().map(|s| s.to_string()));
+        base.inject.extend(deps.iter().map(std::string::ToString::to_string));
         self
     }
 
     /// The plugin's registry id, unique per constructed plugin value.
+    #[must_use]
     pub fn id(&self) -> u64 {
         self.base.id
     }
@@ -159,7 +162,7 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
         mut self,
         #[allow(clippy::redundant_closure)]
         f: impl Fn(&C) -> Vec<String> + crate::sync::MaybeSendSync + 'static,
-    ) -> FnPlugin<C> {
+    ) -> Self {
         self.validator = Some(Rc::new(f));
         self
     }
@@ -167,7 +170,7 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
 
 impl<C: crate::sync::Shared> Clone for FnPlugin<C> {
     fn clone(&self) -> Self {
-        FnPlugin {
+        Self {
         validator: None,
             base: Rc::clone(&self.base),
             _marker: PhantomData,
@@ -222,12 +225,13 @@ pub fn start_fn<C: crate::sync::Shared>(ctx: &Context, plugin: &FnPlugin<C>, con
 impl Context {
     /// Start an anonymous plugin that runs `f` once every service in `deps`
     /// is available, mirroring ctx.inject upstream.
-    pub fn inject(&self, deps: &[&str], f: impl Fn(&Context) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static) -> crate::Result<Fiber> {
-        let p = plugin::<(), _>("anonymous", move |ctx: &Context, _: &()| f(ctx)).inject(deps);
+    pub fn inject(&self, deps: &[&str], f: impl Fn(&Self) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static) -> crate::Result<Fiber> {
+        let p = plugin::<(), _>("anonymous", move |ctx: &Self, (): &()| f(ctx)).inject(deps);
         start_fn(self, &p, ())
     }
 
     /// The registry of this context tree.
+    #[must_use]
     pub fn registry(&self) -> Registry {
         Registry {
             core: Rc::clone(&self.core),
@@ -248,23 +252,27 @@ pub struct Runtime {
 
 impl Runtime {
     /// The runtime name.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// The number of live fibers.
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.fibers.len()
     }
 
     /// Whether the runtime has no live fibers.
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.fibers.is_empty()
     }
 }
 
 impl Registry {
     /// The number of plugin runtimes with at least one live fiber.
+    #[must_use]
     pub fn size(&self) -> usize {
         self.core.borrow().runtimes.len()
     }
@@ -272,11 +280,13 @@ impl Registry {
     /// Whether the plugin identified by `id` has at least one live fiber.
     /// Trait plugins use [`plugin_type_id`], closure plugins their
     /// [`FnPlugin::id`].
+    #[must_use]
     pub fn has_id(&self, id: u64) -> bool {
         self.core.borrow().runtimes.contains_key(&id)
     }
 
     /// Whether the closure plugin has at least one live fiber.
+    #[must_use]
     pub fn has<C: crate::sync::Shared>(&self, plugin: &FnPlugin<C>) -> bool {
         self.has_id(plugin.base.id)
     }
@@ -325,7 +335,7 @@ impl Registry {
 }
 
 /// Shared start path for both plugin forms.
-pub(crate) fn start_base(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value) -> crate::Result<Fiber> {
+pub fn start_base(ctx: &Context, base: Rc<PluginBase>, config: crate::events::Value) -> crate::Result<Fiber> {
     core::enter(&ctx.core);
     let result = start_inner(ctx, base, config);
     core::leave(&ctx.core);

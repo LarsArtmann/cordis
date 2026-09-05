@@ -64,20 +64,20 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::InactiveEffect => write!(f, "cannot create effect on inactive context"),
-            Error::InvalidPlugin(what) => write!(
+            Self::InactiveEffect => write!(f, "cannot create effect on inactive context"),
+            Self::InvalidPlugin(what) => write!(
                 f,
                 "invalid plugin, expect function or object with an apply method, received {what}"
             ),
-            Error::DuplicateService { name, provider } => {
+            Self::DuplicateService { name, provider } => {
                 write!(f, "service {name:?} has been registered at <{provider}>")
             }
-            Error::Validation(message) => write!(f, "invalid config: {message}"),
-            Error::PluginFailed { name, source } => write!(f, "plugin <{name}> failed: {source}"),
-            Error::MissingService(name) => {
+            Self::Validation(message) => write!(f, "invalid config: {message}"),
+            Self::PluginFailed { name, source } => write!(f, "plugin <{name}> failed: {source}"),
+            Self::MissingService(name) => {
                 write!(f, "cannot get required service {name:?} in inactive context")
             }
-            Error::TypeMismatch { name } => write!(f, "service {name:?} has an unexpected type"),
+            Self::TypeMismatch { name } => write!(f, "service {name:?} has an unexpected type"),
         }
     }
 }
