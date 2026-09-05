@@ -76,12 +76,9 @@ impl Context {
             );
         }
 
-        let bag = match self.bag() {
-            Some(bag) => bag,
-            None => {
-                self.core.borrow_mut().store.remove(&key);
-                return Err(crate::Error::InactiveEffect);
-            }
+        let bag = if let Some(bag) = self.bag() { bag } else {
+            self.core.borrow_mut().store.remove(&key);
+            return Err(crate::Error::InactiveEffect);
         };
         let entry = Bag::push(
             &bag,
@@ -118,6 +115,7 @@ impl Context {
     /// ctx.provide_named("port", cordis::value(8080_u32)).unwrap();
     /// assert_eq!(*ctx.get_named("port").unwrap().downcast::<u32>().unwrap(), 8080);
     /// ```
+    #[must_use]
     pub fn get_named(&self, name: &str) -> Option<Value> {
         let key = {
             let mut core = self.core.borrow_mut();
@@ -151,11 +149,13 @@ impl Context {
 
     /// The service of type `T` when it is currently available, mirroring the
     /// two value lookup of [`Context::get_named`].
+    #[must_use]
     pub fn try_get<T: crate::sync::Shared>(&self) -> Option<Rc<T>> {
         self.get::<T>().ok()
     }
 
     /// Whether `name` is declared as a service in this context tree.
+    #[must_use]
     pub fn has(&self, name: &str) -> bool {
         self.core.borrow().props.contains_key(name)
     }

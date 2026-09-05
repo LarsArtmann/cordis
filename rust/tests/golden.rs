@@ -1,3 +1,7 @@
+// Tests legitimately assert via panic; the strict production
+// lints (unwrap/expect/indexing/arithmetic) are relaxed here.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+
 //! Cross-language golden scenario runners: executes ../golden/scenario*.txt
 //! and asserts the emitted traces match the ../golden/expected*.txt files
 //! exactly. The Go and Zig ports ship structurally identical runners; see

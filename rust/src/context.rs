@@ -25,8 +25,8 @@ pub struct Context {
     pub(crate) data: Rc<ContextData>,
 }
 
-pub(crate) struct ContextData {
-    pub parent: Option<Rc<ContextData>>,
+pub struct ContextData {
+    pub parent: Option<Rc<Self>>,
     pub fiber: crate::fiber::FiberId,
     pub isolate: Option<Vec<(String, IsolateKey)>>,
     pub intercept: Option<Rc<RefCell<HashMap<String, Value>>>>,
@@ -38,9 +38,10 @@ pub(crate) struct ContextData {
 impl Context {
     /// Create a root context with its own registry, event bus and service
     /// store. The root fiber is always active.
-    pub fn new() -> Context {
+    #[must_use]
+    pub fn new() -> Self {
         let core = Core::new();
-        let ctx = Context {
+        let ctx = Self {
             core,
             data: Rc::new(ContextData {
                 parent: None,
@@ -56,9 +57,10 @@ impl Context {
         ctx
     }
 
-    /// A plain child scope, mirroring ctx.extend() upstream.
-    pub fn extend(&self) -> Context {
-        Context {
+    /// A plain child scope, mirroring `ctx.extend()` upstream.
+    #[must_use]
+    pub fn extend(&self) -> Self {
+        Self {
             core: Rc::clone(&self.core),
             data: Rc::new(ContextData {
                 parent: Some(Rc::clone(&self.data)),
@@ -73,20 +75,22 @@ impl Context {
 
     /// A child scope with its own service realm for `name`, mirroring
     /// ctx.isolate(name).
-    pub fn isolate(&self, name: &str) -> Context {
+    #[must_use]
+    pub fn isolate(&self, name: &str) -> Self {
         let key = self.core.borrow_mut().fresh_key();
         self.isolate_with(name, key)
     }
 
     /// A child scope sharing a named realm with every other scope created
     /// with the same label, mirroring ctx.isolate(name, label).
-    pub fn isolate_shared(&self, name: &str, label: &str) -> Context {
+    #[must_use]
+    pub fn isolate_shared(&self, name: &str, label: &str) -> Self {
         let key = self.core.borrow_mut().shared_key(name, label);
         self.isolate_with(name, key)
     }
 
-    fn isolate_with(&self, name: &str, key: IsolateKey) -> Context {
-        Context {
+    fn isolate_with(&self, name: &str, key: IsolateKey) -> Self {
+        Self {
             core: Rc::clone(&self.core),
             data: Rc::new(ContextData {
                 parent: Some(Rc::clone(&self.data)),
@@ -102,10 +106,10 @@ impl Context {
     /// A child scope overriding the configuration of the named service,
     /// mirroring ctx.intercept upstream. Read the override back with
     /// [`Context::intercepted`].
-    pub fn intercept(&self, name: &str, config: Value) -> Context {
+    pub fn intercept(&self, name: &str, config: Value) -> Self {
         let mut map = HashMap::new();
         map.insert(name.to_string(), config);
-        Context {
+        Self {
             core: Rc::clone(&self.core),
             data: Rc::new(ContextData {
                 parent: Some(Rc::clone(&self.data)),
@@ -120,22 +124,22 @@ impl Context {
 
     /// The nearest configuration override for `name` in the scope chain,
     /// mirroring ctx.intercepted upstream.
+    #[must_use]
     pub fn intercepted(&self, name: &str) -> Option<Value> {
         let mut data = Some(Rc::clone(&self.data));
         while let Some(d) = data {
-            if let Some(map) = &d.intercept {
-                if let Some(value) = map.borrow().get(name) {
+            if let Some(map) = &d.intercept
+                && let Some(value) = map.borrow().get(name) {
                     return Some(Rc::clone(value));
                 }
-            }
             data = d.parent.clone();
         }
         None
     }
 
     /// A child scope with an event emission filter.
-    pub fn with_filter(&self, filter: Filter) -> Context {
-        Context {
+    pub fn with_filter(&self, filter: Filter) -> Self {
+        Self {
             core: Rc::clone(&self.core),
             data: Rc::new(ContextData {
                 parent: Some(Rc::clone(&self.data)),
@@ -150,14 +154,16 @@ impl Context {
 
     /// A filter matching listeners whose realm key for `name` equals this
     /// context's key, the building block for realm scoped events.
+    #[must_use]
     pub fn realm_filter(&self, name: &str) -> Filter {
         let key = self.isolate_key(name);
         let name = name.to_string();
-        Rc::new(move |listener: &Context| listener.isolate_key(&name) == key)
+        Rc::new(move |listener: &Self| listener.isolate_key(&name) == key)
     }
 
     /// Resolve the realm key of `name` through the scope chain, falling back
     /// to the root realm.
+    #[must_use]
     pub fn isolate_key(&self, name: &str) -> IsolateKey {
         self.find_isolate_override(name)
             .unwrap_or_else(|| self.core.borrow_mut().root_key(name))
@@ -180,6 +186,7 @@ impl Context {
     }
 
     /// The fiber owning this context.
+    #[must_use]
     pub fn fiber(&self) -> crate::fiber::Fiber {
         crate::fiber::Fiber {
             core: Rc::clone(&self.core),
@@ -188,21 +195,22 @@ impl Context {
     }
 
     /// Errors reported by failing cleanups and plugin bodies.
+    #[must_use]
     pub fn logged_errors(&self) -> Vec<String> {
         self.core.borrow().errors.clone()
     }
 
     /// Run `f` as one framework transaction: fiber transitions triggered
     /// inside are coalesced and settle after `f` returns.
-    pub fn batch<R>(&self, f: impl FnOnce(&Context) -> R) -> R {
+    pub fn batch<R>(&self, f: impl FnOnce(&Self) -> R) -> R {
         crate::core::enter(&self.core);
         let result = f(self);
         crate::core::leave(&self.core);
         result
     }
 
-    pub(crate) fn with_collect(&self, bag: Rc<RefCell<Bag>>) -> Context {
-        Context {
+    pub(crate) fn with_collect(&self, bag: Rc<RefCell<Bag>>) -> Self {
+        Self {
             core: Rc::clone(&self.core),
             data: Rc::new(ContextData {
                 parent: Some(Rc::clone(&self.data)),
@@ -218,7 +226,7 @@ impl Context {
 
 impl Default for Context {
     fn default() -> Self {
-        Context::new()
+        Self::new()
     }
 }
 
@@ -228,8 +236,8 @@ pub struct Disposer {
 }
 
 impl Disposer {
-    pub(crate) fn new(f: impl FnOnce() + crate::sync::MaybeSendSync + 'static) -> Disposer {
-        Disposer {
+    pub(crate) fn new(f: impl FnOnce() + crate::sync::MaybeSendSync + 'static) -> Self {
+        Self {
             inner: Some(Box::new(f)),
         }
     }
@@ -282,8 +290,9 @@ pub struct Guard {
 
 impl Guard {
     /// Wrap a disposer.
-    pub fn new(disposer: Disposer) -> Guard {
-        Guard { inner: Some(disposer) }
+    #[must_use]
+    pub const fn new(disposer: Disposer) -> Self {
+        Self { inner: Some(disposer) }
     }
 
     /// Keep the registration for the fiber's lifetime and consume the guard
@@ -301,8 +310,8 @@ impl Guard {
 }
 
 impl From<Disposer> for Guard {
-    fn from(disposer: Disposer) -> Guard {
-        Guard::new(disposer)
+    fn from(disposer: Disposer) -> Self {
+        Self::new(disposer)
     }
 }
 

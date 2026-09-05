@@ -12,23 +12,23 @@ use crate::events::{Hook, Value};
 use crate::fiber::{FiberData, FiberId};
 
 /// Realm keys are the Rust counterpart of the per-realm symbols upstream.
-pub(crate) type IsolateKey = u64;
+pub type IsolateKey = u64;
 
 /// A service instance living in one realm.
-pub(crate) struct Impl {
+pub struct Impl {
     pub fiber: FiberId,
     pub value: Value,
 }
 
 /// The type erased plugin body.
 #[cfg(not(feature = "thread-safe"))]
-pub(crate) type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()>>;
+pub type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()>>;
 #[cfg(feature = "thread-safe")]
 pub(crate) type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()> + Send + Sync>;
 
 /// The shared runtime identity and body of a plugin, used by both the
-/// closure form (FnPlugin) and the trait form (Plugin).
-pub(crate) struct PluginBase {
+/// closure form (`FnPlugin`) and the trait form (Plugin).
+pub struct PluginBase {
     pub id: u64,
     pub name: String,
     pub inject: Vec<String>,
@@ -37,10 +37,10 @@ pub(crate) struct PluginBase {
 
 /// A back-reference from a fiber to its registration entry in the parent
 /// fiber's effect bag.
-pub(crate) type BagEntry = (Rc<RefCell<Bag>>, Rc<RefCell<Entry>>);
+pub type BagEntry = (Rc<RefCell<Bag>>, Rc<RefCell<Entry>>);
 
 /// One plugin runtime: every live fiber of a plugin.
-pub(crate) struct RuntimeData {
+pub struct RuntimeData {
     pub name: String,
     pub apply: ApplyFn,
     pub fibers: Vec<FiberId>,
@@ -51,33 +51,33 @@ pub(crate) struct RuntimeData {
 
 /// A cleanup releasing one resource.
 #[cfg(not(feature = "thread-safe"))]
-pub(crate) type Cleanup = Box<dyn FnMut()>;
+pub type Cleanup = Box<dyn FnMut()>;
 #[cfg(feature = "thread-safe")]
 pub(crate) type Cleanup = Box<dyn FnMut() + Send>;
 
 /// An ordered collection of disposables owned by a fiber or by one effect
 /// inside a fiber. Disposal is always last in, first out.
-pub(crate) struct Bag {
+pub struct Bag {
     pub items: Vec<Rc<RefCell<Entry>>>,
 }
 
-pub(crate) enum EntryKind {
+pub enum EntryKind {
     Leaf(Option<Cleanup>),
     Node(Rc<RefCell<Bag>>),
 }
 
-pub(crate) struct Entry {
+pub struct Entry {
     pub label: String,
     pub kind: EntryKind,
     pub done: bool,
 }
 
 impl Bag {
-    pub fn new() -> Rc<RefCell<Bag>> {
-        Rc::new(RefCell::new(Bag { items: Vec::new() }))
+    pub fn new() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self { items: Vec::new() }))
     }
 
-    pub fn push(bag: &Rc<RefCell<Bag>>, label: String, cleanup: Cleanup) -> Rc<RefCell<Entry>> {
+    pub fn push(bag: &Rc<RefCell<Self>>, label: String, cleanup: Cleanup) -> Rc<RefCell<Entry>> {
         let entry = Rc::new(RefCell::new(Entry {
             label,
             kind: EntryKind::Leaf(Some(cleanup)),
@@ -87,7 +87,7 @@ impl Bag {
         entry
     }
 
-    pub fn push_node(bag: &Rc<RefCell<Bag>>, label: String, node: Rc<RefCell<Bag>>) -> Rc<RefCell<Entry>> {
+    pub fn push_node(bag: &Rc<RefCell<Self>>, label: String, node: Rc<RefCell<Self>>) -> Rc<RefCell<Entry>> {
         let entry = Rc::new(RefCell::new(Entry {
             label,
             kind: EntryKind::Node(node),
@@ -98,7 +98,7 @@ impl Bag {
     }
 
     /// Detach without executing, used when a fiber disposes itself.
-    pub fn detach(bag: &Rc<RefCell<Bag>>, entry: &Rc<RefCell<Entry>>) {
+    pub fn detach(bag: &Rc<RefCell<Self>>, entry: &Rc<RefCell<Entry>>) {
         entry.borrow_mut().done = true;
         bag.borrow_mut().items.retain(|item| !Rc::ptr_eq(item, entry));
     }
@@ -119,12 +119,12 @@ impl Bag {
         match kind {
             EntryKind::Leaf(Some(cleanup)) => run_cleanup(core, cleanup),
             EntryKind::Leaf(None) => {}
-            EntryKind::Node(bag) => Bag::drain(core, &bag),
+            EntryKind::Node(bag) => Self::drain(core, &bag),
         }
     }
 
     /// Detach and execute an entry.
-    pub fn dispose_entry(core: &Rc<RefCell<Core>>, bag: &Rc<RefCell<Bag>>, entry: &Rc<RefCell<Entry>>) {
+    pub fn dispose_entry(core: &Rc<RefCell<Core>>, bag: &Rc<RefCell<Self>>, entry: &Rc<RefCell<Entry>>) {
         {
             let e = entry.borrow_mut();
             if e.done {
@@ -132,29 +132,29 @@ impl Bag {
             }
         }
         bag.borrow_mut().items.retain(|item| !Rc::ptr_eq(item, entry));
-        Bag::execute(core, entry);
+        Self::execute(core, entry);
     }
 
     /// Drain the bag: detach all items and execute them in reverse order.
-    pub fn drain(core: &Rc<RefCell<Core>>, bag: &Rc<RefCell<Bag>>) {
+    pub fn drain(core: &Rc<RefCell<Core>>, bag: &Rc<RefCell<Self>>) {
         let mut items: Vec<Rc<RefCell<Entry>>> = {
             let mut b = bag.borrow_mut();
             std::mem::take(&mut b.items)
         };
         for entry in items.drain(..).rev() {
-            Bag::execute(core, &entry);
+            Self::execute(core, &entry);
         }
     }
 
-    /// The introspection view, mirroring Fiber.getEffects() upstream.
-    pub fn meta(bag: &Rc<RefCell<Bag>>) -> Vec<crate::fiber::EffectMeta> {
+    /// The introspection view, mirroring `Fiber.getEffects()` upstream.
+    pub fn meta(bag: &Rc<RefCell<Self>>) -> Vec<crate::fiber::EffectMeta> {
         let b = bag.borrow();
         b.items
             .iter()
             .map(|entry| {
                 let e = entry.borrow();
                 let children = match &e.kind {
-                    EntryKind::Node(node) => Bag::meta(node),
+                    EntryKind::Node(node) => Self::meta(node),
                     EntryKind::Leaf(_) => Vec::new(),
                 };
                 crate::fiber::EffectMeta {
@@ -166,7 +166,7 @@ impl Bag {
     }
 }
 
-pub(crate) struct Core {
+pub struct Core {
     pub hooks: HashMap<String, Vec<Rc<Hook>>>,
     pub store: HashMap<IsolateKey, Impl>,
     pub props: HashMap<String, ()>,
@@ -195,8 +195,8 @@ pub(crate) struct Core {
 }
 
 impl Core {
-    pub fn new() -> Rc<RefCell<Core>> {
-        Rc::new(RefCell::new(Core {
+    pub fn new() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self {
             hooks: HashMap::new(),
             store: HashMap::new(),
             props: HashMap::new(),
@@ -214,7 +214,7 @@ impl Core {
         }))
     }
 
-    pub fn next_uid(&mut self) -> i64 {
+    pub const fn next_uid(&mut self) -> i64 {
         self.counter += 1;
         self.counter as i64
     }
@@ -229,7 +229,7 @@ impl Core {
     }
 
     /// Allocate a fresh realm key that can never collide with a named realm.
-    pub fn fresh_key(&mut self) -> IsolateKey {
+    pub const fn fresh_key(&mut self) -> IsolateKey {
         self.last_key += 1;
         self.last_key
     }
@@ -309,13 +309,13 @@ impl Core {
 }
 
 /// Enter a public API boundary.
-pub(crate) fn enter(core: &Rc<RefCell<Core>>) {
+pub fn enter(core: &Rc<RefCell<Core>>) {
     core.borrow_mut().depth += 1;
 }
 
 /// Leave a public API boundary, draining pending fiber transitions when the
 /// outermost call returns.
-pub(crate) fn leave(core: &Rc<RefCell<Core>>) {
+pub fn leave(core: &Rc<RefCell<Core>>) {
     let should_drain = {
         let mut c = core.borrow_mut();
         c.depth -= 1;
@@ -345,7 +345,7 @@ pub(crate) fn leave(core: &Rc<RefCell<Core>>) {
 
 /// Run a user cleanup, catching panics into the error log and draining any
 /// transitions it triggered.
-pub(crate) fn run_cleanup(core: &Rc<RefCell<Core>>, cleanup: Cleanup) {
+pub fn run_cleanup(core: &Rc<RefCell<Core>>, cleanup: Cleanup) {
     enter(core);
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(cleanup)).is_err() {
         core.borrow_mut().log_error("root", "cleanup panicked");

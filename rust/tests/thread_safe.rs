@@ -1,3 +1,7 @@
+// Tests legitimately assert via panic; the strict production
+// lints (unwrap/expect/indexing/arithmetic) are relaxed here.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+
 //! Stress tests for the `thread-safe` feature: multiple threads drive one
 //! context tree through the public API. The framework's drain queue keeps
 //! fiber transitions single-threaded internally, so the tree stays
