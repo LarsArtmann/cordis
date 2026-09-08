@@ -62,13 +62,13 @@ plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 
 ## Cross-language assurance
 
-| Feature                                                      | Status                                                                                                      |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Feature                                                      | Status                                                                                                                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Golden scenarios, byte-identical across Go/Rust/Zig          | PARTIALLY_FUNCTIONAL (4 scenarios: lifecycle, events, cascade, dispatch; Go+Rust run all 4, Zig runs 3 — cascade pending a Zig runner on its typed registry, see `golden/README.md` matrix) |
-| DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                            |
-| Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                 |
-| `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                            |
-| TypeScript suite (`packages/`)                               | FULLY_FUNCTIONAL locally: 248/248 after the 2026-09-08 rebase repair; CI verification pending the next push |
+| DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                                                                                                            |
+| Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                                                                                                 |
+| `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                                                                                                            |
+| TypeScript suite (`packages/`)                               | FULLY_FUNCTIONAL locally: 248/248 after the 2026-09-08 rebase repair; CI verification pending the next push                                                                                 |
 
 ## TypeScript original (`packages/`)
 

@@ -199,13 +199,15 @@ Golden scenarios (four: lifecycle `scenario.txt`, events
 `scenario-events.txt`, cascade `scenario-cascade.txt`, dispatch
 `scenario-dispatch.txt`) are executed by `go/golden_test.go`,
 `rust/tests/golden.rs` and `zig/tests/golden.zig` (Zig embeds the files at
-build time via `zig/build.zig`). All three traces must be byte-identical.
+build time via `zig/build.zig`). Go and Rust run all four byte-identically;
+Zig runs three (no cascade runner yet — `golden/README.md` carries the
+per-scenario runner matrix and TODO_LIST tracks the Zig runner).
 Regenerate with `GOLDEN_UPDATE=1` on the Go runner and re-verify Rust and
 Zig. Changing semantics? Fix the port, not the golden file. The loader has
 no Rust/Zig port, so its watch/reload transcript is pinned by a Go-only
 golden trace instead: `go/loader/watch_golden_test.go` +
 `go/loader/testdata/watch-golden.txt` (same `GOLDEN_UPDATE=1` escape
-hatch; do not move it into `golden/`, which is three-runner-only).
+hatch; do not move it into `golden/`).
 
 **Untracked files are invisible to `nix flake check`:** the flake source
 is the live working tree but Nix flakes in a git repo only copy git-tracked

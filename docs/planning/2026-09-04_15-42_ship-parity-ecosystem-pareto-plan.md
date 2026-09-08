@@ -325,49 +325,49 @@ reference the medium task above.
 
 ### Tier P100 — DEPTH & POLISH (47 tasks)
 
-| ID    | Task                                                                                 | Est | Depends on   |
-| ----- | ------------------------------------------------------------------------------------ | --- | ------------ |
-| F21.1 | Rust `Context::intercept` + `intercepted` (scope chain walk)                         | 12m | —            |
-| F21.2 | Config validation hook on the Plugin trait (default no-op)                           | 10m | —            |
-| F21.3 | Typed `update` on trait plugins (avoid raw `Value`)                                  | 12m | F21.2        |
-| F21.4 | Tests: intercept visibility + validation rejection                                   | 12m | F21.1, F21.2 |
-| F21.5 | Docs + clippy + commit                                                               | 5m  | F21.4        |
-| F22.1 | Rust registry snapshot struct (runtimes + fibers view)                               | 12m | —            |
-| F22.2 | `restore` semantics (dispose delta, re-start missing)                                | 12m | F22.1        |
-| F22.3 | Emit `internal/status`-equivalent on transitions                                     | 12m | —            |
-| F22.4 | Tests: snapshot restore == pre-state                                                 | 12m | F22.2        |
-| F22.5 | Tests: status emission order                                                         | 10m | F22.3        |
-| F22.6 | Doctests: typed services, typed events, `get_named`                                  | 12m | —            |
-| F22.7 | Doctests: `start`/`start_fn` registry identity                                       | 10m | F22.6        |
-| F23.1 | Rust parallel dispatch with scoped threads                                           | 12m | M21          |
-| F23.2 | Tests: concurrent listeners, joined errors                                           | 12m | F23.1        |
-| F23.3 | clippy + commit                                                                      | 5m  | F23.2        |
-| F24.1 | Go accessor prop type + accessor store next to the service store                     | 12m | —            |
-| F24.2 | Mixin registration API on Context                                                    | 12m | F24.1        |
-| F24.3 | Get/set routing through accessors when declared                                      | 12m | F24.2        |
-| F24.4 | Tests: accessor shadowing + realm interaction                                        | 12m | F24.3        |
-| F24.5 | Introspection + docs                                                                 | 12m | F24.4        |
-| F25.1 | Go callable service type (services that are funcs)                                   | 12m | —            |
-| F25.2 | Tracker context: current calling fiber during service ops                            | 12m | F25.1        |
-| F25.3 | Attribution wiring in registration paths                                             | 12m | F25.2        |
-| F25.4 | Tests: effects created via service attribute to caller                               | 12m | F25.3        |
-| F25.5 | Tests: effect tree shape under attribution + docs                                    | 12m | F25.4        |
-| F26.1 | Go `Fiber.Err()` accessor (apply error)                                              | 5m  | —            |
-| F26.2 | Go `Await` variant honoring a `context.Context`/timeout                              | 12m | —            |
-| F26.3 | Migrate `errors.As` → `errors.AsType[*Error]` in `errors.go`                         | 8m  | —            |
-| F26.4 | Typed-inject sugar: `Plugin.InjectTypes[T1, T2]()`                                   | 12m | —            |
-| F26.5 | PORTS.md cross-port API comparison table                                             | 12m | —            |
-| F26.6 | Root README badges + port pitch paragraph                                            | 10m | —            |
+| ID        | Task                                                                                                       | Est | Depends on   |
+| --------- | ---------------------------------------------------------------------------------------------------------- | --- | ------------ |
+| F21.1     | Rust `Context::intercept` + `intercepted` (scope chain walk)                                               | 12m | —            |
+| F21.2     | Config validation hook on the Plugin trait (default no-op)                                                 | 10m | —            |
+| F21.3     | Typed `update` on trait plugins (avoid raw `Value`)                                                        | 12m | F21.2        |
+| F21.4     | Tests: intercept visibility + validation rejection                                                         | 12m | F21.1, F21.2 |
+| F21.5     | Docs + clippy + commit                                                                                     | 5m  | F21.4        |
+| F22.1     | Rust registry snapshot struct (runtimes + fibers view)                                                     | 12m | —            |
+| F22.2     | `restore` semantics (dispose delta, re-start missing)                                                      | 12m | F22.1        |
+| F22.3     | Emit `internal/status`-equivalent on transitions                                                           | 12m | —            |
+| F22.4     | Tests: snapshot restore == pre-state                                                                       | 12m | F22.2        |
+| F22.5     | Tests: status emission order                                                                               | 10m | F22.3        |
+| F22.6     | Doctests: typed services, typed events, `get_named`                                                        | 12m | —            |
+| F22.7     | Doctests: `start`/`start_fn` registry identity                                                             | 10m | F22.6        |
+| F23.1     | Rust parallel dispatch with scoped threads                                                                 | 12m | M21          |
+| F23.2     | Tests: concurrent listeners, joined errors                                                                 | 12m | F23.1        |
+| F23.3     | clippy + commit                                                                                            | 5m  | F23.2        |
+| F24.1     | Go accessor prop type + accessor store next to the service store                                           | 12m | —            |
+| F24.2     | Mixin registration API on Context                                                                          | 12m | F24.1        |
+| F24.3     | Get/set routing through accessors when declared                                                            | 12m | F24.2        |
+| F24.4     | Tests: accessor shadowing + realm interaction                                                              | 12m | F24.3        |
+| F24.5     | Introspection + docs                                                                                       | 12m | F24.4        |
+| F25.1     | Go callable service type (services that are funcs)                                                         | 12m | —            |
+| F25.2     | Tracker context: current calling fiber during service ops                                                  | 12m | F25.1        |
+| F25.3     | Attribution wiring in registration paths                                                                   | 12m | F25.2        |
+| F25.4     | Tests: effects created via service attribute to caller                                                     | 12m | F25.3        |
+| F25.5     | Tests: effect tree shape under attribution + docs                                                          | 12m | F25.4        |
+| F26.1     | Go `Fiber.Err()` accessor (apply error)                                                                    | 5m  | —            |
+| F26.2     | Go `Await` variant honoring a `context.Context`/timeout                                                    | 12m | —            |
+| F26.3     | Migrate `errors.As` → `errors.AsType[*Error]` in `errors.go`                                               | 8m  | —            |
+| F26.4     | Typed-inject sugar: `Plugin.InjectTypes[T1, T2]()`                                                         | 12m | —            |
+| F26.5     | PORTS.md cross-port API comparison table                                                                   | 12m | —            |
+| F26.6     | Root README badges + port pitch paragraph                                                                  | 10m | —            |
 | ~~F26.7~~ | ~~AGENTS.md Zig 0.16 std gotchas (Io.Dir.cwd, ArrayList .empty, WriteFiles+@embedFile)~~ done at `75fb408` | 10m | —            |
-| F26.8 | Batch semantics + upstream deterministic-order notes; vet/lint/test green            | 12m | F26.1–4      |
+| F26.8     | Batch semantics + upstream deterministic-order notes; vet/lint/test green                                  | 12m | F26.1–4      |
 | ~~F27.1~~ | ~~CI job running `nix flake check -L`~~ done at `fa45896`                                                  | 10m | —            |
-| F27.2 | Go benchmark skeleton: drain-queue throughput (testing.B)                            | 12m | —            |
-| F27.3 | Rust + Zig benchmark stubs + README results table skeleton                           | 10m | F27.2        |
-| F27.4 | LIFO rollback property test (Go, randomized registration sequences)                  | 12m | —            |
-| F27.5 | Releases: tag `go/v0.1.0`, bump+tag Rust `v0.2.0`, Zig version note                  | 12m | —            |
-| ~~F27.6~~ | ~~`zig build -femit-docs` pass; fix broken doc comments~~ done at `75fb408` (`zig build docs` gate)                                | 12m | —            |
-| F27.7 | Stale-LSP/AsType sweep verification (builds clean)                                   | 5m  | —            |
-| F27.8 | Parity-matrix generator from FEATURES.md + weekly run cadence note                   | 12m | —            |
+| F27.2     | Go benchmark skeleton: drain-queue throughput (testing.B)                                                  | 12m | —            |
+| F27.3     | Rust + Zig benchmark stubs + README results table skeleton                                                 | 10m | F27.2        |
+| F27.4     | LIFO rollback property test (Go, randomized registration sequences)                                        | 12m | —            |
+| F27.5     | Releases: tag `go/v0.1.0`, bump+tag Rust `v0.2.0`, Zig version note                                        | 12m | —            |
+| ~~F27.6~~ | ~~`zig build -femit-docs` pass; fix broken doc comments~~ done at `75fb408` (`zig build docs` gate)        | 12m | —            |
+| F27.7     | Stale-LSP/AsType sweep verification (builds clean)                                                         | 5m  | —            |
+| F27.8     | Parity-matrix generator from FEATURES.md + weekly run cadence note                                         | 12m | —            |
 
 **Fine totals:** 10 + 41 + 38 + 14 + 47 = **150 tasks**, every one ≤12 min.
 ALL TODO items are covered; no TODO exists outside this plan.
@@ -417,11 +417,11 @@ fine-grained `F*.*` rows in section 4 are ≤12-minute decompositions of
 their `M` parents and were executed inside the parents' commits; their
 status is governed by the M-row markers, not tracked separately.
 
-Fine-grained items that did NOT ship and remain open in `TODO_LIST.md`:
+Fine-grained items that did NOT ship alongside their parents:
 
-- F26.7 — AGENTS.md Zig 0.16 std gotchas
-- F27.1 — CI job running `nix flake check`
-- F27.3 — Rust + Zig benchmark stubs and README results table
-- F27.6 — `zig build -femit-docs` doc-comment pass
+- ~~F26.7 — AGENTS.md Zig 0.16 std gotchas~~ done at `75fb408`
+- ~~F27.1 — CI job running `nix flake check`~~ done at `fa45896`
+- F27.3 — Rust + Zig benchmark stubs and README results table (Rust half done at `25ff5fb`; no Zig bench harness)
+- ~~F27.6 — `zig build -femit-docs` doc-comment pass~~ done at `75fb408`
 - F27.8 (half) — weekly run-cadence note (the parity-matrix generator
   itself shipped as `scripts/parity-matrix.sh` in `df35fc4`)

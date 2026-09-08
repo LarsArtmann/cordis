@@ -14,7 +14,7 @@ workflows are green on the current HEAD (`3da7d0f`).
 
 Execution happened under **active concurrent-session interference**: another
 agent (and the auto-commit daemon with amend cycles) rewrote `packages/**`,
-`flake.nix`, `TODO_LIST.md`, `ports.yml` and one hmr fixture *while* this
+`flake.nix`, `TODO_LIST.md`, `ports.yml` and one hmr fixture _while_ this
 session worked. Three CI runs failed on racing half-states before the final
 green pair. Two serious regressions shipped by the racing session were
 diagnosed and repaired here: a reintroduction of the fatal `typescript
@@ -41,7 +41,7 @@ diagnosed and repaired here: a reintroduction of the fatal `typescript
      (`npx prettier@3.9.6`, same version nixpkgs shipped) must diff EMPTY —
      fork TS may differ from upstream only by formatting;
    - `dprint.json` excludes guard: `jq -e '.excludes | index("packages/**")'`.
-   Green in CI (12s).
+     Green in CI (12s).
 4. **Loader JSON config fuzz** (TODO item 8):
    `go/loader/config_fuzz_test.go` — property: any input decodes without
    panicking; every successful decode re-encodes; encode∘decode is
@@ -94,7 +94,7 @@ diagnosed and repaired here: a reintroduction of the fatal `typescript
 
 ## b) PARTIALLY DONE
 
-1. **TODO item 2 (prettier)**: resolved as *not-do* with evidence (no
+1. **TODO item 2 (prettier)**: resolved as _not-do_ with evidence (no
    prettier-stable style exists to enforce; `yarn build` already precedes
    publish; no fork-owned TS exists), but that means **no machine gate
    covers fork-authored TS style** — acceptable only while no fork TS
@@ -102,7 +102,7 @@ diagnosed and repaired here: a reintroduction of the fatal `typescript
 2. **Upstream sync state**: the fork's TS content base is the `caab04e` pin
    plus selectively adopted newer upstream tests; upstream main (`f8ea3cd`)
    has moved further (rc.10 version set, hmr src evolution, 47+ files).
-   A real sync + pin bump is *pending*, deliberately not started here.
+   A real sync + pin bump is _pending_, deliberately not started here.
 3. **Concurrent session's claims**: `75fb408`/`25ff5fb`/`3da7d0f` claim
    Rust interception events, root-fiber coverage, thread-safe clippy gate,
    llvm-cov baseline and benches. Spot-verified: `EVENT_PLUGIN`/`EVENT_UPDATE`
@@ -186,6 +186,7 @@ _Brainstorm, impact-ordered tiers — HARVEST fuel, not commitments. Most
 items below tier 3 are ROADMAP material._
 
 **Now / coordination:**
+
 1. Decide and encode the concurrent-session convention (lock, worktrees, or
    serialized handoff) — blocked-on-user decision, third report raising it.
 2. Sync `packages/**` to current upstream main (`f8ea3cd`), bump
@@ -207,82 +208,82 @@ items below tier 3 are ROADMAP material._
 
 **CI hardening:**
 11. Add a nightly fuzz job (`go test -fuzz=FuzzConfigRoundtrip -fuzztime=10m`)
-    with corpus cache artifact.
+with corpus cache artifact.
 12. Cache the nix store in CI (magic-nix-cache) — the flake job spends most
-    of its 1m15s downloading toolchains.
+of its 1m15s downloading toolchains.
 13. Pin the golangci-lint version used by `eab03a8`'s Ports step to the same
-    version the devShell ships (version skew already caused one
-    local-green/CI-red split).
+version the devShell ships (version skew already caused one
+local-green/CI-red split).
 14. Branch protection requiring both Build and Ports green on main.
 15. Bump/replace `mlugg/setup-zig` when its Node 20 deprecation is fixed.
 16. Add `--all-systems` flake check on a darwin runner (or remote builder).
 17. Matrix-extend the go job with `-count=5` hmr/loader sweep as a weekly
-    canary (15-43 f36).
+canary (15-43 f36).
 18. upload `go test -cover` artifacts to CI for trend tracking.
 
 **Upstream tracking:**
 19. Track upstream's merge of `3-stage-hmr`; when merged, collapse the fork
-    replay divergence and re-pin.
+replay divergence and re-pin.
 20. Upstream goodwill PRs: style-agnostic hmr spec replaces; include-test
-    `tmp-*` → `os.tmpdir`; afterEach cleanup on crash paths.
+`tmp-*` → `os.tmpdir`; afterEach cleanup on crash paths.
 21. Track `RequireNoResidue` / cordis issue #2 (Kernovia feedback loop).
 22. Re-check `packages/hmr/README.md` drift once upstream's README settles
-    (f30 of 15-43, currently upstream-identical).
+(f30 of 15-43, currently upstream-identical).
 23. Decide whether `internal/` event namespaces need Zig parity
-    (`75fb408` closed Rust; Zig has typed registry but interception events
-    unverified this session).
+(`75fb408` closed Rust; Zig has typed registry but interception events
+unverified this session).
 
 **Port quality (Go flagship):**
 24. ~~Loader coverage push: 74.6% is the weakest number; add tests from the
-    fuzz corpus's interesting inputs.~~ done at `72e1505` (90.8%, recorded in AGENTS.md)
+fuzz corpus's interesting inputs.~~ done at `72e1505` (90.8%, recorded in AGENTS.md)
 25. Regression table tests derived from fuzz corpus entries (pin the
-    byte-idempotence property as plain unit tests for the top 50 inputs).
+byte-idempotence property as plain unit tests for the top 50 inputs).
 26. Re-audit bare `_ =` discards across `go/` after the last week's commits.
 27. Sweep for remaining unchecked returns in test files (errcheck caught
-    three this week; assume more exist).
+three this week; assume more exist).
 28. `Fiber.Err` / cancellable-await golden coverage beyond dispatch scenario.
 29. ~~Consider surfacing `Tree.Await`'s discarded fiber error via the loader
-    error sink (deliberate today — re-justify or fix; 05-27 f33).~~ done at `72e1505`
+error sink (deliberate today — re-justify or fix; 05-27 f33).~~ done at `72e1505`
 30. Timer: periodic `-count=5` synctest bubble run (flakiness sentinel).
 
 **Rust / Zig:**
 31. Verify llvm-cov numbers landed and are visible in CI artifacts.
 32. ~~Bench numbers for the "up to 30% faster" ROADMAP claim, or hedge the
-    claim.~~ done at `25ff5fb`
+claim.~~ done at `25ff5fb`
 33. Zig interception events parity check (M13 set).
 34. Zig `zig build docs` output review pass (doc comment quality).
 35. Re-run thread-safe clippy gate after next rustc bump (nursery lints
-    historically reappear; 05-27 f36 pattern).
+historically reappear; 05-27 f36 pattern).
 
 **Docs / knowledge:**
 36. Record today's racing incident + resolution in AGENTS.md daemon notes
-    (amend-after-push hazard observed live).
+(amend-after-push hazard observed live).
 37. Mirror the `UPSTREAM_PIN` sync runbook into PORTS.md's upstream section.
 38. ~~ROADMAP: add "prettier is not a TS style gate" as a settled decision
-    (currently only in AGENTS.md).~~ **NOT-DO/DUPLICATE — AGENTS.md is the single home for the style policy; duplicating it in ROADMAP recreates the drift the rule prevents.**
+(currently only in AGENTS.md).~~ **NOT-DO/DUPLICATE — AGENTS.md is the single home for the style policy; duplicating it in ROADMAP recreates the drift the rule prevents.**
 39. ~~FEATURES.md freshness pass after today's CI/fixture changes (a staged
-    edit from the other session may already cover it — verify).~~ done (second docs-health pass verified and corrected: golden-runner matrix, inherited-features + CI matrix note)
+edit from the other session may already cover it — verify).~~ done (second docs-health pass verified and corrected: golden-runner matrix, inherited-features + CI matrix note)
 40. ~~Annotate the 15-43 and 05-27 reports' newly-completed items
-    (docs-health ANNOTATE pass).~~ done (second docs-health pass, 2026-09-08)
+(docs-health ANNOTATE pass).~~ done (second docs-health pass, 2026-09-08)
 
 **Tooling / environment:**
 41. buildflow upstream fix: filter `nix flake show` checks to the running
-    system (still open, blocks fully green buildflow).
+system (still open, blocks fully green buildflow).
 42. buildflow per-step workdir knob (would obsolete the root go.mod stub).
 43. `nix run .#test-ts` flake app wrapping the documented yarn incantation.
 44. ~~vulnix/cargo-audit/cargo-deny/lychee/codespell availability in devShell
-    (05-27 f9 noise).~~ see 05-27 §f9 (still open, tool-side)
+(05-27 f9 noise).~~ see 05-27 §f9 (still open, tool-side)
 45. Pin the flake's zig version explicitly (nixpkgs drift risk, 05-27 f19).
 
 **Strategy:**
 46. ~~Decide whether fork packages/** dep bumps are ever acceptable without an
-    upstream commit — encode the "never" explicitly.~~ done (encoded in AGENTS.md: "TS dep bumps remain upstream decisions")
+upstream commit — encode the "never" explicitly.~~ done (encoded in AGENTS.md: "TS dep bumps remain upstream decisions")
 47. Evaluate git-town / sync tooling to make upstream syncs one-command
-    (15-43 f44).
+(15-43 f44).
 48. Port-parity sprint: ROADMAP's flagged gaps (hmr watch parity, loader
-    bare-specifier resolution).
+bare-specifier resolution).
 49. Job-count/runtime review of both workflows after this week's additions
-    (15-43 f48).
+(15-43 f48).
 50. Schedule flake lock refresh + toolchain bump cadence (05-27 f50).
 
 ## g) Questions I cannot answer myself
