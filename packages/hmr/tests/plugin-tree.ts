@@ -1,8 +1,8 @@
-import { Context, Service } from "cordis";
-import { EntryGroup, EntryTree } from "@cordisjs/plugin-loader";
-import { version } from "./tree-dep.ts";
+import { Context, Service } from 'cordis'
+import { EntryGroup, EntryTree } from '@cordisjs/plugin-loader'
+import { version } from './tree-dep.ts'
 
-export const name = "plugin-tree";
+export const name = 'plugin-tree'
 
 /**
  * A minimal entry tree host, in the shape of `@cordisjs/plugin-include`:
@@ -16,37 +16,32 @@ export const name = "plugin-tree";
  * walk from a parent-only check.
  */
 export default class Tree extends EntryTree {
-  static inject = ["loader"];
+  static inject = ['loader']
 
-  private group?: EntryGroup;
+  private group?: EntryGroup
 
-  constructor(
-    ctx: Context,
-    public config: any,
-  ) {
-    super(ctx);
+  constructor(ctx: Context, public config: any) {
+    super(ctx)
   }
 
-  async *[Service.init]() {
-    this.ctx.on("hmr-test/get-tree", () => version);
+  async* [Service.init]() {
+    this.ctx.on('hmr-test/get-tree', () => version)
     await this.ctx.plugin((ctx: Context) => {
-      this.group = new EntryGroup(ctx, this);
-    });
-    yield () => this.group?.stop();
-    await this.group!.update([
-      {
-        id: "nested",
-        name: "./plugin-nested",
-      },
-    ] as any);
+      this.group = new EntryGroup(ctx, this)
+    })
+    yield () => this.group?.stop()
+    await this.group!.update([{
+      id: 'nested',
+      name: './plugin-nested',
+    }] as any)
 
     // Optional stall, used by a test to keep this fiber initializing while a
     // second HMR batch arrives: `_setEpoch()` bails out while `inertia` is
     // pending, so this fiber's unload — and with it the disposal of the
     // intermediate fiber below — is deferred until the stall ends.
-    const stats: any = ((globalThis as any).__hmrTest ??= {});
+    const stats: any = ((globalThis as any).__hmrTest ??= {})
     if (stats.stallTreeInit) {
-      await new Promise((resolve) => setTimeout(resolve, stats.stallTreeInit));
+      await new Promise(resolve => setTimeout(resolve, stats.stallTreeInit))
     }
   }
 

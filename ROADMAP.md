@@ -95,10 +95,11 @@ Go, Rust and Zig test suites with byte-identical expected traces, plus
 
 ### Rust
 
-1. `internal/plugin` + `internal/update` interception events (Go parity).
-2. Effect introspection parity (`EffectMeta` trees are implemented; expose
+1. Effect introspection parity (`EffectMeta` trees are implemented; expose
    nested labels on more registration kinds).
-3. Logger service.
+2. Logger service.
+3. `internal/get|set|listener|dispatch` interception events (the loader
+   ports need `get`/`set`).
 
 ### Zig
 
@@ -136,9 +137,12 @@ opens for the ports are tracked in the Go section above.
 - **TS toolchain stance:** track upstream exactly (their pins, their
   breakage) vs fork-pinned dependencies; currently the fork matches
   upstream except a deliberate `@types/node ^26.5.0` bump.
-- **hmr fixture style:** keep fixtures byte-identical to upstream (their
+- **hmr fixture style:** ~~keep fixtures byte-identical to upstream (their
   specs string-replace into them) vs fork-styling fixtures and rewriting
-  the specs' replace patterns.
+  the specs' replace patterns.~~ Resolved 2026-09-08: fixtures (all of
+  `packages/hmr/tests/`) stay byte-identical to upstream — fork-styling
+  them no-ops the specs' literal replaces and timed out 17 tests; the
+  `upstream-parity` CI job enforces it.
 - **One-session-per-worktree convention** for concurrent agents.
 - **Oxlint policy for upstream TS** (report-only today).
 - **Generic-method API deprecation timeline** (see Go section).
@@ -182,6 +186,18 @@ virtual clock (`synctest.Sleep` is new in 1.27), turning 0.46 s of real
 sleeps into ~2 ms and making debounce/throttle boundaries immune to CI load;
 `strings.CutLast` in plugin name derivation; `stdversion` vet (automatic
 under `go test`).
+
+Measured locally (2026-09-08, x86_64-linux, 1.26.7 vs 1.27 back-to-back):
+the release note's size-specialized allocation routines — "reducing the
+cost of some small (<80 byte) memory allocations by up to 30%"
+(go.dev/doc/go1.27) — reproduce as 20–37% faster small allocations on
+quiet runs (32-byte struct: 13.95 → 8.76 ns/op; 72-byte: 19.04 →
+13.70 ns/op), noise-dominated when the desktop is loaded. Framework hot
+paths under 1.27 (`go test -bench . -benchmem`): start/dispose ≈2.4 µs,
+provide+get+dispose ≈0.61 µs, get ≈23 ns, emit ≈65 ns, 5-hop waterfall
+≈0.21 µs; the Rust port posts the same six benchmarks in
+`rust/benches/core.rs` (start/dispose ≈0.56 µs, get ≈24 ns, waterfall
+≈0.30 µs, same machine, best of five).
 
 Deliberately NOT adopted: generic methods (new in 1.27) for the typed API.
 `Provide[T]/Get[T]/On[E]` stay package-level functions because `Context`

@@ -2,4 +2,4 @@
 // ever modifies. It sits in plugin-dep's dependency tree, so it is evicted from
 // the module cache when dep.ts changes; that alone must not make the sibling
 // stale.
-export const commonValue = "common";
+export const commonValue = 'common'

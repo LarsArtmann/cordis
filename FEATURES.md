@@ -21,7 +21,7 @@ plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 | Fiber states (pending/loading/active/failed/disposed/unloading) | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
 | Dispose / restart / update                                      | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
 | Inject reactivity (pending → unload → reload in place)          | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Interception events (`internal/get\|set\|listener\|dispatch`)   | FULLY_FUNCTIONAL               | PLANNED                                             | PLANNED                   |
+| Interception events (`internal/get\|set\|listener\|dispatch\|plugin\|update`) | FULLY_FUNCTIONAL | PARTIALLY_FUNCTIONAL (`plugin`, `update`; `get\|set\|listener\|dispatch` planned) | PLANNED                   |
 | Status events (`internal/status`)                               | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
 | Registry view (size / has / delete)                             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
 | Registry snapshot / restore                                     | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
@@ -58,6 +58,7 @@ plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 | Callable services + tracker (`ProvideService`, `Callable`)           | FULLY_FUNCTIONAL | `go/callable.go`              |
 | API polish: `Fiber.Err`, `AwaitContext`, `Inject1/2/3`               | FULLY_FUNCTIONAL | `go/fiber.go`, `go/inject.go` |
 | Benchmarks (start/dispose, provide+get, emit, waterfall)             | FULLY_FUNCTIONAL | `go/bench_test.go`            |
+| Benchmarks (same six hot paths, release profile)                     | FULLY_FUNCTIONAL | `rust/benches/core.rs`        |
 
 ## Cross-language assurance
 
@@ -83,7 +84,7 @@ No code yet; bounded work is tracked in `TODO_LIST.md`, direction in
 `ROADMAP.md`:
 
 - Zig: registry snapshot/restore, status events, accessor/mixin, logger
-- Rust: interception events (`internal/*`), logger service
+- Rust: `internal/get|set|listener|dispatch` interception, logger service
 - Golden scenario #4 (dispatch-mode parity)
 
 See `ROADMAP.md` for the full parity matrix and the documented native-max
