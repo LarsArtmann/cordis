@@ -45,6 +45,31 @@ requires cgo) and resolves `GOCACHE` via `shellHook` (an attr using
 `govalid` on PATH: `~/go/bin/govalid` is rebuilt with Go 1.27; the
 system-profile copy is built with Go 1.26 and warns about x/tools skew.
 
+## TS workspace gotchas (learned in the 2026-09-07 upstream rebase)
+
+- **Toolchain pins are load-bearing.** Root devDependencies must stay at
+  `typescript ^5.9.3`, `vitest ^4.1.5`, `vite ^7.3.2`, `eslint ^8.57.1`,
+  `esbuild ^0.28.0`. TypeScript 7 breaks yarn-berry's builtin compat patch
+  (`lib/_tsc.js` missing) and there is NO yarn.lock, so every install
+  re-resolves: a bad bump breaks `yarn install` for everyone, immediately.
+  There is no yarn.lock by design (upstream does the same).
+- **Test fixtures are string-coupled to the specs.** hmr specs mutate fixture
+  sources via literal `content.replace("value = 'initial'", ...)`. Fork-style
+  reformatting of `packages/hmr/tests/*` fixtures (yml + plugin `.ts` files)
+  silently no-ops those replaces and every reload test times out. Keep hmr
+  test fixtures byte-identical to upstream; style passes cover src/ and
+  specs only.
+- **Fork TS style == `prettier --print-width 100` (defaults otherwise).**
+  Verified byte-idempotent across the whole formatted TS tree. Use
+  `nix run nixpkgs#prettier -- --print-width 100 --write <files>`.
+- **Stale `lib/` builds shadow src/.** Cross-package imports resolve through
+  each package's `lib/index.js`. After changing TS sources run
+  `nix develop -c yarn build` before debugging "impossible" test failures —
+  the tests may still be running the old bundle.
+- TS deps (chokidar, js-yaml, ...) must match upstream's versions; sed-style
+  "bump everything" passes have twice introduced non-existent versions
+  (js-yaml ^5.4.1) or API breaks.
+
 ## Port architecture (all three languages share this)
 
 **Prime directive (user, 2026-08-22): use each language's native features to
