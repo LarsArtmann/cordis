@@ -42,6 +42,6 @@
   "dependencies": {
     "cosmokit": "^1.8.1",
     "schemastery": "^3.18.0",
-    "supports-color": "^9.4.0"
+    "supports-color": "^11.0.0"
   }
 }

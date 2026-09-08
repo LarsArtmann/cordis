@@ -195,7 +195,12 @@ export class RegistryService {
   plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack()) {
     // check if it's a valid plugin
     const callback = this.resolve(plugin)
-    if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)
+    if (!callback) {
+      throw new Error(
+        'invalid plugin, expect function or object with an "apply" method, received '
+          + typeof plugin,
+      )
+    }
     this.ctx.fiber.assertActive()
 
     let runtime = this._internal.get(callback)
