@@ -127,12 +127,12 @@ Nothing unrecoverable, and no data was lost — but honest callouts:
 
 **Now / this session:**
 
-1. Commit the staged 37-file batch; then `git push --force-with-lease origin main` (on approval).
+1. ~~Commit the staged 37-file batch; then `git push --force-with-lease origin main` (on approval).~~ done (batch landed as `51cddf2` + `b4650df`; pushed, `main` == `origin/main` at `3da7d0f`)
 2. Fix buildflow upstream: filter enumerated `.#checks.<system>.*` to the running system (or skip
    platform-mismatch errors) — turns the gate fully green.
 3. ~~HARVEST this report's (f) into `TODO_LIST.md` / `ROADMAP.md` via docs-health.~~ done (docs-health pass this pass routed the harvest into TODO_LIST/ROADMAP)
 4. ~~Trash the stale partial `packages/*/node_modules` installs so nothing pretends to be a TS suite.~~ **Won't implement — superseded — the TS suite is green since 69b9fd6; the installs are live, not stale debris.**
-5. Watch Ports CI (`ports.yml`) after push and record the run links.
+5. ~~Watch Ports CI (`ports.yml`) after push and record the run links.~~ done (Build 34267336684 + Ports 34267336671 green on `3da7d0f`)
 
 **Buildflow / tooling (Lars-tool side):**
 6. buildflow config knob for per-step workdir (go-generate/test-race would not need the root stub).
@@ -146,9 +146,9 @@ the "9 tools unavailable" health-check noise.
 12. Reduce vulnix noise: scope to the flake's own derivations, not the whole store closure.
 
 **Repo guards (regression prevention):**
-13. CI check that `packages/**` stays byte-identical to upstream (diff against a pinned upstream
-remote) — would have caught the yml churn and the core-README fork-ification automatically.
-14. CI check that `dprint.json` excludes keep covering `packages/**`.
+13. ~~CI check that `packages/**` stays byte-identical to upstream (diff against a pinned upstream
+remote) — would have caught the yml churn and the core-README fork-ification automatically.~~ done at `fa45896` (`upstream-parity` job)
+14. ~~CI check that `dprint.json` excludes keep covering `packages/**`.~~ done at `fa45896` (jq guard in the same job)
 15. Add tests for the new error paths: hmr rollback `Replace` failure, `watch.go` close-failure
 logging, accessor/tree error message shapes.
 16. ~~Re-verify Go coverage (~85% claim) after the erraudit changes; record the number in AGENTS.md.~~ done (docs-health pass measured 2026-09-08 and recorded in AGENTS.md (core 91.7%, loader 74.6%))
@@ -180,10 +180,10 @@ ROADMAP's "Bidirectional feedback" section.
 31. Add a regression test asserting the new wrapped error messages (accessor/tree context).
 32. Consider returning joined rollback errors from hmr `rollback` with `%w` chains preserved
 (already done — add a golden-scenario op if cheap).
-33. Review whether `Tree.Await`'s discard of `f.Await()` should instead surface the fiber error via
-the loader's error sink (design question, currently deliberate).
+33. ~~Review whether `Tree.Await`'s discard of `f.Await()` should instead surface the fiber error via
+the loader's error sink (design question, currently deliberate).~~ done at `72e1505` (Await routes observed failures into the entry error sink; pinned by `TestAwaitSurfacesRuntimeFailure`)
 34. ~~Keep `testing/synctest` bubble pattern for any new timing tests (already policy; add lint?).~~ done (AGENTS.md build section records the synctest pattern policy)
-35. Re-check `-race -count=3` parity with CI (`ports.yml` uses count=3; local runs used count=1).
+35. ~~Re-check `-race -count=3` parity with CI (`ports.yml` uses count=3; local runs used count=1).~~ done at `fa45896` (flake checks and apps moved to `-race -count=3`)
 
 **Port quality (Rust/Zig):**
 36. ~~Run the `thread-safe` Rust feature build again post-toolchain (clippy gated off it by config).~~ done (thread-safe suite green on 2026-09-08)
@@ -203,15 +203,15 @@ the loader's error sink (design question, currently deliberate).
 45. Add the buildflow round-4 log excerpt to the buildflow upstream issue (repro evidence).
 46. Evaluate `--all-systems` flake check in CI on a darwin runner to keep darwin checks honest.
 47. Keep an eye on Nix deprecations (formatter naming, eval cache) — two warnings observed.
-48. After upstream TS fix: full vitest pass, then re-baseline the "gate on Ports" policy.
+48. ~~After upstream TS fix: full vitest pass, then re-baseline the "gate on Ports" policy.~~ done (superseded — upstream reverted to ^5.9.3; 248/248 green locally and in CI)
 49. ~~Confirm the auto-commit daemon produced clean, well-scoped commits for the staged batch.~~ done (recovery batch landed as well-scoped 51cddf2 + b4650df)
 50. Schedule the next flake-lock refresh + go/rust/zig toolchain bump cadence (buildflow update
 steps exist; verify they ran green this round).
 
 ## g) QUESTIONS I CANNOT ANSWER MYSELF
 
-1. **Push approval:** May I run `git push --force-with-lease origin main` once the staged batch is
-   committed? (Rewrites origin/main; verified nothing unique is lost — but it is your remote.)
+1. ~~**Push approval:** May I run `git push --force-with-lease origin main` once the staged batch is
+   committed? (Rewrites origin/main; verified nothing unique is lost — but it is your remote.)~~ done (push executed; CI green on `3da7d0f`)
 2. **Buildflow fix path:** Do you want to fix the nix-checker system-filter bug in buildflow
    yourself, or should I prepare the patch/issue for it?
 3. ~~**TS suite policy:** Keep gating on Ports only until upstream fixes `typescript ^7.0.2` (current~~ done (superseded — upstream reverted to ^5.9.3 and the fork matched; gate-on-Ports stands until CI confirms)
@@ -224,15 +224,19 @@ _Point-in-time snapshot — will go stale. HARVEST (f) into TODO_LIST before it 
 
 ## Resolution (docs-health pass, 2026-09-08)
 
-14 §f items and §g Q3 resolved inline above. §f 1 is half-done: the staged
-batch committed cleanly as `51cddf2` (+ `b4650df`), the push remains
-user-gated (§g Q1, ROADMAP Open decisions). Still open: buildflow
-platform-mismatch fix (2, §g Q2 — tool-side), post-push CI watch (5),
-buildflow knobs and tool provisioning (6–12), CI byte-parity and dprint
-guards (13–14), new-error-path tests (15), darwin checks (18), zig pin
-(19), formatter guard (20), todo-check suppression (21), discard sweep
-(22), Kernovia progress (25), ROADMAP erraudit notes (30), rollback golden
-op (32), `Tree.Await` question (33), `-count=3` parity (35), GOCACHE and
-LSP machine fixes (38–39, 41), scratch cleanup (42), oxlint policy (43),
-buildflow issue evidence (45), darwin flake CI (46), nix deprecations
-(47), post-fix vitest re-baseline (48), flake-lock cadence (50).
+14 §f items and §g Q3 resolved inline above. A second docs-health pass
+(later the same day) resolved 1, 5, 13–14, 33, 35, 48 and §g Q1: the
+push executed (`main` == `origin/main` at `3da7d0f`) with green Build +
+Ports runs (34267336684 / 34267336671), the `upstream-parity` CI job
+with its dprint-excludes guard landed (`fa45896`), `Tree.Await` now
+surfaces fiber failures into the error sink (`72e1505`), the flake gate
+runs `-race -count=3` matching CI (`fa45896`), and the TS suite is green
+248/248 locally and in CI. Still open: buildflow platform-mismatch fix
+(2, §g Q2 — tool-side), buildflow knobs and tool provisioning (6–12),
+new-error-path tests (15 — hmr/accessor/tree done in `72e1505`, the
+watch close-failure test unverified), darwin checks (18), zig pin (19),
+formatter guard (20), todo-check suppression (21), discard sweep (22),
+Kernovia progress (25), ROADMAP erraudit notes (30), rollback golden op
+(32), GOCACHE and LSP machine fixes (38–39, 41), scratch cleanup (42),
+oxlint policy (43), buildflow issue evidence (45), darwin flake CI (46),
+nix deprecations (47), flake-lock cadence (50).

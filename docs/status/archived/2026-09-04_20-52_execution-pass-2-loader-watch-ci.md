@@ -213,13 +213,13 @@ revert). Both pushed.
 27. ~~`Await` variant honoring a stdlib `context.Context`/timeout.~~ done at `8efd0f6`
 28. ~~`errors.As` → `errors.AsType` sweep in `go/errors.go`.~~ done at `8efd0f6`
 29. ~~Typed-inject sugar `Plugin.InjectTypes[T1, T2]()`.~~ done at `8efd0f6`
-30. PORTS.md cross-port API table; README badges + port pitch; AGENTS.md
-Zig 0.16 gotchas; loader/hmr sections; Batch semantics notes.
+30. ~~PORTS.md cross-port API table; README badges + port pitch; AGENTS.md
+Zig 0.16 gotchas; loader/hmr sections; Batch semantics notes.~~ done at `8efd0f6`, `75fb408` (Batch semantics documented at go/context.go:178)
 
 **M27 — quality batch (est. 1.5h)**
-31. `nix flake check -L` CI job; benchmark skeleton (drain throughput).
+31. ~~`nix flake check -L` CI job; benchmark skeleton (drain throughput).~~ done at `df35fc4`, `fa45896`
 32. ~~Rust+Zig benchmark stubs + README results table skeleton.~~ done at `df35fc4`
-33. LIFO rollback property test (randomized registration sequences).
+33. ~~LIFO rollback property test (randomized registration sequences).~~ done at `df35fc4`
 34. ~~Releases: tag `go/v0.1.0`, Rust `v0.2.0`, Zig version note.~~ done at `df35fc4`
 35. ~~`zig build -femit-docs` pass; parity-matrix generator; cadence note.~~ done (go/v0.1.0 + rust/v0.2.0 pushed)
 36. ~~Final: full 3-language verification + actionlint + docs harvest +~~ done (done by pass 4 (5625d62) and the harvest commit (6654270))

@@ -222,8 +222,8 @@ _Brainstorm, impact-sorted within tiers — ROADMAP/TODO_LIST fuel, not commitme
 12. ~~Commit README/AGENTS user-demand restructure.~~ done at `51cddf2`
 13. Review + drop `stash@{0}`; archive or delete `/tmp/go127-adoption.patch` and
 `/tmp/cordis-session-backup-20260908/`.
-14. Push `main` (force-with-lease, user approval required — rebase rewrote 32 commits).
-15. Trigger/watch the first green `ports.yml` run on GitHub.
+14. ~~Push `main` (force-with-lease, user approval required — rebase rewrote 32 commits).~~ done (pushed; `main` == `origin/main` at `3da7d0f`)
+15. ~~Trigger/watch the first green `ports.yml` run on GitHub.~~ done (Build 34267336684 + Ports 34267336671 green on `3da7d0f`, incl. flake + upstream-parity jobs)
 
 **Upstream/outbound:**
 16. ~~File the yarn builtin-typescript-patch vs TS7 layout bug (repro verified).~~ done (moot — upstream reverted to typescript ^5.9.3 themselves)
@@ -232,23 +232,23 @@ _Brainstorm, impact-sorted within tiers — ROADMAP/TODO_LIST fuel, not commitme
 18. Consider contributing the `build.yml` timeout caps upstream.
 
 **Rust quality:**
-19. Fix or explicitly allowlist the ~10 `significant_drop` thread-safe findings with
-lock-scope rationale comments.
-20. Gate `cargo clippy --features thread-safe` in Ports once clean (stop silent rot).
+19. ~~Fix or explicitly allowlist the ~10 `significant_drop` thread-safe findings with
+lock-scope rationale comments.~~ done at `25ff5fb` (17 → 0, rationale allowlists)
+20. ~~Gate `cargo clippy --features thread-safe` in Ports once clean (stop silent rot).~~ done at `25ff5fb`
 21. Decide on a rust toolchain pin (`rust-toolchain.toml`) vs paying nursery drift per
 nixpkgs bump.
-22. Run `cargo-llvm-cov` and record a coverage baseline next to Go's ~85-90%.
-23. `cargo bench` for the "30% faster small allocations" claim; attach numbers to
-ROADMAP or hedge the text.
+22. ~~Run `cargo-llvm-cov` and record a coverage baseline next to Go's ~85-90%.~~ done at `25ff5fb` (86.4% lines / 86.1% regions, recorded in AGENTS.md)
+23. ~~`cargo bench` for the "30% faster small allocations" claim; attach numbers to
+ROADMAP or hedge the text.~~ done at `25ff5fb` (claim verified against go.dev, measured locally, ROADMAP updated)
 24. Review `snapshot.rs` `start_base(&base, ...)` call for ownership clarity (my signature
 change rippled there; it compiles and passes, a second pair of eyes is cheap).
 
 **Go quality:**
-25. `go fix ./...` sweep under 1.27 (embedlit/unsafefuncs hits).
+25. ~~`go fix ./...` sweep under 1.27 (embedlit/unsafefuncs hits).~~ done at `72e1505`
 26. ~~Re-run coverage, update the "~85-90%" doc claims with fresh numbers.~~ done (docs-health pass measured 2026-09-08 — core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6%)
 27. Extend golden scenarios (#4+: events, logger — ROADMAP already lists this).
 28. ~~Verify `golangci-lint` in ports.yml actually runs clean under Go 1.27.~~ done (golangci-lint 0 issues under Go 1.27 (04-04 session))
-29. Run the zig suite standalone (`zig build test`) once outside the flake for parity.
+29. ~~Run the zig suite standalone (`zig build test`) once outside the flake for parity.~~ done (`zig build test --summary all` green Debug and ReleaseSafe, `75fb408` session)
 30. Tag `go/v0.1.x` including the 1.27 bump; re-pin Kernovia's oracle (ADR-004 flow).
 
 **Docs:**
@@ -260,12 +260,12 @@ change rippled there; it compiles and passes, a second pair of eyes is cheap).
 ~~(its "unmerged index hazard" items are now resolved).~~
 36. ~~Check `docs/DOMAIN_LANGUAGE.md` against current terms after the upstream merge.~~ done (docs-health pass terms verified/added by this pass)
 37. Revisit MD013=off policy: consider a higher line-length limit instead of fully off.
-38. Read `CONTRIBUTING.md` (added by pick 12) for accuracy — never reviewed.
+38. ~~Read `CONTRIBUTING.md` (added by pick 12) for accuracy — never reviewed.~~ done at `fa45896` (rewritten: flake quickstart, sync policy, UPSTREAM_PIN discipline)
 
 **Repo hygiene / infra:**
 39. ~~`.gitignore`: ensure `.buildflow-traces/`, `result*` (nix) are covered.~~ done (result*/.buildflow artifacts covered by the buildflow-managed gitignore block)
-40. Add a CI job running `nix flake check` so the flake gate is enforced remotely, not
-only locally.
+40. ~~Add a CI job running `nix flake check` so the flake gate is enforced remotely, not
+only locally.~~ done at `fa45896`
 41. Session-lock convention for concurrent agents (see e1) — even a convention line in
 AGENTS.md.
 42. Investigate/configure the auto-daemon to no-op during rebases (it staged files
@@ -345,14 +345,18 @@ after the release tag.
 22 §f items and §g Q3 resolved inline above. Note two items overtook
 events: the TS7 blocker is moot (upstream reverted to `^5.9.3`; the fork
 installs and tests 248/248), and `3-stage-hmr` was replayed onto the fork
-(`b4650df`) rather than awaited. Still open: oxlint/eslint re-runs (4–5),
-buildflow platform-mismatch fix (6), cargo-audit/cargo-deny/pnpm-audit
-tooling (7–8), stash//tmp cleanup (13), the user-gated push (14) and
-post-push CI verification (15), timeout-caps contribution upstream (18),
-thread-safe clippy work (19–20), toolchain pin (21), coverage baseline
-(22), bench claim (23), snapshot.rs review (24), `go fix` sweep (25),
-golden scenarios #4+ (27), zig standalone run (29), post-1.27 tag +
-Kernovia re-pin (30), MD013 policy (37), CONTRIBUTING review (38),
-`nix flake check` CI job (40), session-lock convention (41), daemon
-rebase behavior (42), linter ownership (43), checks meta warnings (45),
-TS stance decision (47), Kernovia re-run (49).
+(`b4650df`) rather than awaited. A second docs-health pass (later the
+same day) resolved 14–15 (push done, `main` == `origin/main` at
+`3da7d0f`; Build 34267336684 + Ports 34267336671 green incl. the flake
+and upstream-parity jobs), 19–20 (thread-safe `significant_drop` → 0 and
+the Ports gate, `25ff5fb`), 22–23 (llvm-cov 86.4% + bench claim,
+`25ff5fb`), 25 (`go fix`, `72e1505`), 29 (standalone zig runs),
+38 (CONTRIBUTING rewrite, `fa45896`), 40 (flake CI job, `fa45896`).
+Still open: oxlint/eslint re-runs (4–5), buildflow platform-mismatch fix
+(6), cargo-audit/cargo-deny/pnpm-audit tooling (7–8), stash//tmp cleanup
+(13), timeout-caps contribution upstream (18), toolchain pin (21),
+snapshot.rs review (24), golden scenarios #4+ (27 — #4 landed
+`72e1505`, logger scenario open), post-1.27 tag + Kernovia re-pin (30),
+MD013 policy (37), session-lock convention (41), daemon rebase behavior
+(42), linter ownership (43), checks meta warnings (45), TS stance
+decision (47), Kernovia re-run (49).

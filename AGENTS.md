@@ -228,8 +228,10 @@ on 2026-09-08).
   timeouts — an upstream cache-invalidation bug, fixed on their unmerged
   `3-stage-hmr` branch). The fork replayed that branch on top of the rebase
   (`b4650df`): commit-based loader entry changes, atomic include writes,
-  `hmr.watch()`. Local TS suite is green (248/248); treat the next CI Build
-  run as the confirmation, and gate on Ports until then.
+  `hmr.watch()`. Local TS suite is green (248/248) and CI confirmed it:
+  both Build and Ports ran green on `3da7d0f` (runs 34267336684 /
+  34267336671, 2026-09-08), including the `flake` and `upstream-parity`
+  jobs.
 - The root `README.md` is a fork-owned real file (user demand, 2026-09-07;
   replaced upstream's symlink to `packages/core/README.md`). Never recreate
   the symlink and never put fork content into `packages/**/README.md` —

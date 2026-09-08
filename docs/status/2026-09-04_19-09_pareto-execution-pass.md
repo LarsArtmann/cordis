@@ -104,7 +104,7 @@ this session; both are lessons, not scars:
 7. ~~M25 Go callable services + tracker attribution.~~ done at `053a72a`
 8. ~~M22a Rust `internal/status` emission.~~ done at `9b27371`
 9. ~~M22b Rust registry snapshot restore.~~ done at `9b27371`
-10. Golden scenario #4: bail/serial/waterfall dispatch parity.
+10. ~~Golden scenario #4: bail/serial/waterfall dispatch parity.~~ done at `72e1505`
 11. ~~Rust pedantic pay-down sweep #1: `use_self` (mechanical).~~ done at `6ba0d7d`
 12. ~~Rust pedantic pay-down sweep #2: `must_use` + `missing_errors_doc`.~~ done at `6ba0d7d`, `51cddf2`
 13. ~~Re-enable pedantic/nursery = deny once sweeps land; re-verify flake.~~ done (pedantic+nursery deny (e001b5e))
@@ -112,12 +112,12 @@ this session; both are lessons, not scars:
 15. ~~M26 `errors.AsType` migration in `go/errors.go`.~~ done at `8efd0f6`
 16. ~~M26 typed-inject sugar (`InjectTypes[T1,T2]`).~~ done at `8efd0f6`
 17. ~~PORTS.md cross-port API comparison table.~~ done at `8efd0f6`
-18. AGENTS.md: Zig 0.16 gotchas + Rust lock-order invariant.
+18. ~~AGENTS.md: Zig 0.16 gotchas + Rust lock-order invariant.~~ done at `75fb408` (Zig gotchas; lock-order invariant already recorded in AGENTS.md)
 19. ~~Root README: badges + golden-test pitch.~~ done (badges present on the root README)
 20. ~~M27 Go drain-queue benchmark skeleton.~~ done at `df35fc4`
 21. ~~M27 LIFO rollback property test (Go).~~ done at `df35fc4`
 22. ~~M27 releases: `go/v0.1.0`, Rust `v0.2.0`.~~ done (go/v0.1.0 + rust/v0.2.0 pushed)
-23. `zig build -femit-docs` doc-comment fix pass.
+23. ~~`zig build -femit-docs` doc-comment fix pass.~~ done at `75fb408` (`zig build docs` gate)
 24. ~~Parity-matrix generator (FEATURES.md → drift alarm).~~ done at `df35fc4`
 25. Nightly race-loop CI job for the Rust thread-safe suite.
 

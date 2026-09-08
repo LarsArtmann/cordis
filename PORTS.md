@@ -28,9 +28,18 @@ All three ports share one architecture:
   associated `Config` (plus `FnPlugin` closures), a Zig comptime
   constructor (`TypedPlugin`). See `ROADMAP.md` for the documented
   divergences.
-- **Three golden scenarios, three runners.** `golden/scenario.txt`,
-  `scenario-events.txt` and `scenario-cascade.txt` are executed by the Go,
-  Rust and Zig test suites; each must emit the exact traces in
-  `golden/expected*.txt`, pinning the shared semantics across ports.
+- **Four golden scenarios, three runners.** `golden/scenario.txt`,
+  `scenario-events.txt`, `scenario-cascade.txt` and `scenario-dispatch.txt`
+  are executed by the Go and Rust test suites; Zig runs all but the
+  cascade scenario (pending a Zig cascade runner on top of its typed
+  registry — see `golden/README.md` for the per-scenario runner matrix).
+  Each runner must emit the exact traces in `golden/expected*.txt`,
+  pinning the shared semantics across ports. The Go loader additionally
+  pins its watch/reload lifecycle in a Go-only golden transcript
+  (`go/loader/testdata/watch-golden.txt`).
+- **Shared registration builder.** Go's `Resolver.RegisterType[C]` and
+  `ReplaceType[C]` (and hmr's `SwapType`) compose on one
+  `TypedRegistration` builder, so every typed registration path shares
+  the same decode/validation plumbing.
 
 See [ROADMAP.md](ROADMAP.md) for the parity matrix and planned work.

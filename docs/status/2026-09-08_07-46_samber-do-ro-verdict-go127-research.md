@@ -70,7 +70,7 @@ Nothing in the repository was damaged: no edits, no commits, no reverts.
 3. ~~Document in AGENTS.md which 1.27 feature(s) actually pin the `go 1.27` directive.~~ done (AGENTS.md and ROADMAP record synctest as the pinning 1.27 feature)
 4. Add a `goroutineleak` pprof assertion to drain/dispose/rollback tests.
 5. ~~Use `testing/synctest.Sleep` in `go/timer` tests where `time.Sleep` + `Wait` combos exist.~~ done (already done — timer suite rewritten on the virtual clock (51cddf2))
-6. Run `go fix` modernizers (`atomictypes`, `embedlit`, `slicesbackward`, `unsafesfuncs`).
+6. ~~Run `go fix` modernizers (`atomictypes`, `embedlit`, `slicesbackward`, `unsafesfuncs`).~~ done at `72e1505` (the named analyzers produced zero findings; rangeint/stringsseq/stringscutprefix/reflecttypefor/mapsloop applied)
 7. Consider `maphash.Hasher` for service/realm key derivation (design check first — current uint64 realm keys may be fine).
 8. Benchmark method vs free-function call paths (expect zero diff; verify).
 

@@ -163,7 +163,7 @@ execute M16, M22, unblock CI, then M24–M27.
    reproducible CI, documented as divergence.
 4. ~~M24: accessor/mixin system (Go).~~ done at `2fd2f2f`
 5. ~~M25: callable services + tracker (Go).~~ done at `053a72a`
-6. M26: `Fiber.Err()` (Go) — then use it in hmr rollback error detail.
+6. ~~M26: `Fiber.Err()` (Go) — then use it in hmr rollback error detail.~~ done at `8efd0f6`, `72e1505` (hmr rollback errors carry `Fiber.Err()` detail)
 7. ~~M26: `Await(ctx)` cancellation-aware await (Go).~~ done at `8efd0f6`
 8. ~~M26: `errors.AsType` sweep across go/.~~ done at `8efd0f6`
 9. ~~M26: typed-inject sugar (`Inject` with typed config).~~ done at `8efd0f6`
@@ -177,7 +177,7 @@ execute M16, M22, unblock CI, then M24–M27.
 16. ~~M27: release Rust `v0.2.0` (snapshot/status added).~~ done (pushed)
 17. ~~M27: parity-matrix generator script (PORTS.md from test inventory).~~ done at `df35fc4`
 18. ~~M27: zig package docs (doc comments on public decls).~~ done (doc comments present on public decls; the -femit-docs validation pass remains open)
-19. M27: release-cadence note in ROADMAP.md.
+19. ~~M27: release-cadence note in ROADMAP.md.~~ done (ROADMAP §Release cadence)
 20. ~~Rust lint pay-down (~210 findings; `cargo clippy --fix` applies ~132).~~ done at `6ba0d7d`
 21. ROADMAP.md: hmr native divergence entry (file-watch → factory swap; watcher layer
     owned by embedder).
@@ -190,14 +190,15 @@ execute M16, M22, unblock CI, then M24–M27.
 27. ~~Cancel/ignore stale runs; confirm no other hung runs remain.~~ done (stale runs cancelled; greens recorded)
 28. ~~Go: hmr — consider `Swap` option to preserve fiber identity vs new fiber (currently~~ done (package doc states old fiber disposed, fresh fiber starts (go/hmr/hmr.go))
     ~~new fiber, same entry — document explicitly in package doc).~~
-29. Go: hmr — add `hmr/reload` report to include per-entry failure detail once
-    `Fiber.Err()` exists.
-30. Go: loader — `Resolver.ReplaceType[C]` sugar (parity with `RegisterType`).
-31. Go: hmr — concurrency test: parallel `Swap` + `Tree.Create/Remove` storm.
-32. Rust: `internal/plugin` + `internal/update` events (M13 parity — Go has them,
-    Rust does not).
-33. Rust: status event emission for the root fiber covered? (root writes state in
-    `new_root` without emission — check upstream parity).
+29. ~~Go: hmr — add `hmr/reload` report to include per-entry failure detail once
+    `Fiber.Err()` exists.~~ done at `72e1505` (Swap failure returns the per-entry cause:
+    `hmr: entry <id> failed under the new implementation: <cause>`)
+30. ~~Go: loader — `Resolver.ReplaceType[C]` sugar (parity with `RegisterType`).~~ done at `72e1505`
+31. ~~Go: hmr — concurrency test: parallel `Swap` + `Tree.Create/Remove` storm.~~ done at `72e1505`
+32. ~~Rust: `internal/plugin` + `internal/update` events (M13 parity — Go has them,
+    Rust does not).~~ done at `75fb408`, `25ff5fb`
+33. ~~Rust: status event emission for the root fiber covered? (root writes state in
+    `new_root` without emission — check upstream parity).~~ done at `25ff5fb` (documented on `new_root`/`Context::new`, pinned by `root_fiber_birth_emits_no_status`)
 34. ~~Rust: snapshot — prune stale stash entries (currently replaced per id; growth~~ done (stash growth bounded and documented (9b27371))
     ~~bounded by distinct deleted plugins — acceptable, document).~~
 35. ~~Rust: `Registry::delete` doc now mentions stash/restore (done in delete_id doc —~~ done (delete_id doc mentions stash/restore)
@@ -207,7 +208,7 @@ execute M16, M22, unblock CI, then M24–M27.
 38. Zig: consider porting hmr equivalents only if roadmap demands (currently not
     planned — note in matrix as N/A with rationale).
 39. CI: consider `--locked`/`--frozen` for cargo (Cargo.lock IS committed — verify).
-40. CI: build.yml — Node version pin decision (see §g Q2).
+40. ~~CI: build.yml — Node version pin decision (see §g Q2).~~ done (build.yml pins a Node 24/26 matrix)
 41. ~~Docs: README (root) — add loader/hmr/snapshot to feature list.~~ done (docs-health pass README refreshed by the 2026-09-08 docs-health pass)
 42. ~~Docs: packages/core/README.md divergence note (fork rewrote it — ensure it~~ done (superseded — packages/core/README.md restored byte-identical to upstream (51cddf2))
     ~~explains why it differs from upstream).~~
@@ -246,11 +247,14 @@ execute M16, M22, unblock CI, then M24–M27.
 ## Resolution (annotated 2026-09-08, docs-health pass)
 
 36 of 50 §f items and 2 of 3 §g questions are resolved inline above.
-Item 6 is half-shipped: `Fiber.Err()` landed in `8efd0f6`; surfacing it in
-hmr rollback errors is still open (TODO_LIST). Remaining open: the
-yarn.lock decision (§g 2 → ROADMAP Open decisions), the ROADMAP hmr
-divergence entry (21), hmr error-detail/storm test/`ReplaceType` (29–31),
-Rust `internal/plugin`+`internal/update` events and root status emission
-(32–33), status-event doctests (36), the Zig hmr N/A matrix note (38),
-cargo `--locked` policy (39), Node pin decision (40), golangci-lint config
-pinning (47), and the release-cadence note (19).
+Item 6 is fully closed: `Fiber.Err()` landed in `8efd0f6` and hmr
+rollback errors carry its detail (`72e1505`). A second docs-health pass
+(2026-09-08, later) resolved 19, 29–33 and 40: the release-cadence note
+lives in ROADMAP, hmr per-entry failure detail shipped in the Swap error
+(`72e1505`), `ReplaceType` and the storm test landed (`72e1505`), Rust
+`internal/plugin`+`internal/update` events and the root-status verdict
+landed (`75fb408`, `25ff5fb`), and build.yml pins a Node 24/26 matrix.
+Remaining open: the yarn.lock decision (§g 2 → ROADMAP Open decisions),
+the ROADMAP hmr divergence entry (21), status-event doctests (36), the
+Zig hmr N/A matrix note (38), cargo `--locked` policy (39),
+golangci-lint version pinning (47).

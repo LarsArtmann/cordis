@@ -262,20 +262,20 @@ clippy pay-down → release tags.
 12. Close the `Member.Set` service-blip question: either document the
     restart-on-write semantics as final or implement update-in-place
     derivation.
-13. Fix the `IntervalFunc` goroutine lifetime (a slow callback can leak
-    the pump goroutine past disposal) or document the constraint.
+13. ~~Fix the `IntervalFunc` goroutine lifetime (a slow callback can leak
+    the pump goroutine past disposal) or document the constraint.~~ done at `72e1505` (pump-goroutine owns dispatch, re-checks stop signal)
 14. Zig: snapshot/restore + status events (Rust parity) — ROADMAP item.
 15. Zig: accessor/mixin equivalents — ROADMAP item.
-16. Zig: build.zig `-femit-docs` option so the docs pass runs.
-17. Zig std-gotchas section in AGENTS.md (unchecked half of the split
-    item).
-18. Scenario #4 golden: bail/serial/waterfall parity across ports.
+16. ~~Zig: build.zig `-femit-docs` option so the docs pass runs.~~ done at `75fb408` (`zig build docs` gate)
+17. ~~Zig std-gotchas section in AGENTS.md (unchecked half of the split
+    item).~~ done at `75fb408`
+18. ~~Scenario #4 golden: bail/serial/waterfall parity across ports.~~ done at `72e1505`
 19. ~~hmr: document swap-fiber-identity semantics explicitly (new fiber,~~ done (go/hmr package doc states the swap fiber-identity semantics)
     ~~same entry) in the package doc.~~
-20. hmr: surface `Fiber.Err()` detail in rollback errors (now possible
-    post-M26).
-21. hmr: concurrency storm test — parallel `Swap` + `Tree.Create/Remove`.
-22. loader: `Resolver.ReplaceType[C]` sugar (parity with `RegisterType`).
+20. ~~hmr: surface `Fiber.Err()` detail in rollback errors (now possible
+    post-M26).~~ done at `72e1505`
+21. ~~hmr: concurrency storm test — parallel `Swap` + `Tree.Create/Remove`.~~ done at `72e1505`
+22. ~~loader: `Resolver.ReplaceType[C]` sugar (parity with `RegisterType`).~~ done at `72e1505`
 23. Go: consider a debug build tag that turns core-lock misuse into panics
     (Rust thread-safe found two deadlocks this way).
 24. ~~Sweep: confirm no `TODO`/debug prints in go/hmr, go/accessor,~~ done (no TODOs or debug prints in go/hmr, go/accessor, go/callable, rust/src/snapshot.rs)
@@ -320,10 +320,10 @@ clippy pay-down → release tags.
     paths majors — upstream may have good reasons to bump later; note it).
 44. Run `scripts/parity-matrix.sh` output into PORTS.md as a committed
     table (regenerate-on-change, or keep on-demand — decide).
-45. Timer: property test for debounce/throttle windows (randomized call
-    sequences vs expected fire counts).
-46. Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig
-    roundtrip with random shapes).
+45. ~~Timer: property test for debounce/throttle windows (randomized call
+    sequences vs expected fire counts).~~ done at `72e1505`
+46. ~~Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig
+    roundtrip with random shapes).~~ done at `fa45896`
 47. Rust: `Registry` docs — verify the delete/stash/restore contract
     renders correctly and is discoverable from the crate docs front page.
 48. Rust: consider moving `settle_state` emission behind the drain so
@@ -337,10 +337,10 @@ clippy pay-down → release tags.
 
 ## g) QUESTIONS I CANNOT ANSWER MYSELF
 
-1. **Build workflow policy while upstream's hmr suite is red**: gate on
+1. ~~**Build workflow policy while upstream's hmr suite is red**: gate on
    Ports only (current de-facto), mark Build `continue-on-error` with an
    annotation, or cherry-pick upstream's unmerged `3-stage-hmr` fix into
-   our TS tree now? I gated on Ports and left Build red.
+   our TS tree now? I gated on Ports and left Build red.~~ done (superseded — the fork replayed 3-stage-hmr (b4650df); Build and Ports both green in CI on 3da7d0f)
 2. **Dependency pinning policy for the TS workspace**: upstream resolves
    floating ranges on every CI run (no lockfile, `--no-immutable`). Should
    the fork commit a generated `yarn.lock` (reproducible CI, small
@@ -355,15 +355,19 @@ Waiting for instructions.
 
 ## Resolution (annotated 2026-09-08, docs-health pass)
 
-24 of 50 §f items resolved inline above (docs items 9/10/33 by this pass;
-clippy rounds 5–8 by `51cddf2`). Still open: GitHub Release pages (3),
-yarn.lock policy (4), `Member.Set` blip semantics (12), IntervalFunc
-goroutine lifetime (13), Zig snapshot/status + accessor/mixin +
-`-femit-docs` + std-gotchas (14–17), golden scenarios #4/#5/#6 (18, 26,
-27), hmr error detail + storm test (20–21), `ReplaceType` (22), debug
-lock-misuse tag (23), upstream hmr findings PR (30), cargo `--locked`
-(28), dependabot decision (41), CI coverage gate (42), `packages/create`
-bump note (43), committed parity table (44), timer property test (45),
-loader config fuzz (46), Registry docs render (47), `settle_state`
-emission placement (48), cadence execution (49), and §g Q2 (yarn.lock)
-plus Q3 (release surface) — user-gated, parked in ROADMAP Open decisions.
+24 of 50 §f items resolved inline above (docs items 9/10/33 by that pass;
+clippy rounds 5–8 by `51cddf2`). A second docs-health pass (2026-09-08,
+later) resolved 13, 16–18, 20–22, 45, 46 and §g Q1: the IntervalFunc
+pump fix, the Zig docs gate + AGENTS gotchas (`75fb408`), golden #4
+(`72e1505`), hmr error detail + storm test + `ReplaceType` (`72e1505`),
+the timer property test (`72e1505`), the loader JSON fuzz (`fa45896`),
+and the 3-stage-hmr replay closing the Build-policy question (both
+workflows green in CI on `3da7d0f`). Still open: GitHub Release pages (3),
+yarn.lock policy (4), `Member.Set` blip semantics (12), Zig
+snapshot/status + accessor/mixin (14–15), golden scenarios #5/#6 (26,
+27), debug lock-misuse tag (23), upstream hmr findings PR (30), cargo
+`--locked` (28), dependabot decision (41), CI coverage gate (42),
+`packages/create` bump note (43), committed parity table (44), Registry
+docs render (47), `settle_state` emission placement (48), cadence
+execution (49), and §g Q2 (yarn.lock) plus Q3 (release surface) —
+user-gated, parked in ROADMAP Open decisions.

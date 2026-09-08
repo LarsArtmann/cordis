@@ -259,12 +259,12 @@ second backlog._
 
 **Now / unblock everything:**
 
-1. Decide + execute the push (`--force-with-lease`; rebase rewrote 32
-   commits) — ROADMAP Open decisions. _(user-gated)_
-2. After push: watch build.yml (incl. the `3-stage-hmr` replay) and
-   ports.yml; record green runs. _(TODO_LIST)_
-3. Reconcile ROADMAP/FEATURES one week out: if CI confirms the replay,
-   soften the "gate on Ports" gotcha in AGENTS.md.
+1. ~~Decide + execute the push (`--force-with-lease`; rebase rewrote 32
+   commits) — ROADMAP Open decisions.~~ done (pushed; `main` == `origin/main` at `3da7d0f`) _(user-gated)_
+2. ~~After push: watch build.yml (incl. the `3-stage-hmr` replay) and
+   ports.yml; record green runs.~~ done (Build 34267336684 + Ports 34267336671 green on `3da7d0f`)
+3. ~~Reconcile ROADMAP/FEATURES one week out: if CI confirms the replay,
+   soften the "gate on Ports" gotcha in AGENTS.md.~~ done (CI confirmed 2026-09-08; AGENTS gotcha updated by the second docs-health pass)
 
 **Parity (the fork's real work):**
 
@@ -272,58 +272,54 @@ second backlog._
    reload), #121 (include journal), #123 (bare specifiers), #128
    (`hmr.watch()`) and the replayed commit-based `EntryTree.commit()`
    semantics. _(ROADMAP Go §1)_
-5. Golden scenario #4: bail/serial/waterfall dispatch parity across all
-   three runners. _(TODO_LIST)_
+5. ~~Golden scenario #4: bail/serial/waterfall dispatch parity across all
+   three runners.~~ done at `72e1505`
 6. Logger golden scenario. _(ROADMAP Go §3)_
-7. Golden scenario candidate: loader watch/reload trace. _(TODO_LIST)_
+7. ~~Golden scenario candidate: loader watch/reload trace.~~ done at `72e1505` (Go-only watch transcript, `go/loader/testdata/watch-golden.txt`)
 
 **Go quality:**
 
-8. Push `go/loader` coverage from 74.6% toward the ~90% bar. _(TODO_LIST)_
-9. `go fix ./...` modernizer sweep under Go 1.27. _(TODO_LIST)_
-10. hmr: surface `Fiber.Err()` detail in rollback errors. _(TODO_LIST)_
-11. hmr: concurrency storm test (`Swap` vs `Tree.Create/Remove`).
-    _(TODO_LIST)_
-12. loader: `Resolver.ReplaceType[C]` sugar. _(TODO_LIST)_
-13. `IntervalFunc` pump-goroutine lifetime: fix or document. _(TODO_LIST)_
-14. Timer property test: debounce/throttle fire counts. _(TODO_LIST)_
-15. Regression tests for the wrapped error messages (accessor/tree).
-    _(TODO_LIST)_
-16. `Tree.Await`: surface the fiber error or document the discard as final.
-    _(TODO_LIST)_
+8. ~~Push `go/loader` coverage from 74.6% toward the ~90% bar.~~ done at `72e1505` (90.8%, recorded in AGENTS.md)
+9. ~~`go fix ./...` modernizer sweep under Go 1.27.~~ done at `72e1505`
+10. ~~hmr: surface `Fiber.Err()` detail in rollback errors.~~ done at `72e1505`
+11. ~~hmr: concurrency storm test (`Swap` vs `Tree.Create/Remove`).~~ done at `72e1505`
+12. ~~loader: `Resolver.ReplaceType[C]` sugar.~~ done at `72e1505`
+13. ~~`IntervalFunc` pump-goroutine lifetime: fix or document.~~ done at `72e1505`
+14. ~~Timer property test: debounce/throttle fire counts.~~ done at `72e1505`
+15. ~~Regression tests for the wrapped error messages (accessor/tree).~~ done at `72e1505`
+16. ~~`Tree.Await`: surface the fiber error or document the discard as final.~~ done at `72e1505` (routes failures into the entry error sink)
 
 **Rust quality:**
 
-17. `internal/plugin` + `internal/update` interception events. _(TODO_LIST)_
-18. Root-fiber status emission: cover or document (`FiberData::new_root`,
-    `rust/src/fiber.rs:82`). _(TODO_LIST)_
-19. `significant_drop` cleanup, then gate `cargo clippy --features
-    thread-safe` in Ports. _(TODO_LIST)_
-20. `cargo-llvm-cov` baseline next to Go's numbers. _(TODO_LIST)_
-21. `cargo bench` to substantiate or hedge the "30% faster small
-    allocations" ROADMAP claim. _(TODO_LIST)_
+17. ~~`internal/plugin` + `internal/update` interception events.~~ done at `75fb408`, `25ff5fb`
+18. ~~Root-fiber status emission: cover or document (`FiberData::new_root`,
+    `rust/src/fiber.rs:82`).~~ done at `25ff5fb`
+19. ~~`significant_drop` cleanup, then gate `cargo clippy --features
+    thread-safe` in Ports.~~ done at `25ff5fb`
+20. ~~`cargo-llvm-cov` baseline next to Go's numbers.~~ done at `25ff5fb` (86.4% lines)
+21. ~~`cargo bench` to substantiate or hedge the "30% faster small
+    allocations" ROADMAP claim.~~ done at `25ff5fb`
 
 **Zig quality:**
 
-22. Registry `has`/`delete` by `TypedPlugin` identity. _(TODO_LIST)_
-23. `zig build -femit-docs` doc-comment pass. _(TODO_LIST)_
-24. AGENTS.md Zig 0.16 std-gotchas section. _(TODO_LIST)_
+22. ~~Registry `has`/`delete` by `TypedPlugin` identity.~~ done at `75fb408`
+23. ~~`zig build -femit-docs` doc-comment pass.~~ done at `75fb408` (`zig build docs` gate)
+24. ~~AGENTS.md Zig 0.16 std-gotchas section.~~ done at `75fb408`
 
 **CI hardening:**
 
-25. CI job running `nix flake check`. _(TODO_LIST)_
-26. `.prettierrc` (printWidth 100) + `prettier --check` + `yarn build`
-    before tests in build.yml. _(TODO_LIST)_
-27. CI guards: `packages/**` byte-parity vs upstream; dprint excludes cover
-    `packages/**`. _(TODO_LIST)_
-28. Align the flake gate's `-race -count=1` with ports.yml's `-count=3`.
-    _(TODO_LIST)_
-29. Gitignore `tmp-*` debris. _(TODO_LIST)_
+25. ~~CI job running `nix flake check`.~~ done at `fa45896`
+26. ~~`.prettierrc` (printWidth 100) + `prettier --check` + `yarn build`
+    before tests in build.yml.~~ **Won't implement — no prettier-stable style exists to pin; upstream style is CI-enforced by the `upstream-parity` semantic guard (`fa45896`).**
+27. ~~CI guards: `packages/**` byte-parity vs upstream; dprint excludes cover
+    `packages/**`.~~ done at `fa45896`
+28. ~~Align the flake gate's `-race -count=1` with ports.yml's `-count=3`.~~ done at `fa45896`
+29. ~~Gitignore `tmp-*` debris.~~ done at `fa45896`
 
 **TS / upstream:**
 
-30. Install-from-scratch TS verification (`rm -rf node_modules && yarn
-    install && yarn build && yarn test`). _(TODO_LIST)_
+30. ~~Install-from-scratch TS verification (`rm -rf node_modules && yarn
+    install && yarn build && yarn test`).~~ done at `fa45896` (248/248)
 31. eslint/oxlint: fix the invocation mismatch, drive findings to ~0.
     _(source: 04-32 §f4–5)_
 32. Watch upstream `3-stage-hmr` merge; drop the fork's replay when
@@ -331,9 +327,9 @@ second backlog._
 
 **Docs / process:**
 
-33. Review CONTRIBUTING.md; document the "upstream semantics + fork
-    formatting" rebase policy; add the flake app quickstart. _(TODO_LIST)_
-34. Loader: fuzz the JSON config layer. _(TODO_LIST)_
+33. ~~Review CONTRIBUTING.md; document the "upstream semantics + fork
+    formatting" rebase policy; add the flake app quickstart.~~ done at `fa45896`
+34. ~~Loader: fuzz the JSON config layer.~~ done at `fa45896`
 35. Cut GitHub Release pages for `go/v0.1.0` / `rust/v0.2.0`. _(source:
     03-03 §f3)_
 36. Fix the docs-health annotate scripts: `###`-aware section scoping;
@@ -347,7 +343,7 @@ second backlog._
 
 39. yarn.lock policy (commit generated lockfile vs lock-free).
 40. TS toolchain stance (track upstream exactly vs fork-pinned).
-41. hmr fixture style (byte-identical vs style-agnostic specs).
+41. ~~hmr fixture style (byte-identical vs style-agnostic specs).~~ done (resolved 2026-09-08: fixtures stay byte-identical to upstream, CI-enforced; ROADMAP open decision closed)
 42. One-session-per-worktree convention for concurrent agents.
 43. Oxlint policy for upstream TS (report-only today).
 44. Generic-method API deprecation timeline (Go phase 3).

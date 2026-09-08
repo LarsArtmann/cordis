@@ -358,14 +358,14 @@ reference the medium task above.
 | F26.4 | Typed-inject sugar: `Plugin.InjectTypes[T1, T2]()`                                   | 12m | —            |
 | F26.5 | PORTS.md cross-port API comparison table                                             | 12m | —            |
 | F26.6 | Root README badges + port pitch paragraph                                            | 10m | —            |
-| F26.7 | AGENTS.md Zig 0.16 std gotchas (Io.Dir.cwd, ArrayList .empty, WriteFiles+@embedFile) | 10m | —            |
+| ~~F26.7~~ | ~~AGENTS.md Zig 0.16 std gotchas (Io.Dir.cwd, ArrayList .empty, WriteFiles+@embedFile)~~ done at `75fb408` | 10m | —            |
 | F26.8 | Batch semantics + upstream deterministic-order notes; vet/lint/test green            | 12m | F26.1–4      |
-| F27.1 | CI job running `nix flake check -L`                                                  | 10m | —            |
+| ~~F27.1~~ | ~~CI job running `nix flake check -L`~~ done at `fa45896`                                                  | 10m | —            |
 | F27.2 | Go benchmark skeleton: drain-queue throughput (testing.B)                            | 12m | —            |
 | F27.3 | Rust + Zig benchmark stubs + README results table skeleton                           | 10m | F27.2        |
 | F27.4 | LIFO rollback property test (Go, randomized registration sequences)                  | 12m | —            |
 | F27.5 | Releases: tag `go/v0.1.0`, bump+tag Rust `v0.2.0`, Zig version note                  | 12m | —            |
-| F27.6 | `zig build -femit-docs` pass; fix broken doc comments                                | 12m | —            |
+| ~~F27.6~~ | ~~`zig build -femit-docs` pass; fix broken doc comments~~ done at `75fb408` (`zig build docs` gate)                                | 12m | —            |
 | F27.7 | Stale-LSP/AsType sweep verification (builds clean)                                   | 5m  | —            |
 | F27.8 | Parity-matrix generator from FEATURES.md + weekly run cadence note                   | 12m | —            |
 
@@ -402,6 +402,15 @@ Generated 2026-09-04 15:42 CEST._
 ---
 
 ## Resolution (annotated 2026-09-08, docs-health pass)
+
+All 27 M-rows and the F-tier are resolved via the resolution appendix
+(decomposition argument + named open exceptions). Second docs-health
+pass (later the same day) struck the remaining exceptions F26.7
+(`75fb408`), F27.1 (`fa45896`) and F27.6 (`75fb408`). Still open:
+F27.3's Zig half (Rust benches landed in `25ff5fb`; no Zig bench harness
+exists) and F27.8's cadence half (the parity-matrix generator shipped in
+`df35fc4`; the weekly run-cadence note is superseded by the now-green
+remote CI).
 
 All 27 medium tasks above are resolved inline (status per row). The ~150
 fine-grained `F*.*` rows in section 4 are ≤12-minute decompositions of

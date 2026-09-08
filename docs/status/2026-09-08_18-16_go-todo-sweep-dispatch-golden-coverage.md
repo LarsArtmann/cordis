@@ -146,10 +146,10 @@ Each item: what, evidence, scope.
    `Await`'s `recordError` interleave is serialized by `t.mu` but the
    "latest wins" semantics are not stated in docs or pinned by a test.
    Effort: S.
-5. **Rust thread-safe clippy: 19 pre-existing `src/` findings left alone.**
-   Verified pre-existing (all in `core.rs`, `events.rs`, `fiber.rs`,
+5. ~~Rust thread-safe clippy: 19 pre-existing `src/` findings left alone.~~
+   ~~Verified pre-existing (all in `core.rs`, `events.rs`, `fiber.rs`,
    `plugin.rs`, `service.rs`, `snapshot.rs`; none in tests I touched) and
-   not gated per AGENTS.md. Still open by design; listed for completeness.
+   not gated per AGENTS.md. Still open by design; listed for completeness.~~ done at `25ff5fb` (17 → 0, gated in flake + Ports)
 6. **`go fix` sweep was smaller than the TODO item implied.**
    The item named `embedlit`, `unsafefuncs`, `atomictypes`; those three
    analyzers produced zero findings on this codebase — the applied fixers
@@ -307,56 +307,55 @@ Rust/Zig/Repo sections were explicitly out of scope.
 Brainstorm ranked by impact (feeds docs-health HARVEST; not a commitment).
 Format: task — Impact / Effort / Category.
 
-1. Push the branch (user-gated, force-with-lease per repo policy) and
+1. ~~Push the branch (user-gated, force-with-lease per repo policy) and
    verify build.yml + ports.yml green on GitHub, including the replayed
-   `3-stage-hmr` line. — Critical / S / Quality
-2. Add a CI job running `nix flake check` so the port gate is enforced
+   `3-stage-hmr` line.~~ done (pushed; Build 34267336684 + Ports 34267336671 green on `3da7d0f`) — Critical / S / Quality
+2. ~~Add a CI job running `nix flake check` so the port gate is enforced
    remotely (ports.yml has no nix step; all flake verification is currently
-   local-only). — Critical / M / Quality
-3. Install-from-scratch TS verification:
-   `rm -rf node_modules && yarn install && yarn build && yarn test`. —
+   local-only).~~ done at `fa45896` — Critical / M / Quality
+3. ~~Install-from-scratch TS verification:
+   `rm -rf node_modules && yarn install && yarn build && yarn test`.~~ done at `fa45896` (248/248) —
    High / M / Quality
 4. Zig: run scenario #3 (cascade) — prerequisite: registry identity.
    Decision needed first (see g1). — High / M–L / Feature
-5. Zig: registry `has`/`delete` keyed by `TypedPlugin` identity (also
-   unblocks 4). — High / M / Feature
-6. Rust: `internal/plugin` + `internal/update` interception events (M13
-   parity; Go has them). — High / M / Feature
-7. Rust: verify/document root-fiber status emission
-   (`FiberData::new_root` bypasses `settle_state`; `rust/src/fiber.rs:82`).
+5. ~~Zig: registry `has`/`delete` keyed by `TypedPlugin` identity (also
+   unblocks 4).~~ done at `75fb408` — High / M / Feature
+6. ~~Rust: `internal/plugin` + `internal/update` interception events (M13
+   parity; Go has them).~~ done at `75fb408`, `25ff5fb` — High / M / Feature
+7. ~~Rust: verify/document root-fiber status emission
+   (`FiberData::new_root` bypasses `settle_state`; `rust/src/fiber.rs:82`).~~ done at `25ff5fb`
    — Medium / S / Quality
-8. Rust: fix or allowlist `significant_drop` findings under
-   `thread-safe`, then gate `cargo clippy --features thread-safe` in Ports.
+8. ~~Rust: fix or allowlist `significant_drop` findings under
+   `thread-safe`, then gate `cargo clippy --features thread-safe` in Ports.~~ done at `25ff5fb`
    — High / M / Quality
-9. Rust: `cargo-llvm-cov` coverage baseline next to the Go numbers. —
+9. ~~Rust: `cargo-llvm-cov` coverage baseline next to the Go numbers.~~ done at `25ff5fb` —
    Medium / M / Quality
-10. Rust: `cargo bench` to substantiate or hedge the "up to 30% faster
-    small allocations" ROADMAP claim. — Medium / M / Quality
-11. Zig: `-femit-docs` pass; fix broken doc comments. — Medium / S / Docs
-12. Zig: record 0.16 std gotchas in AGENTS.md (`std.Io.Dir.cwd`,
-    `ArrayListUnmanaged .empty`, anonymous non-zig imports). — Medium / S /
+10. ~~Rust: `cargo bench` to substantiate or hedge the "up to 30% faster
+    small allocations" ROADMAP claim.~~ done at `25ff5fb` — Medium / M / Quality
+11. ~~Zig: `-femit-docs` pass; fix broken doc comments.~~ done at `75fb408` — Medium / S / Docs
+12. ~~Zig: record 0.16 std gotchas in AGENTS.md (`std.Io.Dir.cwd`,
+    `ArrayListUnmanaged .empty`, anonymous non-zig imports).~~ done at `75fb408` — Medium / S /
     Docs
-13. CI: `.prettierrc` (printWidth 100) + `prettier --check` + `yarn build`
-    before tests in build.yml. — High / S / Quality
-14. CI guards: `packages/**` stays byte-identical to upstream;
-    `dprint.json` excludes keep covering `packages/**`. — High / M / Quality
-15. Gitignore `tmp-*` test debris. — Low / S / Cleanup
-16. Review CONTRIBUTING.md; add flake app list to quickstart; document the
-    "upstream semantics + fork formatting" rebase policy. — Medium / M /
+13. ~~CI: `.prettierrc` (printWidth 100) + `prettier --check` + `yarn build`
+    before tests in build.yml.~~ **Won't implement — no prettier-stable style exists to pin; upstream style CI-enforced (`fa45896`)** — High / S / Quality
+14. ~~CI guards: `packages/**` stays byte-identical to upstream;
+    `dprint.json` excludes keep covering `packages/**`.~~ done at `fa45896` — High / M / Quality
+15. ~~Gitignore `tmp-*` test debris.~~ done at `fa45896` — Low / S / Cleanup
+16. ~~Review CONTRIBUTING.md; add flake app list to quickstart; document the
+    "upstream semantics + fork formatting" rebase policy.~~ done at `fa45896` — Medium / M /
     Docs
-17. Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig
-    roundtrip with random shapes). — Medium / M / Quality
-18. Align local gate with CI race canary: flake checks `-race -count=1`
-    vs ports.yml `-count=3`. — Medium / S / Quality
+17. ~~Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig
+    roundtrip with random shapes).~~ done at `fa45896` — Medium / M / Quality
+18. ~~Align local gate with CI race canary: flake checks `-race -count=1`
+    vs ports.yml `-count=3`.~~ done at `fa45896` — Medium / S / Quality
 19. Logger golden scenario (core logger service has none). — Medium / M /
     Quality
 20. Rename dispatch DSL `returns=` → `delta=` (spec + three runners +
     regenerate) before more scenarios accrete. — Medium / S / Cleanup
-21. Add per-scenario runner matrix to `golden/README.md` (or give Zig the
-    cascade runner) to kill the oversell. — High / S / Docs
-22. Guard: golden files must be git-tracked; fail `nix flake check` fast
-    with a clear message when untracked (prevents today's NotFound class).
-    — Medium / S / Quality
+21. ~~Add per-scenario runner matrix to `golden/README.md` (or give Zig the
+    cascade runner) to kill the oversell.~~ done (second docs-health pass: matrix added; Zig cascade runner still open, see 4) — High / S / Docs
+22. ~~Guard: golden files must be git-tracked; fail `nix flake check` fast
+    with a clear message when untracked (prevents today's NotFound class).~~ superseded — AGENTS.md carries the gotcha; the tracked-ness guard remains an idea — Medium / S / Quality
 23. Document erraudit's exact invocation + binary build date next to the
     green claim in AGENTS.md. — Medium / S / Docs
 24. Pin the editor/gopls toolchain to the flake's Go 1.27 so LSP output is
@@ -400,7 +399,7 @@ Format: task — Impact / Effort / Category.
     ROADMAP's bidirectional-feedback section. — Low / S / Docs
 43. Upstreamable PR: make hmr spec replaces style-agnostic regexes. —
     Medium / M / Cleanup
-44. CI hash-pin: hmr fixtures byte-identical to upstream (cheap guard).
+44. ~~CI hash-pin: hmr fixtures byte-identical to upstream (cheap guard).~~ done at `fa45896`
     — Medium / S / Quality
 45. Move include test tmp-* files to os.tmpdir (upstreamable; they litter
     fixtures on failure) + cleanup-on-failure hardening. — Low / M /
@@ -410,10 +409,10 @@ Format: task — Impact / Effort / Category.
 47. Add a debug/CI flag for the synctest bubble policy (lint or review
     checklist item) so new timing tests keep using virtual time. — Low /
     S / Quality
-48. `go/README.md`: mention the four golden scenarios and the watch
-    golden transcript. — Low / S / Docs
-49. PORTS.md: record `TypedRegistration` as the shared registration
-    builder in the port-architecture section. — Low / S / Docs
+48. ~~`go/README.md`: mention the four golden scenarios and the watch
+    golden transcript.~~ done (second docs-health pass) — Low / S / Docs
+49. ~~PORTS.md: record `TypedRegistration` as the shared registration
+    builder in the port-architecture section.~~ done (second docs-health pass) — Low / S / Docs
 50. Consider a dispatch-scenario "empty event waterfall" op (terminal-only
     run) — currently untested in the golden, covered only by port unit
     tests. — Low / S / Quality
@@ -444,3 +443,18 @@ Format: task — Impact / Effort / Category.
 _Report generated per the status-report skill; format override honored:
 user explicitly requested Markdown (`.md`) instead of the skill's HTML
 default. Section (f) is HARVEST input for `TODO_LIST.md`/`ROADMAP.md`._
+
+---
+
+## Resolution (annotated 2026-09-08, second docs-health pass)
+
+§f items 1–3, 5–18 (13 = Won't implement), 21, 22, 44, 48–49 and §b5
+carry inline verdicts above (`72e1505` for this session's Go work as
+committed, `75fb408`, `25ff5fb`, `fa45896`, green CI on `3da7d0f`).
+Still open, routed: the Zig cascade decision + runner (§f4/§g1 →
+TODO_LIST + ROADMAP), the logger golden (§f19 → ROADMAP), the dispatch
+DSL rename and golden-quality ideas (§f20, §f25–30), erraudit invocation
+doc (§f23), machine/toolchain items (§f24, §f31–36), Go hygiene and
+design questions (§f37–39, §f47, §f50), upstream tracking and goodwill
+PRs (§f40–43, §f45), yarn.lock policy (§f46 → ROADMAP). §g questions
+remain open where user-gated.

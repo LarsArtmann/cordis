@@ -68,6 +68,9 @@ Divergences from TS behavior, by design:
   _construction_ — both match "one plugin definition, one runtime".
 - Zig's `TypedPlugin` registry identity is the address of the comptime
   view embedded in the returned type.
+- Rust rejects root-fiber updates with a typed `Error::RootUpdate` where
+  Go returns a plain error string; both roll the root scope back in place
+  with its identity intact.
 - String event names are not restricted in code, but the convention is
   that only the framework's `internal/` namespace uses them; application
   events should be typed.
@@ -129,8 +132,6 @@ opens for the ports are tracked in the Go section above.
 
 ### Open decisions (user-gated)
 
-- **Push policy:** local `main` diverged from `origin/main` after the
-  rebase; completing the sync needs force-with-lease approval.
 - **`yarn.lock` policy:** commit a generated lockfile (reproducible CI) vs
   stay lock-free tracking upstream; a missing lockfile broke installs
   twice in fork history.
@@ -146,6 +147,10 @@ opens for the ports are tracked in the Go section above.
 - **One-session-per-worktree convention** for concurrent agents.
 - **Oxlint policy for upstream TS** (report-only today).
 - **Generic-method API deprecation timeline** (see Go section).
+- **Coverage and bench policy:** make the measured baselines (Go ≈90%,
+  Rust 86.4%) enforced gates with a floor, and keep per-port bench
+  baselines separate until one shared harness methodology exists, or
+  record-only?
 
 ### Release cadence
 

@@ -104,24 +104,24 @@
 12. ~~Re-measure coverage; fix or re-confirm "~85%" in AGENTS.md.~~ done (docs-health pass measured 2026-09-08 — core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6%)
 
 **P1 — CI / build hermeticity**
-13. Pin `go-version: 1.27.x` in ports.yml or write down the `stable` policy + failure mode.
+13. ~~Pin `go-version: 1.27.x` in ports.yml or write down the `stable` policy + failure mode.~~ done (stable policy recorded in ROADMAP; 1.26-refusal failure mode in AGENTS.md)
 14. Add a pinned golangci-lint setup (action or nix) — the Lint step currently assumes the runner image; first green run is still pending per ROADMAP.
 15. Confirm what `actions/setup-go` `stable` resolves to at run time; add a step echoing `go version`.
 16. `nix flake check` full pass once the tree is clean; verify `aarch64-linux`/`aarch64-darwin` evaluate with `go_1_27`.
-17. Document in AGENTS.md that `nix build .#checks.*` uses the live worktree (`builtins.path`) and works on dirty trees — learned this session, written nowhere.
+17. ~~Document in AGENTS.md that `nix build .#checks.*` uses the live worktree (`builtins.path`) and works on dirty trees — learned this session, written nowhere.~~ done (AGENTS.md carries the untracked-files/live-tree gotcha)
 18. Document gofmt-vs-dprint split (dprint has no Go plugin; gofmt/golangci-lint own go/ formatting).
 19. Consider a `golangci-lint` config file (currently defaults) reviewed against the how-to-golang required stack.
-20. Add the golden canary (×2) as a flake check step, mirroring ports.yml.
+20. ~~Add the golden canary (×2) as a flake check step, mirroring ports.yml.~~ done (the flake go check runs the full `go test -race -count=3` suite, goldens included)
 
 **P2 — Go 1.27 follow-through**
-21. Run `go fix ./...` under 1.27; triage embedlit/unsafefuncs/atomictypes/slicesbackward suggestions.
-22. `reflect.TypeFor[T]()` migration in typed.go (3 sites; kills the gopls hints).
+21. ~~Run `go fix ./...` under 1.27; triage embedlit/unsafefuncs/atomictypes/slicesbackward suggestions.~~ done at `72e1505` (the named analyzers: zero findings; rangeint/stringsseq/stringscutprefix/reflecttypefor/mapsloop applied)
+22. ~~`reflect.TypeFor[T]()` migration in typed.go (3 sites; kills the gopls hints).~~ done at `72e1505`
 23. Silence gopls `unusedparams` honestly (golden_test.go:131 `realm`, context.go:86 `name`) — rename to `_` or justify.
 24. Fix `infertypeargs` hints (coverage_test.go:291, accessor.go:105).
-25. Bench `bench_test.go` on 1.26.7 vs 1.27.1; record numbers in AGENTS.md (substantiate or soften the alloc claim).
+25. ~~Bench `bench_test.go` on 1.26.7 vs 1.27.1; record numbers in AGENTS.md (substantiate or soften the alloc claim).~~ done at `25ff5fb` (interleaved A/B, ROADMAP numbers)
 26. Investigate the ~1.0 s race-mode package overhead in the synctest timer suite (sandbox numbers).
 27. Prototype `goroutineleak` profile as an opt-in leak gate in one package; keep or document-reject.
-28. `errors.AsType[E]` modernization sweep across go/ (go-error-modernization skill; avoid the sentinel-matching cargo cult).
+28. ~~`errors.AsType[E]` modernization sweep across go/ (go-error-modernization skill; avoid the sentinel-matching cargo cult).~~ done at `8efd0f6`, `72e1505`
 29. `go mod tidy` under 1.27 (expect no-op; verify new require-block normalization doesn't touch the dep-free module).
 30. Convert `loader/watch_test.go` to a synctest bubble (real-interval poll loop) if the fs-side permits.
 31. Evaluate synctest for `stdctx_test.go` (StdContext renewal timing) and the remaining real-time guards (fiber_test.go:95, coverage_test.go:248).
@@ -131,7 +131,7 @@
 35. Compile-probe recipe for the "revisit generic methods" clause (a tiny example proving the collision and the interface limitation, committed as a comment-scoped note or test).
 36. Decide + document minimum-toolchain policy for consumers of the go module (go.mod 1.27 gate) in go/README.md.
 37. Check the module tagging/proxy story for the `go/` submodule (does the fork tag it at all?).
-38. Split-brain scan of parity matrix rows vs code (docs-health VERIFY), especially after the foreign rust commits.
+38. ~~Split-brain scan of parity matrix rows vs code (docs-health VERIFY), especially after the foreign rust commits.~~ done (docs-health VERIFY passes 2026-09-08 ×3; matrix corrected against code)
 39. Add one new deterministic assertion the old real-clock suite could never make (e.g. debounce collapse of N bursts) — turn the synctest win into coverage, not just speed.
 
 **P3 — Rust / Zig (untouched this session; noted state only)**
@@ -139,15 +139,15 @@
 41. Review/coordinate the foreign unstaged `rust/src/*` modifications before they get committed.
 42. Zig ROADMAP items remain open (registry view, serial/waterfall/parallel dispatch, RAII disposers, batch, effect labels).
 43. Rust ROADMAP items remain open (parallel dispatch, Batch API `Context::batch`, config validation).
-44. Re-run `nix build .#checks.*.rust` and `.#checks.*.zig` after the index resolves (they were not run this session).
-45. Kernovia convergence commit (`a5f610d`) mentions upstream issues #1/#2 — verify those upstream items are reflected in the ports' ROADMAP.
+44. ~~Re-run `nix build .#checks.*.rust` and `.#checks.*.zig` after the index resolves (they were not run this session).~~ done (`nix flake check` green across sessions on 2026-09-08)
+45. ~~Kernovia convergence commit (`a5f610d`) mentions upstream issues #1/#2 — verify those upstream items are reflected in the ports' ROADMAP.~~ done (ROADMAP §Kernovia convergence records the bidirectional feedback)
 
 **P4 — smaller hygiene**
-46. Confirm ROADMAP "Repo: first green ports.yml run" gets unblocked post-resolution (it needs a push — user-gated).
-47. Verify `golden/README.md` (foreign-staged) still matches the GOLDEN_UPDATE workflow description.
-48. Document GOCACHE precedence (flake devShell GOCACHE vs machine's /tmp override) — two truths, one gotcha paragraph.
-49. Confirm `.github/workflows/build.yml` (foreign-staged) doesn't regress the TS Build workflow's yarn install semantics (upstream-tracking rule).
-50. Review whether `Member[V]` nil-receiver semantics (`Set` on nil returns ErrReadOnlyAccessor) are test-covered — noticed while reading accessor.go, never checked.
+46. ~~Confirm ROADMAP "Repo: first green ports.yml run" gets unblocked post-resolution (it needs a push — user-gated).~~ done (pushed; Build + Ports green on `3da7d0f`)
+47. ~~Verify `golden/README.md` (foreign-staged) still matches the GOLDEN_UPDATE workflow description.~~ done (workflow matches; runner matrix added by the 2026-09-08 docs pass)
+48. ~~Document GOCACHE precedence (flake devShell GOCACHE vs machine's /tmp override) — two truths, one gotcha paragraph.~~ done (AGENTS.md environment gotcha)
+49. ~~Confirm `.github/workflows/build.yml` (foreign-staged) doesn't regress the TS Build workflow's yarn install semantics (upstream-tracking rule).~~ done (Build green in CI on `3da7d0f`)
+50. ~~Review whether `Member[V]` nil-receiver semantics (`Set` on nil returns ErrReadOnlyAccessor) are test-covered — noticed while reading accessor.go, never checked.~~ done (go/accessor_test.go:148 pins ErrReadOnlyAccessor)
 
 ## g) Questions I cannot figure out myself
 
@@ -173,6 +173,10 @@ Section (g) answers arrived; the hazard is closed. Current HEAD: `61ec9f9`, work
 6. **New info affecting section (f):** item 16 (aarch64 checks) is the known buildflow platform-mismatch blocker, upstream-side per the other report — re-route that item accordingly. The root `go.mod` stub answers part of item 37's module-layout question (repo root is a stub module; the port stays in `go/`).
 
 Docs-health pass addendum (2026-09-08): §f P0 items 1–12 now carry inline
-verdicts above. The remaining P1–P4 items are tracked where they belong:
+verdicts above. A second docs-health pass (later the same day) resolved
+P1/P2/P4 items 13, 17, 20–22, 25, 28, 38, 44–50 (CI push + green runs,
+`go fix`/`TypeFor`/`AsType` sweeps, allocator A/B numbers, golden canary
+covered by the flake suite, GOCACHE + golden-README + Member-nil
+verifications). The remaining P1–P4 items are tracked where they belong:
 bounded work in `TODO_LIST.md`, ideas and user-gated decisions in
 `ROADMAP.md` (Open decisions).

@@ -64,7 +64,7 @@ plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 
 | Feature                                                      | Status                                                                                                      |
 | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (4: lifecycle, events, cascade, dispatch — `golden/`)                                      |
+| Golden scenarios, byte-identical across Go/Rust/Zig          | PARTIALLY_FUNCTIONAL (4 scenarios: lifecycle, events, cascade, dispatch; Go+Rust run all 4, Zig runs 3 — cascade pending a Zig runner on its typed registry, see `golden/README.md` matrix) |
 | DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                            |
 | Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                 |
 | `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                            |
@@ -76,16 +76,19 @@ Tracks `upstream/main` (`caab04e`, rebased 2026-09-08). Inherited upstream
 features: three-stage reload (#111), include journal reconciliation (#121),
 bare-specifier resolution (#123), `hmr.watch()` (#128), plus the
 `3-stage-hmr` line replayed on top (`b4650df`: commit-based loader entry
-changes, atomic include writes).
+changes, atomic include writes). CI (`build.yml`) runs the TS suite on a
+pinned Node 24/26 matrix; the upstream-parity job guards the tree against
+the `caab04e` pin.
 
 ## Planned
 
 No code yet; bounded work is tracked in `TODO_LIST.md`, direction in
 `ROADMAP.md`:
 
-- Zig: registry snapshot/restore, status events, accessor/mixin, logger
+- Zig: registry snapshot/restore, status events, accessor/mixin, logger,
+  cascade golden runner
 - Rust: `internal/get|set|listener|dispatch` interception, logger service
-- Golden scenario #4 (dispatch-mode parity)
+- Logger golden scenario (the logger service has no golden coverage)
 
 See `ROADMAP.md` for the full parity matrix and the documented native-max
 divergences.

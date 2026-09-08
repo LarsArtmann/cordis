@@ -112,10 +112,12 @@ All three ports implement the same invariants:
   re-enter the framework from any goroutine.
 - **Realm-keyed services.** `Isolate` shadows a service behind a fresh realm
   key without leaking in either direction; shared labels opt into sharing.
-- **One spec, three runners.** Four golden scenarios (`golden/`) execute
-  byte-identically in the Go, Rust and Zig test suites — lifecycle, events
-  and cascades are machine-pinned across ports, not documented and hoped
-  for.
+- **One spec, three runners.** Four golden scenarios (`golden/`) pin the
+  shared semantics byte-identically in the Go and Rust test suites; Zig
+  runs three of the four (cascade pending a Zig runner on its typed
+  registry — the per-scenario matrix in `golden/README.md` is the source
+  of truth). Lifecycle, events, cascades and dispatch modes are
+  machine-pinned across ports, not documented and hoped for.
 
 Details: [PORTS.md](PORTS.md).
 

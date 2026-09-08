@@ -151,18 +151,18 @@ Nothing in this list remains broken. No data loss, no broken build at any commit
 | ~~33~~ | ~~Port `packages/loader` to Go~~ done at `b87a305`                                                                                                                              | ~~High~~     | ~~L~~   | ~~Feature~~                                              |
 | ~~34~~ | ~~Port `packages/hmr` to Go~~ done at `7f2d8b1`                                                                                                                                 | ~~High~~     | ~~L~~   | ~~Feature~~                                              |
 | ~~35~~ | ~~PORTS.md: cross-port API comparison table (typed service/event/plugin forms side by side)~~ done at `8efd0f6`                                                                 | ~~Medium~~   | ~~S~~   | ~~Documentation~~                                        |
-| 36     | AGENTS.md: record Zig 0.16 std gotchas hit this session (`std.Io.Dir.cwd`, `ArrayListUnmanaged .empty`, anonymous non-zig imports broken → WriteFiles+`@embedFile`)             | Medium       | S       | Documentation                                            |
+| 36     | ~~AGENTS.md: record Zig 0.16 std gotchas hit this session (`std.Io.Dir.cwd`, `ArrayListUnmanaged .empty`, anonymous non-zig imports broken → WriteFiles+`@embedFile`)~~ done at `75fb408`                                             | Medium       | S       | Documentation                                            |
 | ~~37~~ | ~~Rust: doctests for typed services/events (only Guard/Plugin have doctests)~~ done — 6 Rust doctests green                                                                     | ~~Medium~~   | ~~S~~   | ~~Documentation~~                                        |
 | ~~38~~ | ~~Property test: LIFO rollback order under randomized registration sequences (Go)~~ done at `df35fc4`                                                                           | ~~Medium~~   | ~~M~~   | ~~Quality~~                                              |
 | 39     | Micro-benchmarks: drain queue throughput across the three ports                                                                                                                 | Low          | M       | Quality                                                  |
-| 40     | CI: `nix flake check` job (or `--all-systems` cross-eval) so the check derivations run remotely too                                                                             | Low          | M       | CI                                                       |
+| 40     | ~~CI: `nix flake check` job (or `--all-systems` cross-eval) so the check derivations run remotely too~~ done at `fa45896`                                                     | Low          | M       | CI                                                       |
 | ~~41~~ | ~~Tag first versions of the three ports (`go/v0.1.0`, `rust v0.1.1`, zig note)~~ done — tags go/v0.1.0 and rust/v0.2.0 pushed; zig rides repo tags                              | ~~Low~~      | ~~S~~   | ~~Release~~                                              |
 | ~~42~~ | ~~Root README: badges (CI status, flake check) + one-paragraph port pitch with golden-test mention~~ done — badges on the root README                                           | ~~Low~~      | ~~S~~   | ~~Documentation~~                                        |
 | ~~43~~ | ~~Machine-readable parity matrix generated from FEATURES.md (drift alarm vs ROADMAP)~~ done — scripts/parity-matrix.sh (df35fc4; name-based, approximate by design)             | ~~Low~~      | ~~M~~   | ~~Documentation~~                                        |
 | 44     | Go: decide and document `Context.Batch` error-propagation semantics (currently void)                                                                                            | Low          | S       | Documentation                                            |
 | ~~45~~ | ~~Typed-inject sugar: Go `Plugin.InjectTypes[T1, T2]()` (or `ServiceNames` variadic helper) to avoid stringly `ServiceName[T]()` at every inject site~~ done at `8efd0f6`       | ~~Medium~~   | ~~S~~   | ~~Feature~~                                              |
 | ~~46~~ | ~~Golden: run each port's golden twice in CI (cheap determinism canary)~~ done — golden double-run canary in ports.yml                                                          | ~~Low~~      | ~~S~~   | ~~Quality~~                                              |
-| 47     | Zig: `zig build -femit-docs` pass to catch broken doc comments                                                                                                                  | Low          | S       | Quality                                                  |
+| 47     | ~~Zig: `zig build -femit-docs` pass to catch broken doc comments~~ done at `75fb408`                                                                                          | Low          | S       | Quality                                                  |
 | ~~48~~ | ~~Sweep the remaining stale LSP diagnostics (errorsastype hint) — confirm resolved or fix~~ done at `8efd0f6`                                                                   | ~~Low~~      | ~~S~~   | ~~Cleanup~~                                              |
 | 49     | Evaluate upstreaming the deterministic-notify-order fix concept to `cordiverse/cordis` (upstream relies on JS Map insertion order — already deterministic there; document only) | Low          | S       | Documentation                                            |
 | 50     | Schedule a periodic "run all three suites + flake check" reminder cadence (weekly?) until CI is trusted                                                                         | Low          | S       | Process                                                  |
@@ -191,8 +191,9 @@ items are all resolved since: first green CI runs recorded (`3dcc565`),
 Rust/Zig isolate labels made collision-free, Zig gained typed `once`,
 Go coverage re-measured (core 91.7%), the `golangci-lint` job landed
 (`eab03a8`), and the working tree was committed. Still open (untouched
-above): Zig status events (row 23 — Rust done), AGENTS Zig gotchas (36),
-three-port benchmark coverage (39), `nix flake check` CI job (40),
-`Context.Batch` error-propagation documentation (44),
-`zig build -femit-docs` (47), the upstreaming note (49) and the weekly
-cadence note (50) — tracked in `TODO_LIST.md`.
+above): Zig status events (row 23), three-port benchmark coverage (39 —
+Go and Rust benches exist, Zig has none), `Context.Batch`
+error-propagation documentation (44), the upstreaming note (49) and the
+weekly cadence note (50). Rows 36 (Zig gotchas, `75fb408`), 40 (flake
+CI job, `fa45896`) and 47 (`zig build docs` gate, `75fb408`) were
+resolved by later sessions on 2026-09-08.

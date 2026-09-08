@@ -176,13 +176,13 @@ failure: I raced a concurrent crush session for the whole session.
 7. Run `eslint` + `oxlint` over `packages/`.
 8. ~~Run `dprint check` (json/yaml/md).~~ done (dprint check clean (after fmt))
 9. ~~Run `nix run .#test` (composite all-ports app) once, end to end.~~ done (nix run .#test green on 2026-09-08)
-10. Decide push: `git sync` / force-with-lease on diverged main (needs user
-    approval — see Q2).
-11. Verify CI green on GitHub after push (build.yml + ports.yml).
+10. ~~Decide push: `git sync` / force-with-lease on diverged main (needs user
+    approval — see Q2).~~ done (pushed; `main` == `origin/main` at `3da7d0f`)
+11. ~~Verify CI green on GitHub after push (build.yml + ports.yml).~~ done (Build 34267336684 + Ports 34267336671 green on `3da7d0f`)
 
 **Docs parity (fork docs are now stale vs the new TS baseline):**
-12. FEATURES.md: add `hmr.watch()`, include journal reconciliation,
-loader bare-specifier resolution, Windows/macOS CI matrix.
+12. ~~FEATURES.md: add `hmr.watch()`, include journal reconciliation,
+loader bare-specifier resolution, Windows/macOS CI matrix.~~ done at `3f3d622` (features section; Node 24/26 CI matrix noted by the 2026-09-08 docs pass)
 13. ~~ROADMAP.md parity matrix: re-assess Go/Rust/Zig gaps for #111/#121/~~ done (ROADMAP now tracks the reassessment explicitly (Go section item 1))
 ~~#123/#128 features.~~
 14. ~~CHANGELOG.md: entry for the upstream sync + recovery batch.~~ done (docs-health pass CHANGELOG.md rebuilt by this pass)
@@ -203,10 +203,10 @@ analog).
 if ports implement them.
 
 **Hardening (never again):**
-22. CI hash-pin: hmr fixtures byte-identical to upstream (cheap guard).
+22. ~~CI hash-pin: hmr fixtures byte-identical to upstream (cheap guard).~~ done at `fa45896` (upstream-parity byte guard)
 23. Upstreamable PR: make hmr spec replaces style-agnostic regexes.
-24. Add `.prettierrc` (printWidth 100) to the repo.
-25. Add `prettier --check` + `yarn build` to build.yml before tests.
+24. ~~Add `.prettierrc` (printWidth 100) to the repo.~~ **Won't implement — no prettier-stable style exists to pin (64/64 packages files fail `--check` under every plausible config); upstream style is CI-enforced instead (`fa45896`).**
+25. ~~Add `prettier --check` + `yarn build` to build.yml before tests.~~ **Won't implement — same evidence; the upstream-parity semantic guard (`fa45896`) covers drift.**
 26. Decide yarn.lock policy (commit one vs stay lock-free like upstream).
 27. Move include test tmp-* files to os.tmpdir (upstreamable; they litter
 the fixtures dir on failure).
@@ -219,8 +219,8 @@ already tries; the litter came from crashed runs).
 upstream's new README content for further drift.
 31. ~~Verify `@types/node ^26.5.0` + TS 5.9.3 is a sound combo (tsc build~~ done (docs-health pass noted in AGENTS.md; all suites green with the combo)
 ~~passed, but a deliberate note in AGENTS.md would help).~~
-32. Ensure `lib/`, `tsconfig.tsbuildinfo`, `tmp-*` are fully gitignored
-(they appeared as untracked/copyable debris during diagnosis).
+32. ~~Ensure `lib/`, `tsconfig.tsbuildinfo`, `tmp-*` are fully gitignored
+(they appeared as untracked/copyable debris during diagnosis).~~ done (`lib/`/`tsbuildinfo` verified covered 2026-09-05; `tmp-*` gitignored at `fa45896`)
 33. Restore or formally drop `packages/hmr/node_modules` (I removed it to
 rule out esbuild shadowing; a fresh `yarn install` recreates it).
 34. Check whether `.oxlintrc.json` rules pass on the newly adopted
@@ -229,25 +229,25 @@ upstream-semantics files (they were never linted in fork config).
 ~~intentional upstream state, not an accident we preserved.~~
 
 **Verification depth (quality bar):**
-36. Go: `-count=5` flake sweep on hmr/loader packages (race-sensitive).
+36. ~~Go: `-count=5` flake sweep on hmr/loader packages (race-sensitive).~~ done (green sweep run by the 2026-09-08 16:47 docs-health battery)
 37. ~~Go: re-run coverage report (~85% claim needs re-measuring after all~~ done (docs-health pass core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6%)
 ~~changes).~~
 38. ~~Rust: run the thread-safe feature build/tests explicitly~~ done (thread-safe suite green on 2026-09-08)
 ~~(`--features` variant as defined in Cargo.toml).~~
 39. ~~Zig: clean-cache hermetic test run once.~~ done (green fresh zig build test run (2026-09-08))
-40. TS: one full `yarn test` from a fresh clone-equivalent (rm -rf
-node_modules && install && build && test) to prove install-from-scratch.
+40. ~~TS: one full `yarn test` from a fresh clone-equivalent (rm -rf
+node_modules && install && build && test) to prove install-from-scratch.~~ done at `fa45896` (node_modules + yarn.lock trashed, reinstall, 248/248)
 
 **Process:**
 41. Adopt "one session per worktree" rule in AGENTS.md + CONTRIBUTING.md.
-42. Document the rebase resolution policy ("upstream semantics + fork
-formatting, prettier-100") in CONTRIBUTING.md for humans too.
+42. ~~Document the rebase resolution policy ("upstream semantics + fork
+formatting, prettier-100") in CONTRIBUTING.md for humans too.~~ done at `fa45896` (CONTRIBUTING rewritten with the sync/pin policy)
 43. Kill or park the idle crush processes from this box (user-level).
 44. Consider `git town` sync config to skip rather than auto-rebase huge
 stacks when conflicts are expected (this rebase had 12-file conflicts
 mid-stack).
-45. Add a `just`-free task doc: flake app list (`test`, `test-go/-rust/
-    -zig`) in CONTRIBUTING quickstart.
+45. ~~Add a `just`-free task doc: flake app list (`test`, `test-go/-rust/
+    -zig`) in CONTRIBUTING quickstart.~~ done at `fa45896`
 
 **Bigger bets (ROADMAP fuel, not commitments):**
 46. Port-parity sprint: close the largest ROADMAP gaps flagged in (13).
@@ -272,11 +272,11 @@ exist; re-validate).
    commits) after the rebase. Do you want me to complete the sync
    (force-push with lease via your `git sync`) once the repair is
    committed, or hold for your review first?
-3. **Fixture style policy:** I chose to keep hmr test fixtures
+3. ~~**Fixture style policy:** I chose to keep hmr test fixtures
    byte-identical to upstream (their specs string-replace into them). The
    alternative is fork-styling the fixtures AND rewriting the specs'
    replace patterns. Upstream-sync safety says my choice; repo-wide style
-   consistency says the other. Which do you want long-term?
+   consistency says the other. Which do you want long-term?~~ done (resolved 2026-09-08: fixtures stay byte-identical to upstream, CI-enforced by `upstream-parity`; ROADMAP open decision closed)
 
 ---
 
@@ -289,14 +289,21 @@ intentionally deferred pending instructions._
 ## Resolution (docs-health pass, 2026-09-08)
 
 19 §f items resolved inline above; the docs-parity items (12–16) were
-executed by this pass (FEATURES/ROADMAP/CHANGELOG/PORTS refreshed, all
+executed by that pass (FEATURES/ROADMAP/CHANGELOG/PORTS refreshed, all
 reports annotated). The verification battery this report left open is now
 green: `nix flake check`, `golangci-lint` (0 issues under Go 1.27),
 `cargo clippy --all-targets`, `dprint check`, hmr/loader `-race -count=5`,
-a fresh `zig build test`, and the Go benchmarks. Still open: the
-user-gated push and CI verification (2, 10–11), eslint/oxlint (7),
-port-level parity work for #111/#121/#123/#128 (17–21), hardening guards
-(22–28), the hmr README/tsconfig follow-ups (30, 33's npm restore done —
-node_modules regenerated), the TS fresh-clone test (40), process items
-(41–45, incl. CONTRIBUTING work in TODO_LIST), and the bigger bets
-(46–48).
+a fresh `zig build test`, and the Go benchmarks. A second docs-health
+pass (later the same day) resolved 10–11 (push done, `main` ==
+`origin/main` at `3da7d0f`; Build + Ports green in CI), 12 (FEATURES
+parity section + CI matrix note), 22 (upstream-parity byte guard,
+`fa45896`), 24–25 (**Won't implement** — no prettier-stable style exists;
+the semantic guard covers drift), 32 (`tmp-*` gitignored, `fa45896`),
+36 (`-count=5` sweep green), 40 (install-from-scratch 248/248,
+`fa45896`), 42 and 45 (CONTRIBUTING rewrite, `fa45896`), and §g Q3
+(fixture authority settled: upstream bytes, CI-enforced). Still open:
+the concurrency convention (2, §g Q1), eslint/oxlint (7), port-level
+parity work for #111/#121/#123/#128 (17–21), the style-agnostic-replaces
+goodwill PR (23), yarn.lock policy (26), tmp-dir upstreamables (27–28),
+the hmr README drift check (30), oxlint on adopted files (34), process
+items (41, 43–44, 48), and the bigger bets (46–47).

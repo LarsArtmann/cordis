@@ -163,8 +163,8 @@ Impact / Effort (S <30 min, M 30 min–2 h, L >2 h) / Category:
 
 | # | Task | Impact | Effort | Category |
 | --- | --- | --- | --- | --- |
-| 1 | Commit the flake `zig-out` filter line as its own scoped commit | Medium | S | Cleanup |
-| 2 | Verify Rust `internal/plugin` + `internal/update` interception parity landed in `75fb408`, then check off the stale TODO_LIST item | High | S | Documentation |
+| ~~1~~ | ~~Commit the flake `zig-out` filter line as its own scoped commit~~ done at `ff84d10` | Medium | S | Cleanup |
+| ~~2~~ | ~~Verify Rust `internal/plugin` + `internal/update` interception parity landed in `75fb408`, then check off the stale TODO_LIST item~~ done at `25ff5fb` (verified and recorded in CHANGELOG/FEATURES; TODO_LIST cleared) | High | S | Documentation |
 | 3 | Add a golden-corpus `delete` scenario that removes a multi-fiber plugin (regenerate expected traces for all three runners) | High | M | Quality |
 | 4 | Zig test: delete a plugin whose fiber is `pending` (deps unmet) and assert rollback/no-crash | Medium | S | Quality |
 | 5 | Zig test: compile-refutation coverage for the `pluginView` `@compileError` guard | Low | S | Quality |
@@ -174,25 +174,25 @@ Impact / Effort (S <30 min, M 30 min–2 h, L >2 h) / Category:
 | 9 | Decide and document whether Zig needs a registry `Get`/`Runtime` introspection API (parity gap vs deliberate) | Medium | S | Decision |
 | 10 | Add ReleaseSafe (or ReleaseFast) to one automated gate — a `.#checks` variant or a periodic app — ReleaseSafe is currently run only ad hoc | Medium | S | Quality |
 | 11 | Extend AGENTS.md repo-hygiene: record the "flake gates the live tree; concurrent sessions can fail each other's checks" hazard explicitly | Medium | S | Documentation |
-| 12 | CI job running `nix flake check` so the port gate is enforced remotely (pre-existing TODO_LIST item) | High | M | Quality |
-| 13 | Rust: verify root-fiber status emission (`FiberData::new_root` bypasses `settle_state`) — cover or document (pre-existing TODO_LIST item) | Medium | S | Quality |
-| 14 | Rust: fix or allowlist `significant_drop` nursery findings under `--features thread-safe`, then gate clippy on it (pre-existing) | Medium | M | Quality |
-| 15 | Rust: `cargo-llvm-cov` coverage baseline next to the Go numbers (pre-existing) | Medium | M | Quality |
-| 16 | Rust: `cargo bench` to substantiate or hedge the "up to 30% faster" ROADMAP claim (pre-existing) | Low | M | Quality |
-| 17 | CI: add `.prettierrc` (printWidth 100) + `prettier --check` + `yarn build` before tests in build.yml (pre-existing) | Medium | S | Quality |
-| 18 | CI guards: `packages/**` byte-identical to upstream; `dprint.json` excludes keep covering `packages/**` (pre-existing) | Medium | S | Quality |
-| 19 | After next push: verify build.yml + ports.yml green on GitHub, including the replayed `3-stage-hmr` line (user-gated, pre-existing) | High | S | Quality |
-| 20 | Gitignore `tmp-*` test debris (pre-existing) | Low | S | Cleanup |
-| 21 | TS: one full install-from-scratch verification (`rm -rf node_modules && yarn install && yarn build && yarn test`) (pre-existing) | Medium | M | Quality |
-| 22 | CONTRIBUTING.md review: flake app list in quickstart + document the "upstream semantics + fork formatting" rebase policy (pre-existing) | Medium | M | Documentation |
-| 23 | Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig roundtrip) (pre-existing) | Medium | L | Quality |
-| 24 | Align local gate with CI race canary: flake checks `-count=1` vs ports.yml `-count=3` (pre-existing) | Low | S | Quality |
+| ~~12~~ | ~~CI job running `nix flake check` so the port gate is enforced remotely (pre-existing TODO_LIST item)~~ done at `fa45896` | High | M | Quality |
+| ~~13~~ | ~~Rust: verify root-fiber status emission (`FiberData::new_root` bypasses `settle_state`) — cover or document (pre-existing TODO_LIST item)~~ done at `25ff5fb` | Medium | S | Quality |
+| ~~14~~ | ~~Rust: fix or allowlist `significant_drop` nursery findings under `--features thread-safe`, then gate clippy on it (pre-existing)~~ done at `25ff5fb` | Medium | M | Quality |
+| ~~15~~ | ~~Rust: `cargo-llvm-cov` coverage baseline next to the Go numbers (pre-existing)~~ done at `25ff5fb` | Medium | M | Quality |
+| ~~16~~ | ~~Rust: `cargo bench` to substantiate or hedge the "up to 30% faster" ROADMAP claim (pre-existing)~~ done at `25ff5fb` | Low | M | Quality |
+| ~~17~~ | ~~CI: add `.prettierrc` (printWidth 100) + `prettier --check` + `yarn build` before tests in build.yml (pre-existing)~~ **Won't implement — no prettier-stable style exists to pin; upstream style CI-enforced (`fa45896`)** | Medium | S | Quality |
+| ~~18~~ | ~~CI guards: `packages/**` byte-identical to upstream; `dprint.json` excludes keep covering `packages/**` (pre-existing)~~ done at `fa45896` | Medium | S | Quality |
+| ~~19~~ | ~~After next push: verify build.yml + ports.yml green on GitHub, including the replayed `3-stage-hmr` line (user-gated, pre-existing)~~ done (Build + Ports green on `3da7d0f`) | High | S | Quality |
+| ~~20~~ | ~~Gitignore `tmp-*` test debris (pre-existing)~~ done at `fa45896` | Low | S | Cleanup |
+| ~~21~~ | ~~TS: one full install-from-scratch verification (`rm -rf node_modules && yarn install && yarn build && yarn test`) (pre-existing)~~ done at `fa45896` (248/248) | Medium | M | Quality |
+| ~~22~~ | ~~CONTRIBUTING.md review: flake app list in quickstart + document the "upstream semantics + fork formatting" rebase policy (pre-existing)~~ done at `fa45896` | Medium | M | Documentation |
+| ~~23~~ | ~~Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig roundtrip) (pre-existing)~~ done at `fa45896` | Medium | L | Quality |
+| ~~24~~ | ~~Align local gate with CI race canary: flake checks `-count=1` vs ports.yml `-count=3` (pre-existing)~~ done at `fa45896` | Low | S | Quality |
 | 25 | Document/decide daemon commit scoping (per-concern commits or pre-staging) to stop mixed-concern history (root cause of (d)1) | High | M | Process |
 | 26 | Zig: consider a `Registry` doc example showing the typed form in the module doc comment (docs currently show only `TypedPlugin.start`) | Low | S | Documentation |
 | 27 | Zig: exercise `Registry.delete` through `Context.registry()` from a non-root context to pin scope semantics (works by construction, untested) | Low | S | Quality |
 | 28 | buildflow: fix nix-step system filtering upstream (pre-existing known limitation; belongs in buildflow, not here) | Medium | L | Bug |
 | 29 | Re-run the three-runner golden parity after any future semantics change — reminder cadence, not new work (pre-existing convention) | Medium | S | Process |
-| 30 | docs-health HARVEST this report's (f) items into TODO_LIST/ROADMAP after instructions arrive | High | S | Documentation |
+| ~~30~~ | ~~docs-health HARVEST this report's (f) items into TODO_LIST/ROADMAP after instructions arrive~~ done (second docs-health pass, 2026-09-08) | High | S | Documentation |
 
 Items 12–24, 28 are pre-existing TODO_LIST/known-limitation items (listed
 because the user asked for the full next-up picture); 1–11, 25–27, 29–30 come
@@ -220,3 +220,16 @@ directly out of this session. 30 is the closing move of the skill loop.
 **Handoff:** section (f) is HARVEST input for TODO_LIST/ROADMAP — not executed
 yet, per "wait for instructions". The only uncommitted change from this
 session is the one-line flake `zig-out` filter (item 1).
+
+---
+
+## Resolution (annotated 2026-09-08, second docs-health pass)
+
+Rows 1 (`ff84d10`), 2 (`25ff5fb`), 12–24 (`fa45896`, `25ff5fb`, green CI
+on `3da7d0f`) and 30 carry inline verdicts above. Still open: the Zig
+test/gate gaps (3–7, 10), the `@embedFile` absolute-path oddity (8), the
+registry `Get` decision (9), the live-tree hazard note (11 — partially
+covered by AGENTS.md's untracked-files gotcha), daemon commit scoping
+(25), the Zig doc example (26), `registry()` delete test (27), the
+buildflow upstream fix (28) and the golden re-run cadence (29). Items
+3, 4, 5, 6 and 7 are routed to `TODO_LIST.md`.
