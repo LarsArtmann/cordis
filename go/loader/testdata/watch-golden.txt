@@ -1,0 +1,23 @@
+start one
+start two
+start alpha
+stop one
+start one-b
+stop one-b
+start one-c
+stop alpha
+start beta
+start gamma
+config-update a,b,g
+stop two
+start bye
+partial b
+stop one-c
+partial a
+partial b
+stop beta
+partial g1
+stop gamma
+partial g2
+partial g
+closed

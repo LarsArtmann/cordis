@@ -1,0 +1,14 @@
+fire chain a payload=200
+fire chain b payload=200
+bail chain result=420
+fire chain a payload=300
+fire chain b payload=300
+serial chain result=520
+bail empty result=none
+wf flow w1 payload=5
+wf flow w2 payload=6
+wf-terminal flow payload=16
+waterfall flow result=1016
+wf cut c1 payload=9
+waterfall cut result=786
+parallel sync fired=3

@@ -1,0 +1,50 @@
+# cordis golden scenario v4 — dispatch modes (bail, serial, waterfall, parallel)
+#
+# Executed verbatim by the Go, Rust and Zig runners. The trace each runner
+# emits must match golden/expected-dispatch.txt exactly in every language,
+# which pins listener delivery order, bail/serial short-circuiting, the
+# waterfall composition and short-circuit, and the parallel fan-out count.
+#
+# Ops:
+#   listener <event> <name> [returns=<int>]
+#                                   logging listener; a returns= value makes
+#                                   it bail the chain with payload+<int>,
+#                                   without one it returns null and lets the
+#                                   chain continue
+#   wf-listener <event> <name> add=<int>
+#                                   waterfall listener: logs the payload it
+#                                   received, transforms it by add and calls
+#                                   next with the transformed payload
+#   wf-cut <event> <name> returns=<int>
+#                                   waterfall listener that short-circuits:
+#                                   returns payload+<int> without calling
+#                                   next, so the terminal never runs
+#   quiet <event> <name>            counting listener for the parallel mode
+#   bail <event> payload=<int>      first non-null listener result wins
+#   serial <event> payload=<int>    identical to bail in a sync runtime
+#   waterfall <event> payload=<int> terminal logs the final payload, adds
+#                                   1000 and returns it
+#   parallel <event> payload=<int>  every matching listener runs exactly once
+#
+# Regenerate expected-dispatch.txt with
+# GOLDEN_UPDATE=1 go test -run TestGoldenDispatch ./... then re-verify the
+# Rust and Zig runners.
+
+listener chain a
+listener chain b returns=220
+listener chain c returns=230
+bail chain payload=200
+serial chain payload=300
+bail empty payload=1
+
+wf-listener flow w1 add=1
+wf-listener flow w2 add=10
+waterfall flow payload=5
+
+wf-cut cut c1 returns=777
+waterfall cut payload=9
+
+quiet sync p1
+quiet sync p2
+quiet sync p3
+parallel sync payload=42
