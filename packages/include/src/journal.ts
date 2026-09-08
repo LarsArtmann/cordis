@@ -42,7 +42,10 @@ export function diffOptions(legacy: EntryOptions, options: EntryOptions) {
 }
 
 /** Fold a later record into an earlier one for the same entry. */
-export function mergeRecords(older: JournalRecord | undefined, newer: JournalRecord): JournalRecord | undefined {
+export function mergeRecords(
+  older: JournalRecord | undefined,
+  newer: JournalRecord,
+): JournalRecord | undefined {
   if (!older) return newer
   if (newer.kind === 'remove') {
     // an entry created and removed before ever being written leaves no trace
@@ -77,7 +80,13 @@ export function record(journal: Journal, change: EntryChange, parent: string | n
   }
   const position = change.group.data.indexOf(options)
   if (!legacy) {
-    return merge(journal, id, { kind: 'upsert', created: true, parent, position, changes: omit(options, ['id']) })
+    return merge(journal, id, {
+      kind: 'upsert',
+      created: true,
+      parent,
+      position,
+      changes: omit(options, ['id']),
+    })
   }
   merge(journal, id, {
     kind: 'upsert',
@@ -96,7 +105,11 @@ export interface FlatEntry {
 }
 
 /** Index every entry (including nested group members) by id. */
-export function flatten(data: EntryOptions[], parent: string | null = null, result = new Map<string, FlatEntry>()) {
+export function flatten(
+  data: EntryOptions[],
+  parent: string | null = null,
+  result = new Map<string, FlatEntry>(),
+) {
   data.forEach((options, position) => {
     if (options.id) result.set(options.id, { parent, position, options, list: data })
     if (options.group && Array.isArray(options.config)) {
@@ -106,7 +119,11 @@ export function flatten(data: EntryOptions[], parent: string | null = null, resu
   return result
 }
 
-export function applyChanges(options: EntryOptions, changes: Dict, filter?: (key: string) => boolean) {
+export function applyChanges(
+  options: EntryOptions,
+  changes: Dict,
+  filter?: (key: string) => boolean,
+) {
   for (const [key, value] of Object.entries(changes)) {
     if (filter && !filter(key)) continue
     if (value === undefined) {
@@ -129,7 +146,12 @@ export function detach(data: EntryOptions[], id: string) {
  * `position`, clamped to the group's length. Returns false when the parent
  * group does not exist.
  */
-export function place(data: EntryOptions[], options: EntryOptions, parent: string | null, position: number) {
+export function place(
+  data: EntryOptions[],
+  options: EntryOptions,
+  parent: string | null,
+  position: number,
+) {
   let list = data
   if (parent !== null) {
     const group = flatten(data).get(parent)
@@ -160,14 +182,14 @@ export function applyJournal(
     const flat = flatten(data).get(id)
     if (!flat) {
       const options = { id } as EntryOptions
-      applyChanges(options, record.changes, key => filter(id, key))
+      applyChanges(options, record.changes, (key) => filter(id, key))
       const parent = record.parent ?? null
       if (!place(data, options, parent, record.position)) {
         warn('cannot place entry %C: group %C not found', id, parent)
       }
       continue
     }
-    applyChanges(flat.options, record.changes, key => filter(id, key))
+    applyChanges(flat.options, record.changes, (key) => filter(id, key))
     if (record.parent !== undefined && flat.parent !== record.parent) {
       detach(data, id)
       if (!place(data, flat.options, record.parent, record.position)) {
@@ -207,7 +229,10 @@ export function reconcile(
       if (!t) {
         journal.delete(id)
       } else if (!b || !deepEqual(t.options, b.options)) {
-        conflicts.push({ id, reason: b ? 'modified in file, removed at runtime' : 'added in file, removed at runtime' })
+        conflicts.push({
+          id,
+          reason: b ? 'modified in file, removed at runtime' : 'added in file, removed at runtime',
+        })
         journal.delete(id)
       }
       continue

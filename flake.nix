@@ -21,7 +21,7 @@
         path = ./.;
         name = "cordis-source";
         filter =
-          path: type:
+          path: _type:
           !builtins.elem (baseNameOf path) [
             ".git"
             "node_modules"

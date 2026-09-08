@@ -441,6 +441,6 @@ Format: task — Impact / Effort / Category.
 
 ---
 
-*Report generated per the status-report skill; format override honored:
+_Report generated per the status-report skill; format override honored:
 user explicitly requested Markdown (`.md`) instead of the skill's HTML
-default. Section (f) is HARVEST input for `TODO_LIST.md`/`ROADMAP.md`.*
+default. Section (f) is HARVEST input for `TODO_LIST.md`/`ROADMAP.md`._

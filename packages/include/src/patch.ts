@@ -34,7 +34,10 @@ export function ensureIds(entries: EntryOptions[], used: (id: string) => boolean
 }
 
 /** Runtime changes are routed back to an inserted entry by its id, so every insert needs one. */
-export function ensureInsertIds(patches: PatchOptions[] | undefined, used: (id: string) => boolean) {
+export function ensureInsertIds(
+  patches: PatchOptions[] | undefined,
+  used: (id: string) => boolean,
+) {
   for (const patch of patches ?? []) {
     if (patch.insert) ensureIds(patch.insert, used)
   }
@@ -44,7 +47,11 @@ export function ensureInsertIds(patches: PatchOptions[] | undefined, used: (id: 
  * Overlay `patches` onto a fresh clone of `data`. Inserted entries are cloned
  * too, so the tree owns every object it mounts.
  */
-export function applyPatches(data: EntryOptions[], patches: PatchOptions[] | undefined, warn: Warn): EntryOptions[] {
+export function applyPatches(
+  data: EntryOptions[],
+  patches: PatchOptions[] | undefined,
+  warn: Warn,
+): EntryOptions[] {
   data = structuredClone(data)
   if (!patches?.length) return data
 
@@ -188,11 +195,16 @@ export class PatchIndex {
  * patch-owned ones to `patches`. Both are mutated in place, so pass clones.
  * Returns whether any patch changed.
  */
-export function routeJournal(journal: Journal, data: EntryOptions[], patches: PatchOptions[], warn: Warn) {
+export function routeJournal(
+  journal: Journal,
+  data: EntryOptions[],
+  patches: PatchOptions[],
+  warn: Warn,
+) {
   const index = new PatchIndex(patches)
   let patched = false
 
-  const insertList = (owner: EntryOwner.Insert) => owner.options.config ??= []
+  const insertList = (owner: EntryOwner.Insert) => (owner.options.config ??= [])
 
   const placeAt = (options: EntryOptions, parent: string | null, position: number) => {
     const owner = index.entry(parent)
@@ -247,8 +259,8 @@ export function routeJournal(journal: Journal, data: EntryOptions[], patches: Pa
     const patchChanges: Dict<Dict> = {}
     applyChanges(current.options, record.changes, (key) => {
       const keyOwner = index.key(id, key)
-      if (keyOwner.type !== 'patch') return true
-      ;(patchChanges[keyOwner.index] ??= {})[key] = record.changes[key]
+      if (keyOwner.type !== 'patch') return true;
+      (patchChanges[keyOwner.index] ??= {})[key] = record.changes[key]
       return false
     })
     for (const [i, changes] of Object.entries(patchChanges)) {

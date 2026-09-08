@@ -13,12 +13,12 @@ executes the script and emits a canonical trace:
 
 ## Scenarios
 
-| Scenario     | Spec                       | Expected trace             | Pins                                                                              |
-| ------------ | -------------------------- | -------------------------- | --------------------------------------------------------------------------------- |
-| #1 lifecycle | `scenario.txt`             | `expected.txt`             | fiber lifecycle, inject reactivity, LIFO rollback, isolation realms, root restart |
-| #2 events    | `scenario-events.txt`      | `expected-events.txt`      | dispatch order, realm filters, global listeners                                   |
-| #3 cascade   | `scenario-cascade.txt`     | `expected-cascade.txt`     | nested plugin disposal order, registry delete, registry size                      |
-| #4 dispatch  | `scenario-dispatch.txt`    | `expected-dispatch.txt`    | bail/serial short-circuiting, waterfall composition and cut, parallel fan-out     |
+| Scenario     | Spec                    | Expected trace          | Pins                                                                              |
+| ------------ | ----------------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| #1 lifecycle | `scenario.txt`          | `expected.txt`          | fiber lifecycle, inject reactivity, LIFO rollback, isolation realms, root restart |
+| #2 events    | `scenario-events.txt`   | `expected-events.txt`   | dispatch order, realm filters, global listeners                                   |
+| #3 cascade   | `scenario-cascade.txt`  | `expected-cascade.txt`  | nested plugin disposal order, registry delete, registry size                      |
+| #4 dispatch  | `scenario-dispatch.txt` | `expected-dispatch.txt` | bail/serial short-circuiting, waterfall composition and cut, parallel fan-out     |
 
 Regenerate an expected file with
 `GOLDEN_UPDATE=1 go test -run 'TestGolden.*' ./...` from `go/`, then

@@ -1,62 +1,62 @@
-import { Context, Fiber, Inject, Plugin, Service } from "cordis";
-import { Awaitable, Dict } from "cosmokit";
-import { ModuleJob, ModuleLoader, ResolveResult } from "@cordisjs/plugin-loader";
-import { ChokidarOptions, FSWatcher, watch } from "chokidar";
-import { relative, resolve } from "node:path";
-import { handleError } from "./error.ts";
-import type {} from "@cordisjs/plugin-timer";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { createRequire } from "node:module";
-import picomatch from "picomatch";
-import enUS from "./locales/en-US.yml";
-import zhCN from "./locales/zh-CN.yml";
-import z from "schemastery";
+import { Context, Fiber, Inject, Plugin, Service } from 'cordis'
+import { Awaitable, Dict } from 'cosmokit'
+import { ModuleJob, ModuleLoader, ResolveResult } from '@cordisjs/plugin-loader'
+import { ChokidarOptions, FSWatcher, watch } from 'chokidar'
+import { relative, resolve } from 'node:path'
+import { handleError } from './error.ts'
+import type {} from '@cordisjs/plugin-timer'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
+import picomatch from 'picomatch'
+import enUS from './locales/en-US.yml'
+import zhCN from './locales/zh-CN.yml'
+import z from 'schemastery'
 
-declare module "cordis" {
+declare module 'cordis' {
   interface Context {
-    hmr: Hmr;
+    hmr: Hmr
   }
 
   interface Events {
-    "hmr/change"(url: string): void;
-    "hmr/reload"(stalePlugins: Map<Plugin, StalePlugin>): void;
+    'hmr/change'(url: string): void
+    'hmr/reload'(stalePlugins: Map<Plugin, StalePlugin>): void
   }
 }
 
-export type WatchCallback = () => Awaitable<void>;
+export type WatchCallback = () => Awaitable<void>
 
 /**
  * Recursively collect all module dependencies from a ModuleJob.
  * Skips node: builtins and node_modules to focus on user code.
  */
 async function loadDependencies(job: ModuleJob, ignored = new Set<string>()) {
-  const dependencies = new Set<string>();
+  const dependencies = new Set<string>()
   async function traverse(job: ModuleJob) {
-    if (ignored.has(job.url) || dependencies.has(job.url)) return;
-    if (job.url.startsWith("node:") || job.url.includes("/node_modules/")) return;
-    dependencies.add(job.url);
-    const children = await job.linked;
-    await Promise.all(Array.prototype.map.call(children, traverse));
+    if (ignored.has(job.url) || dependencies.has(job.url)) return
+    if (job.url.startsWith('node:') || job.url.includes('/node_modules/')) return
+    dependencies.add(job.url)
+    const children = await job.linked
+    await Promise.all(Array.prototype.map.call(children, traverse))
   }
-  await traverse(job);
-  return dependencies;
+  await traverse(job)
+  return dependencies
 }
 
 /** An entry plugin whose module has changed. Keyed by the *old* plugin. */
 interface StalePlugin {
-  filename: string;
+  filename: string
   /** the runtime the old plugin was registered under */
-  runtime?: Plugin.Runtime;
+  runtime?: Plugin.Runtime
 }
 
 /** One instance of a stale plugin, paired with what will replace it. */
 interface StaleFiber {
   /** the entry file, relative to `baseDir`, for logging */
-  path: string;
+  path: string
   /** the freshly imported plugin to rebuild with */
-  replacement: any;
+  replacement: any
   /** the fiber left behind by the unload stage */
-  fiber: Fiber;
+  fiber: Fiber
 }
 
 /**
@@ -71,51 +71,51 @@ interface StaleFiber {
  */
 function hasInactiveAncestor(fiber: Fiber) {
   for (let current = fiber.parent.fiber; ; current = current.parent.fiber) {
-    if (current.uid === null) return true;
+    if (current.uid === null) return true
     // the root fiber is its own parent's fiber
-    if (current === current.parent.fiber) return false;
+    if (current === current.parent.fiber) return false
   }
 }
 
-@Inject("loader")
-@Inject("timer")
+@Inject('loader')
+@Inject('timer')
 class Hmr extends Service {
-  public baseDir: string;
+  public baseDir: string
 
-  private internal?: ModuleLoader;
-  private watcher!: FSWatcher;
+  private internal?: ModuleLoader
+  private watcher!: FSWatcher
 
   /**
    * Changes from externals will always trigger a full reload.
    * Externals are the dependency tree of the CLI worker entry point.
    */
-  private externals!: Set<string>;
+  private externals!: Set<string>
 
   /**
    * Files that should be reloaded (accepted changes).
    * Includes all stashed files and their dependents.
    */
-  private accepted!: Set<string>;
+  private accepted!: Set<string>
 
   /**
    * Files that should NOT be reloaded.
    * Includes externals and files whose dependents are all declined.
    */
-  private declined!: Set<string>;
+  private declined!: Set<string>
 
   /** Stashed file changes waiting to be processed */
-  private stashed = new Set<string>();
+  private stashed = new Set<string>()
 
   /** Callbacks registered through `watch()`, keyed by absolute path. */
-  private watchers = new Map<string, Set<WatchCallback>>();
+  private watchers = new Map<string, Set<WatchCallback>>()
 
   constructor(
     ctx: Context,
     public config: Hmr.Config,
   ) {
-    super(ctx, "hmr");
-    this.internal = this.ctx.loader.internal;
-    this.baseDir = fileURLToPath(new URL(config.base || ".", ctx.baseUrl));
+    super(ctx, 'hmr')
+    this.internal = this.ctx.loader.internal
+    this.baseDir = fileURLToPath(new URL(config.base || '.', ctx.baseUrl))
   }
 
   /**
@@ -126,84 +126,84 @@ class Hmr extends Service {
     parentURL: string,
     attrs: ImportAttributes,
   ): Promise<ResolveResult> {
-    const internal = this.internal!;
+    const internal = this.internal!
     switch (internal.version) {
-      case "v1":
-        return await internal.resolve(specifier, parentURL, attrs);
-      case "v2":
-        return internal.resolveSync(parentURL, { specifier, attributes: attrs });
+      case 'v1':
+        return await internal.resolve(specifier, parentURL, attrs)
+      case 'v2':
+        return internal.resolveSync(parentURL, { specifier, attributes: attrs })
     }
   }
 
-  async *[Service.init]() {
-    yield () => this.watcher?.close();
+  async* [Service.init]() {
+    yield () => this.watcher?.close()
 
-    const { loader } = this.ctx;
-    const { root, ignored } = this.config;
+    const { loader } = this.ctx
+    const { root, ignored } = this.config
     if (!this.config.base) {
-      this.ctx.logger.info("watching %o", root);
+      this.ctx.logger.info('watching %o', root)
     } else {
-      this.ctx.logger.info("watching %o in %s", root, this.baseDir);
+      this.ctx.logger.info('watching %o in %s', root, this.baseDir)
     }
     if (!this.internal) {
       // eslint-disable-next-line max-len
       this.ctx.logger.warn(
-        "loader internals are unavailable, source code HMR is disabled; pass --expose-internals or install node-addon-require-builtin to enable it",
-      );
+        'loader internals are unavailable, source code HMR is disabled; pass --expose-internals or install node-addon-require-builtin to enable it',
+      )
     }
 
     // Collect externals: framework modules reachable from the main entry.
     // Changes to these files require a full process restart, not HMR.
-    this.externals = new Set();
-    const mainUrl = pathToFileURL(resolve(process.argv[1])).href;
-    const mainJob = this.internal?.loadCache.get(mainUrl);
+    this.externals = new Set()
+    const mainUrl = pathToFileURL(resolve(process.argv[1])).href
+    const mainJob = this.internal?.loadCache.get(mainUrl)
     if (mainJob) {
-      this.externals = await loadDependencies(mainJob);
+      this.externals = await loadDependencies(mainJob)
     }
 
-    const match = picomatch(ignored);
+    const match = picomatch(ignored)
     this.watcher = watch(root, {
       ...this.config,
       cwd: this.baseDir,
       ignored: (path) =>
         !this.watchers.has(resolve(this.baseDir, path)) && match(relative(this.baseDir, path)),
-    });
+    })
 
-    const partialReload = this.ctx.debounce(() => this.partialReload(), this.config.debounce);
+    const partialReload = this.ctx.debounce(() => this.partialReload(), this.config.debounce)
 
-    this.watcher.on("change", async (path) => {
-      this.ctx.logger.debug("change detected at %C", path);
-      const filename = resolve(this.baseDir, path);
-      const url = pathToFileURL(filename).href;
+    this.watcher.on('change', async (path) => {
+      this.ctx.logger.debug('change detected at %C', path)
+      const filename = resolve(this.baseDir, path)
+      const url = pathToFileURL(filename).href
 
       // Full reload: the changed file is part of the framework
-      if (this.externals.has(url)) return loader.exit();
+      if (this.externals.has(url)) return loader.exit()
 
       // Awaited before the steps below, so that within one change a watcher
       // is settled by the time the file reaches module reloading.
-      const callbacks = this.watchers.get(filename);
+      const callbacks = this.watchers.get(filename)
       if (callbacks?.size) {
         await Promise.all(
           [...callbacks].map(async (callback) => {
             try {
-              await callback();
+              await callback()
             } catch (error) {
-              this.ctx.logger.warn(error);
+              this.ctx.logger.warn(error)
             }
           }),
-        );
+        )
       }
 
       // Partial reload: the file is in the ESM loadCache
       // In Node 24, both CJS and ESM modules imported via import() end up
       // in loadCache, so this check covers all module formats.
       if (this.internal?.loadCache.has(url)) {
-        this.stashed.add(url);
-        return partialReload();
+        this.stashed.add(url)
+        return partialReload()
       }
 
-      this.ctx.emit("hmr/change", url);
-    });
+      this.ctx.emit('hmr/change', url)
+    })
   }
 
   /**
@@ -214,35 +214,35 @@ class Hmr extends Service {
    * a path runs on each change.
    */
   watch(path: string | URL, callback: WatchCallback) {
-    const filename =
-      path instanceof URL || path.startsWith("file:")
+    const filename
+      = path instanceof URL || path.startsWith('file:')
         ? fileURLToPath(path)
-        : resolve(this.baseDir, path);
+        : resolve(this.baseDir, path)
     return this.ctx.effect(() => {
-      let callbacks = this.watchers.get(filename);
-      if (!callbacks) this.watchers.set(filename, (callbacks = new Set()));
-      callbacks.add(callback);
+      let callbacks = this.watchers.get(filename)
+      if (!callbacks) this.watchers.set(filename, (callbacks = new Set()))
+      callbacks.add(callback)
       // The watch set only ever grows: a path handed to `add()` may well have
       // been covered by `root` already, and `unwatch()` would take it out of
       // the normal watch too. Dropping the callback is what ends the watch.
-      this.watcher.add(filename);
+      this.watcher.add(filename)
       return () => {
-        callbacks.delete(callback);
-        if (!callbacks.size) this.watchers.delete(filename);
-      };
-    }, "ctx.hmr.watch()");
+        callbacks.delete(callback)
+        if (!callbacks.size) this.watchers.delete(filename)
+      }
+    }, 'ctx.hmr.watch()')
   }
 
   // hide stack trace from HMR
   getOuterStack = (): string[] => [
     // '    at HMR.partialReload (<anonymous>)',
-  ];
+  ]
 
   async getLinked(url: string) {
-    const job = this.internal?.loadCache.get(url);
-    if (!job) return [];
-    const linked = await job.linked;
-    return Array.prototype.map.call(linked, (job: ModuleJob) => job.url) as string[];
+    const job = this.internal?.loadCache.get(url)
+    if (!job) return []
+    const linked = await job.linked
+    return Array.prototype.map.call(linked, (job: ModuleJob) => job.url) as string[]
   }
 
   /**
@@ -253,109 +253,109 @@ class Hmr extends Service {
    * declined or if it's an external.
    */
   private async analyzeChanges() {
-    const pending: string[] = [];
+    const pending: string[] = []
 
-    this.accepted = new Set(this.stashed);
-    this.declined = new Set(this.externals);
+    this.accepted = new Set(this.stashed)
+    this.declined = new Set(this.externals)
 
-    const isExcluded = (url: string) => url.startsWith("node:") || url.includes("/node_modules/");
+    const isExcluded = (url: string) => url.startsWith('node:') || url.includes('/node_modules/')
 
     await Promise.all(
       [...this.stashed].map(async (url) => {
-        const children = await this.getLinked(url);
+        const children = await this.getLinked(url)
         for (const child of children) {
-          if (this.accepted.has(child) || this.declined.has(child) || isExcluded(child)) continue;
-          pending.push(child);
+          if (this.accepted.has(child) || this.declined.has(child) || isExcluded(child)) continue
+          pending.push(child)
         }
       }),
-    );
+    )
 
     while (pending.length) {
       let index = 0,
-        hasUpdate = false;
+        hasUpdate = false
       while (index < pending.length) {
-        const url = pending[index];
-        const children = await this.getLinked(url);
+        const url = pending[index]
+        const children = await this.getLinked(url)
         let isDeclined = true,
-          isAccepted = false;
+          isAccepted = false
         for (const child of children) {
-          if (this.declined.has(child) || isExcluded(child)) continue;
+          if (this.declined.has(child) || isExcluded(child)) continue
           if (this.accepted.has(child)) {
-            isAccepted = true;
-            break;
+            isAccepted = true
+            break
           } else {
-            isDeclined = false;
+            isDeclined = false
             if (!pending.includes(child)) {
-              hasUpdate = true;
-              pending.push(child);
+              hasUpdate = true
+              pending.push(child)
             }
           }
         }
         if (isAccepted || isDeclined) {
-          hasUpdate = true;
-          pending.splice(index, 1);
+          hasUpdate = true
+          pending.splice(index, 1)
           if (isAccepted) {
-            this.accepted.add(url);
+            this.accepted.add(url)
           } else {
-            this.declined.add(url);
+            this.declined.add(url)
           }
         } else {
-          index++;
+          index++
         }
       }
-      if (!hasUpdate) break;
+      if (!hasUpdate) break
     }
 
     for (const url of pending) {
-      this.declined.add(url);
+      this.declined.add(url)
     }
   }
 
   private async partialReload() {
-    const internal = this.internal!;
-    await this.analyzeChanges();
+    const internal = this.internal!
+    await this.analyzeChanges()
 
-    const candidates = new Map<ModuleJob, Plugin>();
-    const invalidatedModules = new Set(this.accepted);
-    const stalePlugins = new Map<Plugin, StalePlugin>();
+    const candidates = new Map<ModuleJob, Plugin>()
+    const invalidatedModules = new Set(this.accepted)
+    const stalePlugins = new Map<Plugin, StalePlugin>()
 
     // Build a map of plugin names per config tree URL.
     // Plugin entry files are treated as atomic reload units.
-    const nameMap: Dict<Set<string>> = Object.create(null);
+    const nameMap: Dict<Set<string>> = Object.create(null)
     for (const entry of this.ctx.loader.entries()) {
-      (nameMap[entry.parent.tree.ctx.baseUrl!] ??= new Set()).add(entry.options.name);
+      (nameMap[entry.parent.tree.ctx.baseUrl!] ??= new Set()).add(entry.options.name)
     }
 
     // Resolve each plugin name to its file URL and check if it needs reload
     for (const baseUrl in nameMap) {
       for (const name of nameMap[baseUrl]) {
         try {
-          const { url } = await this._resolve(name, baseUrl, {});
-          if (this.declined.has(url)) continue;
-          const job = internal.loadCache.get(url);
-          const plugin = this.ctx.loader.unwrapExports(job?.module?.getNamespace());
-          if (!job || !plugin) continue;
-          candidates.set(job, plugin);
-          this.declined.add(url);
+          const { url } = await this._resolve(name, baseUrl, {})
+          if (this.declined.has(url)) continue
+          const job = internal.loadCache.get(url)
+          const plugin = this.ctx.loader.unwrapExports(job?.module?.getNamespace())
+          if (!job || !plugin) continue
+          candidates.set(job, plugin)
+          this.declined.add(url)
         } catch (err) {
-          this.ctx.logger.warn(err);
+          this.ctx.logger.warn(err)
         }
       }
     }
 
     // Check each candidate plugin's dependency tree for accepted files
     for (const [job, plugin] of candidates) {
-      this.declined.delete(job.url);
-      const dependencies = [...(await loadDependencies(job, this.declined))];
-      this.declined.add(job.url);
+      this.declined.delete(job.url)
+      const dependencies = [...(await loadDependencies(job, this.declined))]
+      this.declined.add(job.url)
 
-      if (!dependencies.some((dep) => this.accepted.has(dep))) continue;
-      dependencies.forEach((dep) => invalidatedModules.add(dep));
+      if (!dependencies.some((dep) => this.accepted.has(dep))) continue
+      dependencies.forEach((dep) => invalidatedModules.add(dep))
 
       stalePlugins.set(plugin, {
         filename: job.url,
         runtime: this.ctx.registry.get(plugin),
-      });
+      })
     }
 
     /**
@@ -375,21 +375,21 @@ class Hmr extends Service {
      *   where .delete() only sets the type slot to undefined (doesn't remove the entry)
      * Using Map.prototype.delete ensures complete removal in both versions.
      */
-    const esmBackup: Dict = Object.create(null);
-    const cjsBackup: Dict = Object.create(null);
-    const require = createRequire(import.meta.url);
+    const esmBackup: Dict = Object.create(null)
+    const cjsBackup: Dict = Object.create(null)
+    const require = createRequire(import.meta.url)
     for (const filename of invalidatedModules) {
       // Backup and clear ESM loadCache
-      const job = Map.prototype.get.call(internal.loadCache, filename);
-      esmBackup[filename] = job;
-      Map.prototype.delete.call(internal.loadCache, filename);
+      const job = Map.prototype.get.call(internal.loadCache, filename)
+      esmBackup[filename] = job
+      Map.prototype.delete.call(internal.loadCache, filename)
 
       // Backup and clear CJS Module._cache
       try {
-        const filepath = fileURLToPath(filename);
+        const filepath = fileURLToPath(filename)
         if (require.cache[filepath]) {
-          cjsBackup[filepath] = require.cache[filepath];
-          delete require.cache[filepath];
+          cjsBackup[filepath] = require.cache[filepath]
+          delete require.cache[filepath]
         }
       } catch {
         // filename might not be a file: URL (e.g. node: protocol), ignore
@@ -398,35 +398,35 @@ class Hmr extends Service {
 
     const rollback = () => {
       for (const filename in esmBackup) {
-        Map.prototype.set.call(internal.loadCache, filename, esmBackup[filename]);
+        Map.prototype.set.call(internal.loadCache, filename, esmBackup[filename])
       }
       for (const filepath in cjsBackup) {
-        require.cache[filepath] = cjsBackup[filepath];
+        require.cache[filepath] = cjsBackup[filepath]
       }
-    };
+    }
 
     // Stage 1: re-import the module graph (all-or-nothing).
     // Plugin validity is checked here, where the only mutated state is the
     // module cache and no plugin has been touched yet. Moving this check
     // earlier is what allows stage 3 to have no rollback at all: a malformed
     // export can no longer fail halfway through swapping instances.
-    const replacements: Dict = {};
+    const replacements: Dict = {}
     try {
       for (const [, { filename, runtime }] of stalePlugins) {
         const exports = this.ctx.loader.unwrapExports(
           await this.ctx.loader.import(filename, this.getOuterStack),
-        );
+        )
         if (runtime && !this.ctx.registry.resolve(exports)) {
           throw new Error(
-            `invalid plugin at ${relative(this.baseDir, fileURLToPath(filename))}, ` +
-              `expect function or object with an "apply" method, received ${typeof exports}`,
-          );
+            `invalid plugin at ${relative(this.baseDir, fileURLToPath(filename))}, `
+              + `expect function or object with an "apply" method, received ${typeof exports}`,
+          )
         }
-        replacements[filename] = exports;
+        replacements[filename] = exports
       }
     } catch (e) {
-      handleError(this.ctx, e);
-      return rollback();
+      handleError(this.ctx, e)
+      return rollback()
     }
 
     // Stage 2: unload (per plugin, synchronous).
@@ -434,24 +434,24 @@ class Hmr extends Service {
     // costs nothing, and it is what makes the ancestor check below decidable:
     // by the time anything is rebuilt, every fiber this batch tears down has
     // already had its `uid` cleared.
-    let staleFibers: StaleFiber[] = [];
+    let staleFibers: StaleFiber[] = []
     for (const [plugin, { filename, runtime }] of stalePlugins) {
-      if (!runtime) continue;
-      const path = relative(this.baseDir, fileURLToPath(filename));
+      if (!runtime) continue
+      const path = relative(this.baseDir, fileURLToPath(filename))
 
       // `registry.delete()` deliberately leaves the fibers in `runtime.fibers`
       // (the `registry.has()` guard in `Fiber` skips the removal) so that we
       // can rebuild from them; snapshot anyway, as the list is backed by a
       // live `Map` iterator.
-      const fibers = [...runtime.fibers];
+      const fibers = [...runtime.fibers]
       try {
-        this.ctx.registry.delete(plugin);
+        this.ctx.registry.delete(plugin)
       } catch (err) {
-        this.ctx.logger.warn("failed to dispose plugin at %C", path);
-        this.ctx.logger.warn(err);
+        this.ctx.logger.warn('failed to dispose plugin at %C', path)
+        this.ctx.logger.warn(err)
       }
       for (const fiber of fibers) {
-        staleFibers.push({ path, replacement: replacements[filename], fiber });
+        staleFibers.push({ path, replacement: replacements[filename], fiber })
       }
     }
 
@@ -460,63 +460,63 @@ class Hmr extends Service {
     // single pass now that every delete is done and before anything is
     // awaited, so that stage 3 only ever has to think about its own fiber.
     staleFibers = staleFibers.filter((stale) => {
-      if (!hasInactiveAncestor(stale.fiber)) return true;
-      this.ctx.logger.debug("skip plugin at %C (inactive ancestor)", stale.path);
-      return false;
-    });
+      if (!hasInactiveAncestor(stale.fiber)) return true
+      this.ctx.logger.debug('skip plugin at %C (inactive ancestor)', stale.path)
+      return false
+    })
 
     // Stage 3: reload (per fiber, concurrent).
-    const logged = new Set<string>();
+    const logged = new Set<string>()
     await Promise.all(
       staleFibers.map(async ({ path, replacement, fiber }) => {
         try {
-          while (fiber.inertia) await fiber.inertia;
+          while (fiber.inertia) await fiber.inertia
 
           const newFiber = fiber.parent.registry.plugin(
             replacement,
             fiber.config,
             this.getOuterStack,
-          );
-          newFiber.entry = fiber.entry;
-          if (newFiber.entry) newFiber.entry.fiber = newFiber;
+          )
+          newFiber.entry = fiber.entry
+          if (newFiber.entry) newFiber.entry.fiber = newFiber
           if (!logged.has(path)) {
-            logged.add(path);
-            this.ctx.logger.info("reload plugin at %C", path);
+            logged.add(path)
+            this.ctx.logger.info('reload plugin at %C', path)
           }
         } catch (err) {
           // No rollback: a plugin that fails to load is left failed, exactly
           // as it would be on a cold start. It stays registered and keeps its
           // parent and config, so the next change to the file retries it.
-          this.ctx.logger.warn("failed to reload plugin at %C", path);
-          this.ctx.logger.warn(err);
+          this.ctx.logger.warn('failed to reload plugin at %C', path)
+          this.ctx.logger.warn(err)
         }
       }),
-    );
+    )
 
-    this.ctx.emit("hmr/reload", stalePlugins);
-    this.stashed = new Set();
+    this.ctx.emit('hmr/reload', stalePlugins)
+    this.stashed = new Set()
   }
 }
 
 namespace Hmr {
   export interface Config extends ChokidarOptions {
-    base?: string;
-    root: string[];
-    debounce: number;
-    ignored: string[];
+    base?: string
+    root: string[]
+    debounce: number
+    ignored: string[]
   }
 
   export const Config: z<Config> = z
     .object({
       base: z.string(),
-      root: z.array(String).role("table").default(["."]),
-      ignored: z.array(String).role("table").default(["**/node_modules", "**/.*", "cache", "data"]),
-      debounce: z.natural().role("ms").default(100),
+      root: z.array(String).role('table').default(['.']),
+      ignored: z.array(String).role('table').default(['**/node_modules', '**/.*', 'cache', 'data']),
+      debounce: z.natural().role('ms').default(100),
     })
     .i18n({
-      "en-US": enUS,
-      "zh-CN": zhCN,
-    });
+      'en-US': enUS,
+      'zh-CN': zhCN,
+    })
 }
 
-export default Hmr;
+export default Hmr

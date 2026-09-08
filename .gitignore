@@ -94,6 +94,7 @@ reports/
 vendor/
 go.work
 go.work.sum
+/cordis
 
 ## Nix
 result
