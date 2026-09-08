@@ -65,3 +65,45 @@ jobs:
       - name: Test
         working-directory: zig
         run: zig build test --summary all
+
+  flake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - name: Flake check
+        run: nix flake check
+
+  upstream-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # cordiverse/cordis main at the fork's last packages/** sync. Bump this
+      # SHA in the same commit as every packages/** sync.
+      UPSTREAM_PIN: caab04ecf5c5718b974a4b556a8e29d830defd1b
+      PRETTIER_VERSION: 3.9.6
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Fetch upstream pin
+        run: |
+          git remote add upstream https://github.com/cordiverse/cordis.git
+          git fetch --depth 1 upstream "$UPSTREAM_PIN"
+      - name: Byte guard - non-TS files must match the pin exactly
+        run: |
+          git diff --exit-code "$UPSTREAM_PIN" -- packages/ \
+            ':(exclude)*.ts' ':(exclude)*.js' ':(exclude)**/package.json'
+      - name: Semantic guard - TS/JS may differ from the pin only by prettier formatting
+        run: |
+          rm -rf /tmp/pin-tree /tmp/fork-tree
+          mkdir -p /tmp/pin-tree /tmp/fork-tree
+          git archive "$UPSTREAM_PIN" packages | tar -x -C /tmp/pin-tree
+          git ls-files -co --exclude-standard packages | tar -cf - -T - | tar -x -C /tmp/fork-tree
+          npx --yes "prettier@$PRETTIER_VERSION" --print-width 100 --write \
+            "/tmp/pin-tree/packages/**/*.{ts,js}" "/tmp/fork-tree/packages/**/*.{ts,js}"
+          diff -r --exclude=package.json /tmp/fork-tree/packages /tmp/pin-tree/packages
+      - name: Guard dprint.json keeps excluding packages
+        run: jq -e '.excludes | index("packages/**")' dprint.json

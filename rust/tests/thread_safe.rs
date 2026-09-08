@@ -36,8 +36,6 @@ fn threads_share_one_tree() {
         let ctx = Arc::clone(&ctx);
         let started = Arc::clone(&started);
         let received = Arc::clone(&received);
-        #[allow(unused_variables)]
-        let t = t;
         handles.push(std::thread::spawn(move || {
             for i in 0..25 {
                 let name = format!("worker-{t}");

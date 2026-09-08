@@ -504,6 +504,12 @@ pub fn link_fiber_ctx(core: &Rc<RefCell<Core>>, id: FiberId) {
 }
 
 /// Does every injected service currently resolve for this fiber?
+//
+// The core lock deliberately spans the whole check: the answer is a snapshot
+// across the service store and every provider's state, and a torn read could
+// activate a fiber against half-updated dependencies. Go holds its mutex
+// across the same loop.
+#[allow(clippy::significant_drop_tightening)]
 fn deps_ready(core: &Rc<RefCell<Core>>, id: FiberId) -> bool {
     let fiber = core.borrow().fiber(id);
     let f = fiber.borrow();
@@ -534,8 +540,7 @@ fn deps_ready(core: &Rc<RefCell<Core>>, id: FiberId) -> bool {
 /// Listener bodies run with no borrows held.
 pub fn settle_state(core: &Rc<RefCell<Core>>, id: FiberId, old: FiberState) {
     let (ctx, change) = {
-        let c = core.borrow();
-        let fiber = c.fiber(id);
+        let fiber = core.borrow().fiber(id);
         let f = fiber.borrow();
         if f.state == old {
             return;
@@ -578,31 +583,33 @@ pub fn transition(core: &Rc<RefCell<Core>>, id: FiberId) {
         let want_active = ready && !disposed;
 
         let fiber = core.borrow().fiber(id);
-        let mut f = fiber.borrow_mut();
-        if f.executing {
-            return;
-        }
-        let action = match (state, want_active, restart, disposed) {
-            (_, _, _, true) if state != FiberState::Active => {
-                f.state = FiberState::Disposed;
-                f.uid = -1;
-                Action::None
+        let action = {
+            let mut f = fiber.borrow_mut();
+            if f.executing {
+                return;
             }
-            (FiberState::Active, true, true, false) => {
-                f.executing = true;
-                f.state = FiberState::Unloading;
-                Action::Restart
+            match (state, want_active, restart, disposed) {
+                (_, _, _, true) if state != FiberState::Active => {
+                    f.state = FiberState::Disposed;
+                    f.uid = -1;
+                    Action::None
+                }
+                (FiberState::Active, true, true, false) => {
+                    f.executing = true;
+                    f.state = FiberState::Unloading;
+                    Action::Restart
+                }
+                (FiberState::Active, false, _, _) => {
+                    f.executing = true;
+                    f.state = FiberState::Unloading;
+                    Action::Deactivate
+                }
+                (FiberState::Pending | FiberState::Failed, true, _, false) => {
+                    f.executing = true;
+                    Action::Activate
+                }
+                _ => Action::None,
             }
-            (FiberState::Active, false, _, _) => {
-                f.executing = true;
-                f.state = FiberState::Unloading;
-                Action::Deactivate
-            }
-            (FiberState::Pending | FiberState::Failed, true, _, false) => {
-                f.executing = true;
-                Action::Activate
-            }
-            _ => Action::None,
         };
         (action, state)
     };
@@ -679,8 +686,7 @@ fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
     let prior = {
         // Lock order: Core before FiberData, everywhere. Every core lock
         // is released before settle_state re-locks it.
-        let c = core.borrow();
-        let fiber = c.fiber(id);
+        let fiber = core.borrow().fiber(id);
         let mut f = fiber.borrow_mut();
         let prior = f.state;
         f.bag = Some(Bag::new());

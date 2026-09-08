@@ -101,6 +101,7 @@ impl Context {
             } else {
                 hooks.push(Rc::clone(&hook));
             }
+            drop(core);
         }
 
         let Some(bag) = self.bag() else {
@@ -147,7 +148,10 @@ impl Context {
                     if fired.swap(true, std::sync::atomic::Ordering::SeqCst) {
                         return None;
                     }
-                    if let Some(d) = holder.borrow_mut().take() {
+                    // The guard must not span dispose(): a re-entrant lock
+                    // of the same cell would deadlock the Mutex build.
+                    let pending = holder.borrow_mut().take();
+                    if let Some(d) = pending {
                         d.dispose();
                     }
                     listener(args)
@@ -157,7 +161,8 @@ impl Context {
         )?;
         *holder.borrow_mut() = Some(disposer);
         Ok(Disposer::new(move || {
-            if let Some(d) = holder.borrow_mut().take() {
+            let pending = holder.borrow_mut().take();
+            if let Some(d) = pending {
                 d.dispose();
             }
         }))

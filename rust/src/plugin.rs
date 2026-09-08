@@ -352,6 +352,7 @@ impl Registry {
                     if let Some(entry) = stashed {
                         core.stash.insert(id, entry);
                     }
+                    drop(core);
                     runtime.fibers
                 }
                 None => Vec::new(),

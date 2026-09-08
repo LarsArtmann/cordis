@@ -136,11 +136,13 @@ impl Context {
         };
         let core = self.core.borrow();
         let imp = core.store.get(&key)?;
+        let value = Rc::clone(&imp.value);
         let provider = core.fiber(imp.fiber);
+        drop(core);
         if provider.borrow().state != FiberState::Active {
             return None;
         }
-        Some(Rc::clone(&imp.value))
+        Some(value)
     }
 
     /// The service of type `T` published in this context's realm. Fails when

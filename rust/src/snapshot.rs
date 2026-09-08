@@ -69,6 +69,10 @@ impl crate::context::Context {
     /// assert!(snapshot.runtimes.is_empty());
     /// ```
     #[must_use]
+    // A snapshot by definition reads the registry under one lock: the ids,
+    // names and fiber states below must come from one consistent view or a
+    // restore could resurrect a torn registry.
+    #[allow(clippy::significant_drop_tightening)]
     pub fn snapshot(&self) -> RegistrySnapshot {
         let core = self.core.borrow();
         let mut runtimes: Vec<(u64, &RuntimeData)> = core
@@ -98,6 +102,9 @@ impl crate::context::Context {
     /// # Panics
     /// When a runtime's fiber slot is missing from the arena, which can
     /// only happen if the core was mutated concurrently.
+    // The four decision lists (delta, dispose, restart, requeue) must be
+    // derived from one consistent view of runtimes and fiber states.
+    #[allow(clippy::significant_drop_tightening)]
     pub fn restore(&self, snapshot: &RegistrySnapshot) {
         let (delta, dispose, restart, requeue) = {
             let core = self.core.borrow();
@@ -184,29 +191,38 @@ impl crate::context::Context {
         // Fibers of surviving runtimes that died since the snapshot come
         // back through a restart request; the state machine re-runs the
         // body with the current config.
-        let requeue_fibers = {
-            let core = self.core.borrow();
-            let mut out = Vec::new();
-            for id in requeue {
-                let Some(runtime) = core.runtimes.get(&id) else {
-                    continue;
-                };
-                for fid in runtime.fibers.iter().copied() {
-                    let data = core.fiber(fid);
-                    let f = data.borrow();
-                    if f.state == FiberState::Pending {
-                        out.push(fid);
-                    }
-                }
-            }
-            out
-        };
+        let requeue_fibers = self.pending_fibers(&requeue);
         let mut core = self.core.borrow_mut();
         for fid in requeue_fibers {
             let data = core.fiber(fid);
             data.borrow_mut().restart_requested = true;
             core.queue(fid);
         }
+    }
+
+    /// The fibers of surviving runtimes that went back to pending since the
+    /// snapshot. Locks are taken per lookup, never across the scan.
+    fn pending_fibers(&self, requeue: &[u64]) -> Vec<crate::fiber::FiberId> {
+        let mut out = Vec::new();
+        for id in requeue {
+            let fibers = {
+                let core = self.core.borrow();
+                core.runtimes.get(id).map(|runtime| runtime.fibers.clone())
+            };
+            let Some(fibers) = fibers else {
+                continue;
+            };
+            for fid in fibers {
+                let pending = {
+                    let data = self.core.borrow().fiber(fid);
+                    data.borrow().state == FiberState::Pending
+                };
+                if pending {
+                    out.push(fid);
+                }
+            }
+        }
+        out
     }
 }
 

@@ -25,7 +25,7 @@ pub struct Impl {
 #[cfg(not(feature = "thread-safe"))]
 pub type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()>>;
 #[cfg(feature = "thread-safe")]
-pub(crate) type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()> + Send + Sync>;
+pub type ApplyFn = Rc<dyn Fn(&Context, Value) -> crate::Result<()> + Send + Sync>;
 
 /// The shared runtime identity and body of a plugin, used by both the
 /// closure form (`FnPlugin`) and the trait form (Plugin).
@@ -54,7 +54,7 @@ pub struct RuntimeData {
 #[cfg(not(feature = "thread-safe"))]
 pub type Cleanup = Box<dyn FnMut()>;
 #[cfg(feature = "thread-safe")]
-pub(crate) type Cleanup = Box<dyn FnMut() + Send>;
+pub type Cleanup = Box<dyn FnMut() + Send>;
 
 /// An ordered collection of disposables owned by a fiber or by one effect
 /// inside a fiber. Disposal is always last in, first out.
@@ -264,9 +264,13 @@ impl Core {
     /// Queue a fiber for state transition evaluation.
     pub fn queue(&mut self, id: FiberId) {
         let fiber = self.fiber(id);
-        let mut f = fiber.borrow_mut();
-        if !f.queued {
+        let already = {
+            let mut f = fiber.borrow_mut();
+            let already = f.queued;
             f.queued = true;
+            already
+        };
+        if !already {
             self.dirty.push_back(id);
         }
     }
@@ -277,21 +281,20 @@ impl Core {
         let mut checks = Vec::new();
         for (index, slot) in self.fibers.iter().enumerate() {
             let Some(fiber) = slot else { continue };
-            let f = fiber.borrow();
-            if f.runtime.is_none() {
-                continue;
-            }
-            for name in names {
-                if !f.inject.contains(name) {
-                    continue;
+            let target = {
+                let f = fiber.borrow();
+                if f.runtime.is_none() {
+                    None
+                } else {
+                    names.iter().find_map(|name| {
+                        f.inject
+                            .contains(name)
+                            .then(|| (f.ctx.find_isolate_override(name), name.clone()))
+                    })
                 }
-                checks.push((
-                    index,
-                    f.ctx.find_isolate_override(name),
-                    from.find_isolate_override(name),
-                    name.clone(),
-                ));
-                break;
+            };
+            if let Some((fiber_override, name)) = target {
+                checks.push((index, fiber_override, from.find_isolate_override(&name), name));
             }
         }
         let mut targets = Vec::new();
