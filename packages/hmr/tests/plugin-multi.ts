@@ -1,10 +1,10 @@
-import { Context } from "cordis";
+import { Context } from 'cordis'
 
-const stats: any = ((globalThis as any).__hmrTest ??= {});
+const stats: any = ((globalThis as any).__hmrTest ??= {})
 
-export const name = "plugin-multi";
+export const name = 'plugin-multi'
 
-export let version = "multi-v1";
+export let version = 'multi-v1'
 
 /**
  * Loaded by two entries at once, so its runtime holds two fibers. Each
@@ -12,8 +12,8 @@ export let version = "multi-v1";
  * independently and check that each kept its own config across a reload.
  */
 export function apply(ctx: Context, config: { label: string }) {
-  (stats.multiApplies ??= []).push(`${config.label}:${version}`);
-  ctx.on("hmr-test/get-multi", (label: string) => {
-    return label === config.label ? version : undefined;
-  });
+  ;(stats.multiApplies ??= []).push(`${config.label}:${version}`)
+  ctx.on('hmr-test/get-multi', (label: string) => {
+    return label === config.label ? version : undefined
+  })
 }

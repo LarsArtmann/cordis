@@ -505,10 +505,13 @@ pub fn link_fiber_ctx(core: &Rc<RefCell<Core>>, id: FiberId) {
 
 /// Does every injected service currently resolve for this fiber?
 //
-// The core lock deliberately spans the whole check: the answer is a snapshot
-// across the service store and every provider's state, and a torn read could
-// activate a fiber against half-updated dependencies. Go holds its mutex
-// across the same loop.
+// The core borrow deliberately spans the whole check: the answer is a
+// snapshot across the service store and every provider's state, and a torn
+// read could activate a fiber against half-updated dependencies. Go's
+// resolveDeps (go/fiber.go) instead locks only its store-lookup loop,
+// snapshots candidate states, and closes the gap with a generation-counter
+// re-check in transition; this port makes the whole snapshot atomic, which
+// needs no retry.
 #[allow(clippy::significant_drop_tightening)]
 fn deps_ready(core: &Rc<RefCell<Core>>, id: FiberId) -> bool {
     let fiber = core.borrow().fiber(id);

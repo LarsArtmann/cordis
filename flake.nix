@@ -99,6 +99,18 @@
                 zig build docs --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
                 touch $out
               '';
+
+          markdown =
+            pkgs.runCommand "cordis-markdown-lint"
+              {
+                nativeBuildInputs = [ pkgs.markdownlint-cli ];
+              }
+              ''
+                cp -r ${source} cordis
+                cd cordis
+                markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
+                touch $out
+              '';
         }
       );
 
@@ -167,6 +179,7 @@
                   rustc
                   cargo
                   zig
+                  markdownlint-cli
                 ];
                 text = script;
               };
@@ -189,6 +202,9 @@
           test-zig = mkTest "test-zig" ''
             cd zig && zig build test --summary all
           '';
+          test-markdown = mkTest "test-markdown" ''
+            markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
+          '';
           test = mkTest "test" ''
             export GOCACHE="''${GOCACHE_OVERRIDE:-$(mktemp -d)/go-build}"
             export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
@@ -200,6 +216,8 @@
             (cd rust && cargo clippy --all-targets && cargo clippy --all-targets --features thread-safe && cargo test)
             echo "== Zig =="
             (cd zig && zig build test --summary all)
+            echo "== Markdown =="
+            markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
           '';
         }
       );

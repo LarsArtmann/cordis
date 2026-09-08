@@ -66,11 +66,12 @@ is verified against `packages/core/src/`. Status vocabulary:
 
 | Feature                                                      | Status                                                                                                                                                                                      |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Golden scenarios, byte-identical across Go/Rust/Zig          | PARTIALLY_FUNCTIONAL (4 scenarios: lifecycle, events, cascade, dispatch; Go+Rust run all 4, Zig runs 3 — cascade pending a Zig runner on its typed registry, see `golden/README.md` matrix) |
+| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (4 scenarios: lifecycle, events, cascade, dispatch; every port runs all 4, see `golden/README.md` matrix)                                                                  |
 | DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                                                                                                            |
 | Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                                                                                                 |
 | `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                                                                                                            |
 | TypeScript suite (`packages/`)                               | FULLY_FUNCTIONAL locally: 248/248 after the 2026-09-08 rebase repair; CI verification pending the next push                                                                                 |
+| Markdown lint gate (flake `markdown` check, `test-markdown`) | FULLY_FUNCTIONAL (markdownlint clean since 2026-09-08; config and `packages/` exclusion fixed the same day)                                                                                 |
 
 ## TypeScript original (`packages/`)
 
@@ -87,8 +88,7 @@ the `caab04e` pin.
 No code yet; bounded work is tracked in `TODO_LIST.md`, direction in
 `ROADMAP.md`:
 
-- Zig: registry snapshot/restore, status events, accessor/mixin, logger,
-  cascade golden runner
+- Zig: registry snapshot/restore, status events, accessor/mixin, logger
 - Rust: `internal/get|set|listener|dispatch` interception, logger service
 - Logger golden scenario (the logger service has no golden coverage)
 

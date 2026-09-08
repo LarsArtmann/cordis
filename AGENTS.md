@@ -62,12 +62,20 @@ system-profile copy is built with Go 1.26 and warns about x/tools skew.
 
 ## TS workspace gotchas (learned in the 2026-09-07 upstream rebase)
 
-- **Toolchain pins are load-bearing.** Root devDependencies must stay at
-  `typescript ^5.9.3`, `vitest ^4.1.5`, `vite ^7.3.2`, `eslint ^8.57.1`,
-  `esbuild ^0.28.0`. TypeScript 7 breaks yarn-berry's builtin compat patch
-  (`lib/_tsc.js` missing) and there is NO yarn.lock, so every install
-  re-resolves: a bad bump breaks `yarn install` for everyone, immediately.
-  There is no yarn.lock by design (upstream does the same).
+- **Toolchain pins are load-bearing.** VERIFIED WORKING SET (2026-09-08
+  evening, full 248/248 suite): `packageManager yarn@4.18.0` — 4.14.1
+  cannot install TypeScript 7 (its builtin compat patch lstats the missing
+  `lib/_tsc.js`; fixed in yarn 4.17.1, yarn#7190/#7216); `typescript
+  ^7.0.2` (builds via yakumo); `vitest ^5.0.0`; **`vite ^7.3.2` — vite 8
+  breaks the suite** (module-runner `SyntaxError` on decorator.spec.ts and
+  hmr waitFor timeouts; both vanish on vite 7); `eslint ^10.10.0` (no gate
+  exercises it); `esbuild ^0.28.2`; js-yaml must stay `^4.1.0` (upstream
+  pin — js-yaml 5 breaks `new yaml.Type(...)` at build time, hit twice
+  now). There is NO yarn.lock by design (upstream does the same), so every
+  install re-resolves: a bad bump breaks `yarn install` for everyone,
+  immediately. These pins are a deliberate fork divergence from upstream
+  (upstream runs yarn 4.14.1 + TS ^5.9.3 + vitest ^4.1.5); re-verify the
+  set after every packages sync.
 - **Test fixtures are string-coupled to the specs.** hmr specs mutate fixture
   sources via literal `content.replace("value = 'initial'", ...)`. Fork-style
   reformatting of `packages/hmr/tests/*` fixtures (yml + plugin `.ts` files)
@@ -91,9 +99,14 @@ system-profile copy is built with Go 1.26 and warns about x/tools skew.
   each package's `lib/index.js`. After changing TS sources run
   `nix develop -c yarn build` before debugging "impossible" test failures —
   the tests may still be running the old bundle.
-- TS deps (chokidar, js-yaml, ...) must match upstream's versions; sed-style
-  "bump everything" passes have twice introduced non-existent versions
-  (js-yaml ^5.4.1) or API breaks.
+- TS dep bumps are upstream decisions, but three bump-everything incidents
+  (2026-09-08) hardened the protocol: (1) check the npm registry before
+  calling a version fake — chokidar 5, vitest 5, eslint 10 and js-yaml 5
+  all exist; (2) verify each major empirically against the harness — vite
+  8 breaks the suite, eslint 10 breaks `yarn lint` (.eslintrc removal),
+  js-yaml 5 breaks the include build (`yaml.Type` gone); (3) fixture bytes
+  are string-coupled to specs — reformat them and every reload test times
+  out.
 
 ## Zig 0.16 std gotchas (all verified against 0.16.0 on 2026-09-08)
 
@@ -199,9 +212,9 @@ Golden scenarios (four: lifecycle `scenario.txt`, events
 `scenario-events.txt`, cascade `scenario-cascade.txt`, dispatch
 `scenario-dispatch.txt`) are executed by `go/golden_test.go`,
 `rust/tests/golden.rs` and `zig/tests/golden.zig` (Zig embeds the files at
-build time via `zig/build.zig`). Go and Rust run all four byte-identically;
-Zig runs three (no cascade runner yet — `golden/README.md` carries the
-per-scenario runner matrix and TODO_LIST tracks the Zig runner).
+build time via `zig/build.zig`). All three ports run all four
+byte-identically; the Zig cascade runner shares the lifecycle runner's
+op interpreter (`runLifecycleScenario` in `zig/tests/golden.zig`).
 Regenerate with `GOLDEN_UPDATE=1` on the Go runner and re-verify Rust and
 Zig. Changing semantics? Fix the port, not the golden file. The loader has
 no Rust/Zig port, so its watch/reload transcript is pinned by a Go-only
@@ -244,23 +257,37 @@ on 2026-09-08).
   conflict points was format-only, so fork TS content is authoritative for
   semantics and future conflicts should re-apply fork deltas onto upstream
   blobs. Upstream `hmr.watch()` (#128) was already in the fork base.
-- RESOLVED (2026-09-08): `yarn install` used to hard-crash with
+- RESOLVED (2026-09-08, twice): `yarn install` hard-crashed with
   `typescript: ^7.0.2` (every TS 7 tarball ships only `bin/tsc`, no
   `lib/_tsc.js`, and yarn 4.14.1's builtin `compat/typescript` patch
-  lstats that file). Upstream has since reverted to `^5.9.3`; the fork
-  matches upstream's pins and installs cleanly. The fork's only manifest
-  delta is a deliberate `@types/node ^26.5.0` bump (tsc-verified).
-  TS dep bumps remain upstream decisions — re-check
-  `git diff <upstream> -- '**/package.json'` after every sync.
+  lstats that file). First resolution matched upstream's revert to
+  `^5.9.3`; the same evening a fresh bump-everything pass re-shipped TS 7
+  and the REAL fix landed instead: **upgrade yarn to 4.18.0** (>=4.17.1
+  gates the legacy patch off for TS 7) — see the verified working set in
+  the toolchain bullet above. Manifest deltas vs upstream are now
+  deliberate (yarn 4.18.0, TS 7, vitest 5, chokidar 5, @babel 8, esbuild
+  0.28.2, plus the older `@types/node ^26.5.0`); js-yaml stays at
+  upstream's `^4.1.0` (js-yaml 5 breaks the build) and eslint stays at
+  upstream's `^8.57.1` (eslint 10 removed `.eslintrc` support and Build
+  CI runs `yarn lint` over the legacy config — verified failing under 10,
+  green under 8). yarn 4.18 writes `npmMinimalAgeGate: 0` into
+  `.yarnrc.yml` on install (freshly published majors are younger than its
+  default age gate) — keep it committed or every install re-writes it.
+  Re-check `git diff <upstream> -- '**/package.json'` after every sync and
+  re-run the full suite before trusting the set.
 
 ## Repo hygiene facts
 
 - Lint config lives in `.markdownlint.jsonc` (MD013/MD010-in-code-blocks
-  off, keepachangelog duplicate headings allowed), `.markdownlintignore`
-  (`docs/status/`, `docs/planning/` are frozen history;
-  `packages/core/README.md` is upstream-frozen; `node_modules/` is vendored),
-  `.oxlintrc.json` (`ignorePatterns` skips generated `lib/`/`dist/`), and
-  `.buildflow.yml`. `dprint.json` excludes `packages/**` — upstream owns
+  off, keepachangelog duplicate headings allowed; strict JSON, no trailing
+  commas) and is GATED since 2026-09-08: the flake `markdown` check and the
+  `test-markdown` app (also part of `nix run .#test`) run markdownlint over
+  the tree. `.markdownlintignore` excludes `docs/status/` +
+  `docs/planning/` (frozen history), all of `packages/` (upstream-owned,
+  byte-parity-guarded), and vendored/generated dirs (`node_modules/`,
+  `target/`, `zig-out/`). `.oxlintrc.json` (`ignorePatterns` skips
+  generated `lib/`/`dist/`), and `.buildflow.yml` round out the configs.
+  `dprint.json` excludes `packages/**` — upstream owns
   formatting there; never let a formatter rewrite upstream files.
 - Run `nix develop -c buildflow` on this machine: buildflow's per-module Go
   fan-out needs a working `go` matching `go/go.mod` (1.27), and the system
@@ -294,8 +321,20 @@ on 2026-09-08).
 - The `thread-safe` Rust build swaps `RefCell` for `std::sync::Mutex`
   (non-reentrant). **Never hold a core borrow across another core borrow** —
   nested same-thread locking deadlocks instead of panicking
-  (`Fiber::name` did exactly this). Audit every new borrow scope against
-  this rule; a deadlock shows up as a hung test suite, not an error.
+  (`Fiber::name` did exactly this, pinned by
+  `fiber_name_never_self_deadlocks` in `rust/tests/thread_safe.rs`). Audit
+  every new borrow scope against this rule; a deadlock shows up as a hung
+  test suite, not an error. The `once` scrutinee hardening (take the holder
+  cell before disposing) is defense-in-depth: no current dispose path
+  re-enters the cell, so no test can fail against the old shape by
+  construction; `once_listener_may_dispose_itself_synchronously` pins the
+  observable contract instead. The `deps_ready` allowlist comment cites
+  Go's `resolveDeps` faithfully (Go locks only its lookup loop + retries
+  via generation counter; Rust makes the snapshot atomic).
+- Root disposal fires no `internal/plugin` (the root owns no runtime); its
+  rollback cascades to root-scoped plugins, which fire their own disposal
+  events — pinned by `root_dispose_emits_no_plugin_event`
+  (`rust/tests/parity.rs`).
 - `use BorrowExt as _` imports look unused in default builds (an autofix
   deleted one once) but are required under `thread-safe`, where the
   `Rc`/`RefCell` aliases become `Arc`/`Mutex`. Verify both feature

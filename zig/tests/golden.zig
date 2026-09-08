@@ -176,6 +176,100 @@ fn readScenarioLines(gpa: std.mem.Allocator, text: []const u8) ![][]const u8 {
     return lines.toOwnedSlice(gpa);
 }
 
+fn runLifecycleScenario(r: *Runner, ctx: *Context, alloc: std.mem.Allocator, scenario: [][]const u8) !void {
+    for (scenario) |line| {
+        var tokens = std.mem.tokenizeAny(u8, line, " \t");
+        const op = tokens.next().?;
+        var args: std.ArrayListUnmanaged([]const u8) = .empty;
+        while (tokens.next()) |tok| try args.append(alloc, tok);
+
+        if (std.mem.eql(u8, op, "provide") or std.mem.eql(u8, op, "provide-in-realm")) {
+            const params = parseParams(alloc, args.items);
+            var scope: *Context = ctx;
+            if (params.realm.len > 0) scope = ctx.isolateShared(args.items[0], params.realm);
+            try startProvider(r, scope, args.items[0]);
+            r.log("provided {s}", .{args.items[0]});
+        } else if (std.mem.eql(u8, op, "withdraw") or std.mem.eql(u8, op, "withdraw-in-realm")) {
+            const key = try std.fmt.allocPrint(alloc, "provider:{s}", .{args.items[0]});
+            const fiber = r.fibers.get(key).?;
+            fiber.dispose();
+            r.log("withdrawn {s}", .{args.items[0]});
+        } else if (std.mem.eql(u8, op, "start") or std.mem.eql(u8, op, "start-isolated")) {
+            const params = parseParams(alloc, args.items);
+            var scope: *Context = ctx;
+            if (std.mem.eql(u8, op, "start-isolated")) {
+                for (params.deps) |dep| scope = scope.isolateShared(dep, params.realm);
+            }
+            try startLogical(r, scope, args.items[0], params);
+        } else if (std.mem.eql(u8, op, "update")) {
+            const fiber = r.fibers.get(args.items[0]).?;
+            const config = try std.fmt.parseInt(i32, args.items[1], 10);
+            const stored = try ctx.core.a().create(i32);
+            stored.* = config;
+            try fiber.update(cordis.value(stored));
+        } else if (std.mem.eql(u8, op, "restart")) {
+            try r.fibers.get(args.items[0]).?.restart();
+        } else if (std.mem.eql(u8, op, "dispose")) {
+            r.fibers.get(args.items[0]).?.dispose();
+            r.log("disposed {s}", .{args.items[0]});
+        } else if (std.mem.eql(u8, op, "restart-root")) {
+            ctx.fiberHandle().dispose();
+            r.log("root-restarted", .{});
+        } else if (std.mem.eql(u8, op, "spawn")) {
+            var parent: []const u8 = "";
+            for (args.items) |tok| {
+                if (std.mem.startsWith(u8, tok, "parent=")) parent = tok["parent=".len..];
+            }
+            const params = parseParams(alloc, args.items[1..]);
+            const spec = alloc.create(ChildSpec) catch @panic("cordis: out of memory");
+            spec.* = .{ .name = args.items[0], .deps = params.deps, .config = params.config };
+            const existing = r.children.get(parent) orelse &.{};
+            var list: std.ArrayListUnmanaged(ChildSpec) = .empty;
+            list.appendSlice(alloc, existing) catch @panic("cordis: out of memory");
+            list.append(alloc, spec.*) catch @panic("cordis: out of memory");
+            r.children.put(alloc, parent, list.toOwnedSlice(alloc) catch @panic("cordis: out of memory")) catch @panic("cordis: out of memory");
+        } else if (std.mem.eql(u8, op, "delete")) {
+            const p = r.plugins.get(args.items[0]).?;
+            ctx.registry().delete(p);
+            r.log("deleted {s}", .{args.items[0]});
+        } else if (std.mem.eql(u8, op, "expect-registry-size")) {
+            const want = try std.fmt.parseInt(usize, args.items[0], 10);
+            const got = ctx.registry().size();
+            if (got != want) {
+                std.debug.print("expected registry size {d}, got {d}\n", .{ want, got });
+                return error.GoldenRegistrySizeMismatch;
+            }
+            r.log("registry-size {d}", .{want});
+        } else if (std.mem.eql(u8, op, "expect-state")) {
+            const fiber = r.fibers.get(args.items[0]).?;
+            const got = stateName(fiber.state());
+            if (!std.mem.eql(u8, got, args.items[1])) {
+                std.debug.print("expected {s} {s}, got {s}\ntrace:\n", .{ args.items[0], args.items[1], got });
+                for (r.trace.items) |entry| std.debug.print("{s}\n", .{entry});
+                return error.GoldenStateMismatch;
+            }
+            r.log("state {s} {s}", .{ args.items[0], args.items[1] });
+        } else {
+            std.debug.print("unknown op {s}\n", .{op});
+            return error.GoldenUnknownOp;
+        }
+    }
+}
+
+fn expectGoldenTrace(r: *Runner, expected: [][]const u8) !void {
+    if (r.trace.items.len != expected.len) {
+        std.debug.print("trace length {d} != expected {d}\ntrace:\n", .{ r.trace.items.len, expected.len });
+        for (r.trace.items) |entry| std.debug.print("{s}\n", .{entry});
+        return error.GoldenLengthMismatch;
+    }
+    for (r.trace.items, expected, 0..) |got, want, i| {
+        if (!std.mem.eql(u8, got, want)) {
+            std.debug.print("trace divergence at line {d}: expected '{s}', got '{s}'\n", .{ i + 1, want, got });
+            return error.GoldenDivergence;
+        }
+    }
+}
+
 test "golden scenario events" {
     const gpa = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(gpa);
@@ -278,95 +372,26 @@ test "golden scenario" {
 
     var r = Runner{ .gpa = alloc };
 
-    for (scenario) |line| {
-        var tokens = std.mem.tokenizeAny(u8, line, " \t");
-        const op = tokens.next().?;
-        var args: std.ArrayListUnmanaged([]const u8) = .empty;
-        while (tokens.next()) |tok| try args.append(alloc, tok);
+    try runLifecycleScenario(&r, ctx, alloc, scenario);
+    try expectGoldenTrace(&r, expected);
+}
 
-        if (std.mem.eql(u8, op, "provide") or std.mem.eql(u8, op, "provide-in-realm")) {
-            const params = parseParams(alloc, args.items);
-            var scope: *Context = ctx;
-            if (params.realm.len > 0) scope = ctx.isolateShared(args.items[0], params.realm);
-            try startProvider(&r, scope, args.items[0]);
-            r.log("provided {s}", .{args.items[0]});
-        } else if (std.mem.eql(u8, op, "withdraw") or std.mem.eql(u8, op, "withdraw-in-realm")) {
-            const key = try std.fmt.allocPrint(alloc, "provider:{s}", .{args.items[0]});
-            const fiber = r.fibers.get(key).?;
-            fiber.dispose();
-            r.log("withdrawn {s}", .{args.items[0]});
-        } else if (std.mem.eql(u8, op, "start") or std.mem.eql(u8, op, "start-isolated")) {
-            const params = parseParams(alloc, args.items);
-            var scope: *Context = ctx;
-            if (std.mem.eql(u8, op, "start-isolated")) {
-                for (params.deps) |dep| scope = scope.isolateShared(dep, params.realm);
-            }
-            try startLogical(&r, scope, args.items[0], params);
-        } else if (std.mem.eql(u8, op, "update")) {
-            const fiber = r.fibers.get(args.items[0]).?;
-            const config = try std.fmt.parseInt(i32, args.items[1], 10);
-            const stored = try ctx.core.a().create(i32);
-            stored.* = config;
-            try fiber.update(cordis.value(stored));
-        } else if (std.mem.eql(u8, op, "restart")) {
-            try r.fibers.get(args.items[0]).?.restart();
-        } else if (std.mem.eql(u8, op, "dispose")) {
-            r.fibers.get(args.items[0]).?.dispose();
-            r.log("disposed {s}", .{args.items[0]});
-        } else if (std.mem.eql(u8, op, "restart-root")) {
-            ctx.fiberHandle().dispose();
-            r.log("root-restarted", .{});
-        } else if (std.mem.eql(u8, op, "spawn")) {
-            var parent: []const u8 = "";
-            for (args.items) |tok| {
-                if (std.mem.startsWith(u8, tok, "parent=")) parent = tok["parent=".len..];
-            }
-            const params = parseParams(alloc, args.items[1..]);
-            const spec = alloc.create(ChildSpec) catch @panic("cordis: out of memory");
-            spec.* = .{ .name = args.items[0], .deps = params.deps, .config = params.config };
-            const existing = r.children.get(parent) orelse &.{};
-            var list: std.ArrayListUnmanaged(ChildSpec) = .empty;
-            list.appendSlice(alloc, existing) catch @panic("cordis: out of memory");
-            list.append(alloc, spec.*) catch @panic("cordis: out of memory");
-            r.children.put(alloc, parent, list.toOwnedSlice(alloc) catch @panic("cordis: out of memory")) catch @panic("cordis: out of memory");
-        } else if (std.mem.eql(u8, op, "delete")) {
-            const p = r.plugins.get(args.items[0]).?;
-            ctx.registry().delete(p);
-            r.log("deleted {s}", .{args.items[0]});
-        } else if (std.mem.eql(u8, op, "expect-registry-size")) {
-            const want = try std.fmt.parseInt(usize, args.items[0], 10);
-            const got = ctx.registry().size();
-            if (got != want) {
-                std.debug.print("expected registry size {d}, got {d}\n", .{ want, got });
-                return error.GoldenRegistrySizeMismatch;
-            }
-            r.log("registry-size {d}", .{want});
-        } else if (std.mem.eql(u8, op, "expect-state")) {
-            const fiber = r.fibers.get(args.items[0]).?;
-            const got = stateName(fiber.state());
-            if (!std.mem.eql(u8, got, args.items[1])) {
-                std.debug.print("expected {s} {s}, got {s}\ntrace:\n", .{ args.items[0], args.items[1], got });
-                for (r.trace.items) |entry| std.debug.print("{s}\n", .{entry});
-                return error.GoldenStateMismatch;
-            }
-            r.log("state {s} {s}", .{ args.items[0], args.items[1] });
-        } else {
-            std.debug.print("unknown op {s}\n", .{op});
-            return error.GoldenUnknownOp;
-        }
-    }
+test "golden scenario cascade" {
+    const gpa = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const alloc = arena.allocator();
 
-    if (r.trace.items.len != expected.len) {
-        std.debug.print("trace length {d} != expected {d}\ntrace:\n", .{ r.trace.items.len, expected.len });
-        for (r.trace.items) |entry| std.debug.print("{s}\n", .{entry});
-        return error.GoldenLengthMismatch;
-    }
-    for (r.trace.items, expected, 0..) |got, want, i| {
-        if (!std.mem.eql(u8, got, want)) {
-            std.debug.print("trace divergence at line {d}: expected '{s}', got '{s}'\n", .{ i + 1, want, got });
-            return error.GoldenDivergence;
-        }
-    }
+    const scenario = try readScenarioLines(alloc, golden_data.scenario_cascade);
+    const expected = try readScenarioLines(alloc, golden_data.expected_cascade);
+
+    const ctx = try Context.init(gpa);
+    defer ctx.deinit();
+
+    var r = Runner{ .gpa = alloc };
+
+    try runLifecycleScenario(&r, ctx, alloc, scenario);
+    try expectGoldenTrace(&r, expected);
 }
 
 test "golden dsl parseParams" {

@@ -7,35 +7,35 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 
 ## Upstream tracking
 
-- [ ] Sync `packages/**` to current upstream `main` (upstream moved past the
-      `caab04e` pin: rc.10 version set, hmr src evolution), bump
-      `UPSTREAM_PIN` (`.github/workflows/ports.yml:89`) in the same commit,
-      run all gates (source: docs/status/2026-09-08_21-18 §b2/§c1/§f2).
+- [ ] Validate the deliberate manifest divergence through CI: the working
+      tree now runs yarn 4.18.0 + TS ^7.0.2 + vitest ^5 (248/248 locally,
+      2026-09-08) while upstream pins yarn 4.14.1 + TS ^5.9.3 + vitest ^4.
+      The `upstream-parity` job has not seen the reformat + fixture restore
+      yet — push, confirm it is green, and only then decide whether to
+      sync `packages/**` to upstream `f8ea3cd` (rc.10 version set) and bump
+      `UPSTREAM_PIN` (`.github/workflows/ports.yml:89`) in the same commit
+      (source: docs/status/2026-09-08_21-18 §b2/§c1/§f2).
 
 ## Parity
 
-- [ ] Zig: cascade golden runner — wire `golden/scenario-cascade.txt` into
-      `zig/build.zig` + `zig/tests/golden.zig` on top of the typed registry
-      (`hasTyped`/`deleteTyped`, landed in `75fb408`); then flip the
-      `golden/README.md` matrix cell and the FEATURES/README rows to
-      FULLY_FUNCTIONAL (source: docs/status/2026-09-08_18-16 §b1/§f4 —
-      prerequisite done, runner missing; golden/README matrix is the source
-      of truth until then).
+Nothing pending — Zig runs all four golden scenarios (cascade runner landed
+2026-09-08 on top of its typed registry).
 
-## Rust follow-ups (source: docs/status/2026-09-08_21-11 §f1–f5, §c6)
+## Rust follow-ups
 
-- [ ] Verify Go's `depsReady` locking against `go/fiber.go` and correct the
-      `deps_ready` allowlist comment in `rust/src/` (or keep it with a
-      verified citation).
-- [ ] `once` scrutinee regression test under `--features thread-safe` that
-      fails with the guard-spanning shape — or document the fix as
-      defense-in-depth in the commit/AGENTS.
-- [ ] Root-dispose-emits-no-`EVENT_PLUGIN` test (by design; currently pinned
-      only by code reading).
-- [ ] `EVENT_PLUGIN`/`EVENT_UPDATE` + root guard narrative in
-      `rust/src/lib.rs` (crate docs stop at the `pub use` line).
+Nothing pending — the `deps_ready` allowlist comment now carries a verified
+`go/fiber.go` citation, the `once` scrutinee hardening and the `Fiber::name`
+one-lock shape are pinned in `rust/tests/thread_safe.rs`, root-dispose's
+no-`internal/plugin` contract is pinned in `rust/tests/parity.rs`, and the
+crate docs narrate the internal events and the root guard (all landed
+2026-09-08).
 
 ## Repo guards and small fixes
+
+CONTESTED (2026-09-08, see commit `2ac1be1`): the three `packages/**` /
+`ports.yml` items below are entangled with a separate session's
+bump-and-restyle commit on `main` that contradicts the repo's documented
+pins. Resolve that first, then pick these back up.
 
 - [ ] Fixture/spec replace-literal canary in `packages/hmr`: a tiny test
       asserting every spec `.replace()` literal exists in its fixture —
@@ -47,16 +47,11 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 - [ ] Decide and document the `package.json` exclusion in `upstream-parity`
       — the one unguarded drift surface left (source:
       docs/status/2026-09-08_21-18 §f8).
-- [ ] Wire `.markdownlint.jsonc` into a gate or delete it: nothing in
-      buildflow, flake or CI invokes it (verified 2026-09-08), and it has
-      trailing commas strict parsers reject (source:
-      docs/status/2026-09-08_21-11 §c7/§f25).
-- [ ] Thread-safe Rust regression test for the `Fiber::name` nested-borrow
-      deadlock (fixed in `d9cc834`; `rust/tests/thread_safe.rs` has no
-      pinning test; source: docs/status/2026-09-08_04-04 §f40).
-- [ ] GitHub Release pages with notes for `go/v0.1.0` and `rust/v0.2.0`
-      (tags exist, pages do not; source:
-      docs/status/2026-09-05_03-03 §f3).
+
+Done 2026-09-08: the markdownlint config is now a real gate (flake
+`markdown` check + `test-markdown` app; trailing commas fixed,
+`packages/` excluded), and GitHub Release pages exist for `go/v0.1.0` and
+`rust/v0.2.0`.
 
 ## User-gated
 

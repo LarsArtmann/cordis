@@ -18,9 +18,26 @@
 //! * User callbacks never run while internal state is borrowed, so listeners
 //!   and plugins may freely call back into the framework.
 //!
-//! This crate is currently single-threaded (`Rc`/`RefCell` based), matching
-//! the execution model of the TypeScript original. A thread-safe variant is
-//! on the roadmap.
+//! The default build is single-threaded (`Rc`/`RefCell` based), matching
+//! the execution model of the TypeScript original. The `thread-safe` feature
+//! swaps the [`sync`] aliases for `Arc`/`Mutex` with identical semantics:
+//! user callbacks still run with no borrows held, and the core is only ever
+//! locked for the duration of one framework call.
+//!
+//! # Internal events
+//!
+//! Two event names extend upstream's `internal/update` contract, both fired
+//! on the owning fiber's context like ordinary events. [`EVENT_STATUS`]
+//! reports every fiber state change (payload: a [`StatusChange`]).
+//! [`EVENT_PLUGIN`] brackets a plugin fiber's life: once when the fiber is
+//! created and once when it is disposed (payload: the [`Fiber`] handle).
+//! [`EVENT_UPDATE`] intercepts config updates as a waterfall whose listeners
+//! may rewrite the config before calling `next`, or veto by ending the chain.
+//!
+//! The root fiber deliberately stands outside this machinery: it owns no
+//! plugin runtime, so disposing it just rolls back and restarts the root
+//! scope (firing no [`EVENT_PLUGIN`]), and updating its config returns
+//! [`Error::RootUpdate`] instead of running the [`EVENT_UPDATE`] waterfall.
 
 mod context;
 

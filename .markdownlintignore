@@ -2,7 +2,12 @@
 docs/status/
 docs/planning/
 
-# Upstream-owned frozen files (must stay byte-identical to upstream) and
-# vendored installs.
-packages/core/README.md
+# Upstream-owned: everything under packages/ must stay byte-identical to
+# upstream (non-TS files are CI-guarded by the upstream-parity check), so it
+# is never re-linted or reflowed.
+packages/
+
+# Vendored installs and build artifacts.
 node_modules/
+target/
+zig-out/

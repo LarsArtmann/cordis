@@ -729,6 +729,38 @@ fn root_restart_rolls_back_and_stays_active() {
 }
 
 #[test]
+fn root_dispose_emits_no_plugin_event() {
+    use cordis::EVENT_PLUGIN;
+
+    // A plugin fiber brackets its life with internal/plugin: one event on
+    // start, one on disposal.
+    let ctx = Context::new();
+    let events = Rc::new(RefCell::new(0));
+    let _listener = ctx
+        .on_named(EVENT_PLUGIN, counting_listener(&events), opts())
+        .unwrap();
+    let p = plugin("p", |_ctx: &Context, (): &()| Ok(()));
+    let fiber = start_fn(&ctx, &p, ()).unwrap();
+    assert_eq!(*events.borrow(), 1);
+
+    // Root disposal is a rollback-and-restart of the root scope: the
+    // root-scoped plugin cascades (firing its own disposal event), but the
+    // root itself owns no plugin runtime and never fires the event.
+    ctx.fiber().dispose();
+    assert_eq!(*events.borrow(), 2);
+    assert_eq!(fiber.state(), FiberState::Disposed);
+
+    // With no plugin fiber in play, root disposal fires nothing at all.
+    let root = Context::new();
+    let root_events = Rc::new(RefCell::new(0));
+    let _listener = root
+        .on_named(EVENT_PLUGIN, counting_listener(&root_events), opts())
+        .unwrap();
+    root.fiber().dispose();
+    assert_eq!(*root_events.borrow(), 0);
+}
+
+#[test]
 fn root_restart_drains_root_scoped_listeners() {
     use cordis::{StatusChange, EVENT_STATUS};
 

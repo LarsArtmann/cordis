@@ -88,6 +88,19 @@ in `packages/` track upstream and are not released from this fork.
   writes are atomic.
 - Root `README.md` is now a fork-owned sales page;
   `packages/core/README.md` is byte-identical to upstream again.
+- TypeScript workspace toolchain upgrade, verified against the full
+  248/248 suite plus `yarn lint` (2026-09-08): `packageManager` bumped to
+  yarn 4.18.0 — the version that can install TypeScript 7 (4.14.1's
+  builtin compat patch crashes on the missing `lib/_tsc.js`);
+  `typescript ^7.0.2`, `vitest ^5.0.0`, `esbuild ^0.28.2`, hmr's
+  `chokidar ^5`/`@babel/code-frame ^8`. vite stays at `^7.3.2`
+  (vite 8's module-runner breaks the suite: SyntaxError on
+  decorator.spec.ts plus hmr waitFor timeouts), js-yaml at upstream's
+  `^4.1.0` (js-yaml 5 removes `yaml.Type`, which the include build
+  calls), and eslint at upstream's `^8.57.1` (eslint 10 removed
+  `.eslintrc` support; CI runs `yarn lint` over the legacy config).
+  Test fixtures (hmr plugin `.ts`, include fixtures) restored to
+  upstream bytes — the spec `.replace()` literals are coupled to them.
 
 - `Tree.Await` now routes fiber failures it observes into the entry's
   error sink, making `Await` + `Errors()` a complete failure picture

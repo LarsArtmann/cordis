@@ -30,9 +30,9 @@ All three ports share one architecture:
   divergences.
 - **Four golden scenarios, three runners.** `golden/scenario.txt`,
   `scenario-events.txt`, `scenario-cascade.txt` and `scenario-dispatch.txt`
-  are executed by the Go and Rust test suites; Zig runs all but the
-  cascade scenario (pending a Zig cascade runner on top of its typed
-  registry — see `golden/README.md` for the per-scenario runner matrix).
+  are executed by all three test suites (the Zig cascade runner rides on
+  its typed registry — see `golden/README.md` for the per-scenario runner
+  matrix).
   Each runner must emit the exact traces in `golden/expected*.txt`,
   pinning the shared semantics across ports. The Go loader additionally
   pins its watch/reload lifecycle in a Go-only golden transcript

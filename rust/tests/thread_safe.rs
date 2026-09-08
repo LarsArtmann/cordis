@@ -152,3 +152,63 @@ fn parallel_runs_listeners_concurrently() {
     ctx.parallel("par", &[one]).expect("all listeners ok");
     assert_eq!(hits.load(Ordering::SeqCst), 3);
 }
+
+#[test]
+fn fiber_name_never_self_deadlocks() {
+    // Regression pin for the nested-borrow deadlock fixed in d9cc834:
+    // Fiber::name used to lock the core and then lock it again through a
+    // helper, hanging every thread-safe run. Name lookups take the core
+    // lock exactly once, from any thread.
+    let ctx = Arc::new(Context::new());
+    let p = plugin("named-worker", |_ctx: &Context, _: &i32| Ok(()));
+    let fiber = Arc::new(start_fn(&ctx, &p, 0).expect("start"));
+    assert_eq!(fiber.name(), "named-worker");
+
+    let mut handles = Vec::new();
+    for _ in 0..4 {
+        let fiber = Arc::clone(&fiber);
+        handles.push(std::thread::spawn(move || {
+            for _ in 0..100 {
+                assert_eq!(fiber.name(), "named-worker");
+            }
+        }));
+    }
+    for handle in handles {
+        handle.join().expect("thread");
+    }
+}
+
+#[test]
+fn once_listener_may_dispose_itself_synchronously() {
+    // Pins the once disposer interplay under the Mutex build. The
+    // scrutinee hardening (take the holder cell before disposing) is
+    // defense-in-depth: no current dispose path re-enters the cell, so no
+    // test can fail against the old shape. This pins the observable
+    // contract instead: a once listener may synchronously dispose through
+    // its own handle mid-dispatch without deadlocking or double-delivering.
+    let ctx = Context::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let handle: Arc<std::sync::Mutex<Option<cordis::Disposer>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let listener_handle = Arc::clone(&handle);
+    let listener_calls = Arc::clone(&calls);
+    let once = ctx
+        .once_named(
+            "ping",
+            Arc::new(move |_args: &[cordis::Value]| {
+                listener_calls.fetch_add(1, Ordering::SeqCst);
+                let pending = listener_handle.lock().expect("handle").take();
+                if let Some(d) = pending {
+                    d.dispose();
+                }
+                None
+            }),
+            EventOptions::default(),
+        )
+        .expect("once");
+    *handle.lock().expect("handle") = Some(once);
+
+    ctx.emit_named("ping", &[]);
+    ctx.emit_named("ping", &[]);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}

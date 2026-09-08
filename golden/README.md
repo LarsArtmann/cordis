@@ -17,15 +17,14 @@ executes the script and emits a canonical trace:
 | ------------ | ----------------------- | ----------------------- | -- | ---- | --- | --------------------------------------------------------------------------------- |
 | #1 lifecycle | `scenario.txt`          | `expected.txt`          | ✅ | ✅   | ✅  | fiber lifecycle, inject reactivity, LIFO rollback, isolation realms, root restart |
 | #2 events    | `scenario-events.txt`   | `expected-events.txt`   | ✅ | ✅   | ✅  | dispatch order, realm filters, global listeners                                   |
-| #3 cascade   | `scenario-cascade.txt`  | `expected-cascade.txt`  | ✅ | ✅   | —   | nested plugin disposal order, registry delete, registry size                      |
+| #3 cascade   | `scenario-cascade.txt`  | `expected-cascade.txt`  | ✅ | ✅   | ✅  | nested plugin disposal order, registry delete, registry size                      |
 | #4 dispatch  | `scenario-dispatch.txt` | `expected-dispatch.txt` | ✅ | ✅   | ✅  | bail/serial short-circuiting, waterfall composition and cut, parallel fan-out     |
 
-Scenario #3 (cascade) is Go+Rust only today: its `spawn`/`delete`/
-`expect-registry-size` ops need registry identity keyed by plugin type,
-which Zig gained with `hasTyped`/`deleteTyped` but has not wired into a
-cascade runner yet (tracked in `TODO_LIST.md`). Every scenario that a
-runner does execute must match byte for byte; the matrix above is the
-source of truth for which pins hold in which port.
+All four scenarios run in all three ports. Scenario #3 (cascade) rides on
+Zig's typed registry (`hasTyped`/`deleteTyped`): its `spawn`/`delete`/
+`expect-registry-size` ops need registry identity keyed by plugin type.
+Every scenario that a runner does execute must match byte for byte; the
+matrix above is the source of truth for which pins hold in which port.
 
 Regenerate an expected file with
 `GOLDEN_UPDATE=1 go test -run 'TestGolden.*' ./...` from `go/`, then

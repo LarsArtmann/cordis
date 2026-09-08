@@ -33,6 +33,8 @@ pub fn build(b: *std.Build) void {
     _ = golden_files.addCopyFile(b.path("../golden/expected-events.txt"), "expected-events.txt");
     _ = golden_files.addCopyFile(b.path("../golden/scenario-dispatch.txt"), "scenario-dispatch.txt");
     _ = golden_files.addCopyFile(b.path("../golden/expected-dispatch.txt"), "expected-dispatch.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/scenario-cascade.txt"), "scenario-cascade.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/expected-cascade.txt"), "expected-cascade.txt");
     const golden_data = golden_files.add("golden_data.zig",
         \\pub const scenario = @embedFile("scenario.txt");
         \\pub const expected = @embedFile("expected.txt");
@@ -40,6 +42,8 @@ pub fn build(b: *std.Build) void {
         \\pub const expected_events = @embedFile("expected-events.txt");
         \\pub const scenario_dispatch = @embedFile("scenario-dispatch.txt");
         \\pub const expected_dispatch = @embedFile("expected-dispatch.txt");
+        \\pub const scenario_cascade = @embedFile("scenario-cascade.txt");
+        \\pub const expected_cascade = @embedFile("expected-cascade.txt");
         \\
     );
     const golden_data_mod = b.createModule(.{ .root_source_file = golden_data });
