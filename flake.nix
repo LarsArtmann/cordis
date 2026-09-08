@@ -27,6 +27,7 @@
             "node_modules"
             "target"
             ".zig-cache"
+            "zig-out"
             "dist"
             ".turbo"
           ];
