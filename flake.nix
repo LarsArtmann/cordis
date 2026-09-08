@@ -78,6 +78,7 @@
                 chmod -R u+w cordis-rust
                 cd cordis-rust
                 cargo clippy --offline --all-targets
+                cargo clippy --offline --all-targets --features thread-safe
                 cargo test --offline
                 touch $out
               '';
@@ -183,7 +184,7 @@
           test-rust = mkTest "test-rust" ''
             export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
             mkdir -p "$CARGO_HOME"
-            cd rust && cargo clippy --all-targets && cargo test
+            cd rust && cargo clippy --all-targets && cargo clippy --all-targets --features thread-safe && cargo test
           '';
           test-zig = mkTest "test-zig" ''
             cd zig && zig build test --summary all
@@ -196,7 +197,7 @@
             echo "== Go =="
             (cd go && go vet ./... && go test -race -count=3 ./...)
             echo "== Rust =="
-            (cd rust && cargo clippy --all-targets && cargo test)
+            (cd rust && cargo clippy --all-targets && cargo clippy --all-targets --features thread-safe && cargo test)
             echo "== Zig =="
             (cd zig && zig build test --summary all)
           '';

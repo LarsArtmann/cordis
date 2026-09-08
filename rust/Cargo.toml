@@ -26,3 +26,7 @@ exit = "deny"
 as_conversions = "deny"
 
 [dependencies]
+
+[[bench]]
+name = "core"
+harness = false

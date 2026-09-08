@@ -545,7 +545,9 @@ func (r *dispatchRunner) run(line string) {
 		if c != nil {
 			c.Store(0)
 		}
-		r.ctx.Parallel(event, payload)
+		if err := r.ctx.Parallel(event, payload); err != nil {
+			r.t.Fatalf("parallel %s: %v", event, err)
+		}
 		if c != nil {
 			fired = c.Load()
 		}

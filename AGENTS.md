@@ -62,12 +62,22 @@ system-profile copy is built with Go 1.26 and warns about x/tools skew.
 - **Test fixtures are string-coupled to the specs.** hmr specs mutate fixture
   sources via literal `content.replace("value = 'initial'", ...)`. Fork-style
   reformatting of `packages/hmr/tests/*` fixtures (yml + plugin `.ts` files)
-  silently no-ops those replaces and every reload test times out. Keep hmr
-  test fixtures byte-identical to upstream; style passes cover src/ and
-  specs only.
-- **Fork TS style == `prettier --print-width 100` (defaults otherwise).**
-  Verified byte-idempotent across the whole formatted TS tree. Use
-  `nix run nixpkgs#prettier -- --print-width 100 --write <files>`.
+  silently no-ops those replaces and every reload test times out. ALL test
+  fixtures (hmr + include, yml and plugin `.ts`) are byte-identical to
+  upstream and CI-guarded by the `upstream-parity` byte check; the 2026-09-08
+  pass restored `include/tests/fixtures/*.ts` + `base.yml` to pin bytes after
+  a formatter pass churned them.
+- **packages/** style == upstream's, enforced by CI.** The `upstream-parity`
+  job in `ports.yml` pins the last-synced upstream commit (`UPSTREAM_PIN`):
+  non-TS files must be byte-identical to the pin; TS/JS may differ only by
+  prettier-normalizable formatting (both trees normalized with the pinned
+  prettier, then diffed). Bump `UPSTREAM_PIN` in the same commit as every
+  `packages/**` sync. Prettier is NOT a style gate for packages (upstream
+  style is not prettier-stable: 64 files fail `--check` under every
+  plausible config) — the fork's old `prettier --print-width 100`
+  double-quote/semicolon formatting of packages was reverted to upstream
+  style in `0542b6d`. CI pins prettier 3.9.6 (`npx prettier@3.9.6`), the
+  same version nixpkgs shipped on 2026-09-08 — keep the two in lockstep.
 - **Stale `lib/` builds shadow src/.** Cross-package imports resolve through
   each package's `lib/index.js`. After changing TS sources run
   `nix develop -c yarn build` before debugging "impossible" test failures —

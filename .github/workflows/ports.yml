@@ -45,6 +45,9 @@ jobs:
       - name: Clippy
         working-directory: rust
         run: cargo clippy --all-targets
+      - name: Clippy thread-safe feature
+        working-directory: rust
+        run: cargo clippy --all-targets --features thread-safe
       - name: Test
         working-directory: rust
         run: cargo test

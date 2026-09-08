@@ -38,6 +38,13 @@ in `packages/` track upstream and are not released from this fork.
   watch/reload lifecycle (`go/loader/testdata/watch-golden.txt`, the
   loader has no Rust/Zig port); and an hmr concurrency storm test racing
   parallel `Swap` calls against `Tree.Create`/`Remove`.
+- CI: a `flake` job running `nix flake check` so the flake gate (including
+  the `-race -count=3` canary the local gate now shares) is enforced
+  remotely; an `upstream-parity` job that pins the last-synced upstream
+  commit and guards `packages/**` (byte-identical non-TS files,
+  prettier-normalized TS/JS semantic parity, `dprint.json` excludes
+  covering `packages/**`); and a Go fuzz target for the loader's JSON
+  config layer (`EncodeConfig`/`DecodeConfig` idempotent roundtrip).
 - Go timer: a randomized debounce/throttle property test whose
   event-simulation oracle runs on a fixed seed inside the synctest bubble.
 - Regression tests pinning the wrapped error messages of
@@ -82,6 +89,16 @@ in `packages/` track upstream and are not released from this fork.
 - hmr test fixtures restored byte-identical to upstream after a formatting
   pass silently broke the specs' literal string replaces (every reload
   test timed out).
+- TS workspace manifests realigned to upstream after a dep sync reintroduced
+  `typescript ^7.0.2` (every `yarn install` crashed on yarn's `lib/_tsc.js`
+  compat lstat) and carried fork-era bumps upstream never adopted
+  (`js-yaml ^5` broke `yaml.Type` at build time, plus `chokidar ^5`,
+  `supports-color ^11` and friends); the root manifest keeps only the
+  deliberate `@types/node ^26.5.0` delta.
+- `packages/core` formatting churn reverted to upstream bytes (extra blank
+  line, re-braced guard, reformatted `bin.js`) so the upstream-parity
+  guards hold; include plugin fixtures and `base.yml` restored to pin
+  bytes; `tmp-*` test debris gitignored.
 - `timer.IntervalFunc` no longer schedules a callback after its disposer
   ran: the pump goroutine owns callback dispatch and re-checks the stop
   signal after each tick. A slow callback now delays the pump (ticks
