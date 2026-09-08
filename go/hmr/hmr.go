@@ -125,10 +125,11 @@ func (m *Manager) Swap(name string, reg loader.Registration) (Report, error) {
 			return Report{Module: name}, m.rollback(name, previous, found, touched, err)
 		}
 		// Apply errors do not cross the framework boundary: a plugin
-		// whose apply failed leaves its fiber in StateFailed.
+		// whose apply failed leaves its fiber in StateFailed with the
+		// error available through Fiber.Err.
 		if f := e.Fiber(); f != nil && f.State() == cordis.StateFailed {
 			return Report{Module: name}, m.rollback(name, previous, found, touched,
-				fmt.Errorf("hmr: entry %s failed under the new implementation", id))
+				fmt.Errorf("hmr: entry %s failed under the new implementation: %w", id, f.Err()))
 		}
 	}
 	report.Reloaded = touched
@@ -141,12 +142,7 @@ func (m *Manager) Swap(name string, reg loader.Registration) (Report, error) {
 // loader.RegisterType: it builds the registration from a typed apply
 // function and swaps it in.
 func SwapType[C any](m *Manager, name string, apply func(ctx *cordis.Context, config C) error) (Report, error) {
-	return m.Swap(name, loader.Registration{
-		New: func() cordis.PluginHandle { return cordis.NewPlugin(name, apply) },
-		Decode: func(raw any) (any, error) {
-			return loader.DecodeInto[C](raw)
-		},
-	})
+	return m.Swap(name, loader.TypedRegistration(name, apply))
 }
 
 // rollback restores the previous registration and relinks every entry the

@@ -5,37 +5,6 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 
 **Prime directive: native-max APIs, not TS 1:1 ports.**
 
-## Go (flagship)
-
-- [ ] Golden scenario #4: bail/serial/waterfall dispatch parity, byte-identical
-      across all three runners (source:
-      docs/status/2026-09-04_19-09_pareto-execution-pass.md §f10;
-      `golden/` still ships only the lifecycle, events and cascade scenarios)
-- [ ] hmr: include `Fiber.Err()` detail in rollback errors (now possible
-      post-M26) (source: docs/status/2026-09-05_03-03 §f20)
-- [ ] loader: `Resolver.ReplaceType[C]` sugar, parity with `RegisterType[C]`
-      (source: docs/status/2026-09-04_22-48 §f30)
-- [ ] hmr: concurrency storm test — parallel `Swap` racing
-      `Tree.Create`/`Remove` (source: docs/status/2026-09-04_22-48 §f31)
-- [ ] Raise `go/loader` statement coverage (74.6% measured 2026-09-08)
-      toward the ~90% bar the other packages hold (source: measured via
-      `go test -cover` under Go 1.27)
-- [ ] `go fix ./...` modernizer sweep under Go 1.27 (embedlit, unsafefuncs,
-      atomictypes) (source: docs/status/2026-09-08_04-04 §f21)
-- [ ] `IntervalFunc`: a slow callback can outlive disposal — fix the
-      pump-goroutine lifetime or document the constraint
-      (source: docs/status/2026-09-05_03-03 §f13)
-- [ ] Timer property test: debounce/throttle fire counts under randomized
-      call sequences (source: docs/status/2026-09-05_03-03 §f45)
-- [ ] Regression tests asserting the wrapped error messages in
-      `accessor.go`/`loader/tree.go` (source:
-      docs/status/2026-09-08_05-27 §f31)
-- [ ] `Tree.Await`: decide whether the discarded fiber error should surface
-      through the loader's error sink, or document the discard as final
-      (source: docs/status/2026-09-08_05-27 §f33)
-- [ ] Golden scenario candidate: loader watch/reload trace
-      (source: docs/status/2026-09-08_15-43 §f21)
-
 ## Rust
 
 - [ ] `internal/plugin` + `internal/update` interception events (M13 parity;

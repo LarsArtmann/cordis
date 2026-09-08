@@ -87,17 +87,38 @@ func (r *Resolver) Replace(name string, reg Registration) (previous Registration
 	return previous, found, nil
 }
 
+// TypedRegistration builds a Registration from a typed apply function and
+// a decoder normalizing raw config into C. RegisterType, ReplaceType and
+// the hmr package's SwapType are composed on it. A nil apply yields the
+// zero Registration, so Register and Replace reject it with their
+// missing-factory error instead of registering a plugin that fails at
+// start time.
+func TypedRegistration[C any](name string, apply func(ctx *cordis.Context, config C) error) Registration {
+	if apply == nil {
+		return Registration{}
+	}
+	return Registration{
+		New: func() cordis.PluginHandle { return cordis.NewPlugin(name, apply) },
+		Decode: func(raw any) (any, error) {
+			return DecodeInto[C](raw)
+		},
+	}
+}
+
 // RegisterType registers a plugin with a typed apply function and a decoder
 // that normalizes raw config into C. It is the common case:
 //
 //	resolver.RegisterType[*Conf]("echo", func(ctx *cordis.Context, conf *Conf) error { ... })
 func RegisterType[C any](r *Resolver, name string, apply func(ctx *cordis.Context, config C) error) {
-	r.MustRegister(name, Registration{
-		New: func() cordis.PluginHandle { return cordis.NewPlugin(name, apply) },
-		Decode: func(raw any) (any, error) {
-			return DecodeInto[C](raw)
-		},
-	})
+	r.MustRegister(name, TypedRegistration(name, apply))
+}
+
+// ReplaceType swaps the registration for name with one built from a typed
+// apply function, the typed counterpart of Replace and the sugar mirror of
+// RegisterType. It returns the previous registration so callers can roll a
+// failed swap back.
+func ReplaceType[C any](r *Resolver, name string, apply func(ctx *cordis.Context, config C) error) (previous Registration, found bool, err error) {
+	return r.Replace(name, TypedRegistration(name, apply))
 }
 
 // Resolve builds a fresh plugin handle for name.

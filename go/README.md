@@ -92,7 +92,7 @@ go worker(ctx.Fiber().StdContext()) // cancelled on unload/dispose
 go test ./...
 ```
 
-The cross-language golden scenario (shared with the Rust and Zig ports)
+The cross-language golden scenarios (shared with the Rust and Zig ports)
 runs as `TestGoldenScenario`; regenerate its expectation with
 `GOLDEN_UPDATE=1 go test -run TestGoldenScenario ./...` and re-verify the
 other ports afterwards.

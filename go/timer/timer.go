@@ -92,18 +92,37 @@ func Interval(ctx *cordis.Context, delay time.Duration) (<-chan time.Time, cordi
 }
 
 // IntervalFunc runs fn after every delay until the owning scope rolls back
-// or the returned disposer is called. fn runs on its own goroutine.
+// or the returned disposer is called. fn runs on the interval's own pump
+// goroutine: a slow callback delays the pump (time.Ticker drops the ticks
+// missed while fn runs) instead of queueing a burst, and no callback is
+// scheduled once the pump has observed disposal. A callback that is already
+// running when the disposer fires is not interrupted and the disposer does
+// not wait for it, so fn must tolerate outliving the disposer by one
+// in-flight invocation.
 func IntervalFunc(ctx *cordis.Context, delay time.Duration, fn func()) (cordis.Disposer, error) {
-	ch, d, err := Interval(ctx, delay)
+	stop := make(chan struct{})
+	disposer, err := ctx.Cleanup("timer.interval", func() { close(stop) })
 	if err != nil {
 		return nil, err
 	}
 	go func() {
-		for range ch {
+		ticker := time.NewTicker(delay)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			fn()
 		}
 	}()
-	return d, nil
+	return disposer, nil
 }
 
 // Throttle returns a wrapper around fn that invokes it at most once per

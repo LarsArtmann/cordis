@@ -125,10 +125,10 @@ func TestConcurrentAccess(t *testing.T) {
 	const workers = 8
 	const iterations = 100
 	done := make(chan struct{}, workers)
-	for w := 0; w < workers; w++ {
+	for w := range workers {
 		go func(w int) {
 			defer func() { done <- struct{}{} }()
-			for i := 0; i < iterations; i++ {
+			for range iterations {
 				switch w % 4 {
 				case 0:
 					ctx.Emit("tick")
@@ -145,7 +145,7 @@ func TestConcurrentAccess(t *testing.T) {
 			}
 		}(w)
 	}
-	for w := 0; w < workers; w++ {
+	for range workers {
 		<-done
 	}
 }

@@ -263,15 +263,18 @@ func (t *Tree) Move(id, parentID string, pos int) error {
 // in StatePending for missing dependencies are not in flight: they settle
 // when their dependencies arrive, and callers can Await again afterwards.
 // Fibers created while waiting (through group diffs) are awaited too.
+// A fiber that failed after a successful start (a failed restart or apply)
+// has its error routed into the entry's error sink on the way, so the
+// pair Await + Errors reports the complete failure picture.
 func (t *Tree) Await() {
 	for {
 		seen := make(map[*cordis.Fiber]bool)
 		for _, e := range t.Entries() {
 			if f := e.Fiber(); f != nil && f.State() != cordis.StatePending {
 				seen[f] = true
-				// Await only synchronizes on settle here; the fiber's own
-				// failure was already routed to the loader's error reporting.
-				_ = f.Await() //nolint:erraudit // deliberate discard, see above
+				if err := f.Await(); err != nil {
+					e.recordError(err)
+				}
 			}
 		}
 		grew := false
@@ -287,7 +290,8 @@ func (t *Tree) Await() {
 	}
 }
 
-// Errors returns a snapshot of the per-entry start failures.
+// Errors returns a snapshot of the per-entry failures: start errors and
+// runtime fiber failures surfaced through Await.
 func (t *Tree) Errors() map[string]error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

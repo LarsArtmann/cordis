@@ -8,7 +8,7 @@ import (
 // typeName returns the type identity of T as reported by the reflect
 // package. It is the canonical name of typed services and typed events.
 func typeName[T any]() string {
-	return reflect.TypeOf((*T)(nil)).Elem().String()
+	return reflect.TypeFor[T]().String()
 }
 
 // ServiceName returns the canonical service name of T. The type-keyed
@@ -113,7 +113,7 @@ func MustGetNamed[T any](c *Context, name string) T {
 // arrives fully typed. The subscription is bound to the context's fiber and
 // rolls back with it; the returned Disposer removes it ahead of time.
 func On[E any](ctx *Context, listener func(E), opts ...EventOption) (Disposer, error) {
-	want := reflect.TypeOf((*E)(nil)).Elem()
+	want := reflect.TypeFor[E]()
 	name := EventName[E]()
 	return ctx.On(name, func(args ...any) any {
 		if len(args) != 1 {
@@ -131,7 +131,7 @@ func On[E any](ctx *Context, listener func(E), opts ...EventOption) (Disposer, e
 // Once subscribes listener to the event type E and removes it after the
 // first delivery.
 func Once[E any](ctx *Context, listener func(E), opts ...EventOption) (Disposer, error) {
-	want := reflect.TypeOf((*E)(nil)).Elem()
+	want := reflect.TypeFor[E]()
 	name := EventName[E]()
 	return ctx.Once(name, func(args ...any) any {
 		if len(args) != 1 {

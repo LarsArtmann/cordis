@@ -2,6 +2,7 @@ package cordis_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,5 +190,38 @@ func TestAccessorGetFailsWithoutSource(t *testing.T) {
 	}
 	if ctx.Has("port") {
 		t.Fatal("accessor registered without a source")
+	}
+}
+
+// TestAccessorWrappedStartError pins the wrapped start-error shape: the
+// context prefix names the source service and the framework's pre-flight
+// error stays unwrappable through the chain.
+func TestAccessorWrappedStartError(t *testing.T) {
+	ctx := cordis.New()
+	if _, err := cordis.Provide(ctx, &accConfig{Port: 8080}); err != nil {
+		t.Fatal(err)
+	}
+	var inner *cordis.Context
+	fiber, err := cordis.Start(ctx, cordis.NewPlugin("host", func(c *cordis.Context, _ struct{}) error {
+		inner = c
+		return nil
+	}), struct{}{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fiber.Dispose()
+
+	_, _, err = cordis.Accessor(inner, "port",
+		func(ctx *cordis.Context, cfg *accConfig) (int, error) { return cfg.Port, nil },
+	)
+	if err == nil {
+		t.Fatal("accessor on a disposed context must fail to start")
+	}
+	wantPrefix := "cordis: accessor of " + cordis.ServiceName[*accConfig]() + ": "
+	if !strings.Contains(err.Error(), wantPrefix) {
+		t.Fatalf("error = %v, want prefix %q", err, wantPrefix)
+	}
+	if !errors.Is(err, cordis.ErrInactiveEffect) {
+		t.Fatalf("error = %v, want the inactive-effect cause preserved", err)
 	}
 }

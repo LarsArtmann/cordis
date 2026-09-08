@@ -404,3 +404,171 @@ test "golden dsl scenario line parsing" {
     try std.testing.expectEqualStrings("start", it.next().?);
     try std.testing.expectEqualStrings("worker", it.next().?);
 }
+
+// ---------------------------------------------------------------------------
+// Dispatch scenario (bail, serial, waterfall, parallel). The Zig waterfall
+// terminal is a bare function pointer without context, so the scenario state
+// it needs lives in file scope; the test is single-threaded.
+
+var g_dispatch_alloc: std.mem.Allocator = undefined;
+var g_dispatch_trace: *std.ArrayListUnmanaged([]const u8) = undefined;
+var g_wf_event: []const u8 = "";
+
+fn dispatchLog(comptime format: []const u8, args: anytype) void {
+    const line = std.fmt.allocPrint(g_dispatch_alloc, format, args) catch @panic("cordis: out of memory");
+    g_dispatch_trace.append(g_dispatch_alloc, line) catch @panic("cordis: out of memory");
+}
+
+fn dispatchValue(v: i32) cordis.Value {
+    const p = g_dispatch_alloc.create(i32) catch @panic("cordis: out of memory");
+    p.* = v;
+    return cordis.value(p);
+}
+
+fn wfTerminal(args: []const cordis.Value) ?cordis.Value {
+    const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+    dispatchLog("wf-terminal {s} payload={d}", .{ g_wf_event, payload.* });
+    payload.* += 1000;
+    return args[0];
+}
+
+const DispatchSink = struct {
+    event: []const u8,
+    name: []const u8 = "",
+    add: i32 = 0,
+    returns: ?i32 = null,
+    kind: enum { plain, chain, cut, quiet } = .plain,
+    counter: ?*usize = null,
+
+    fn fire(self: *DispatchSink, args: []const cordis.Value) ?cordis.Value {
+        switch (self.kind) {
+            .quiet => {
+                self.counter.?.* += 1;
+                return null;
+            },
+            .plain => {
+                const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+                dispatchLog("fire {s} {s} payload={d}", .{ self.event, self.name, payload.* });
+                if (self.returns) |ret| return dispatchValue(payload.* + ret);
+                return null;
+            },
+            .chain => {
+                const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+                dispatchLog("wf {s} {s} payload={d}", .{ self.event, self.name, payload.* });
+                const next: *cordis.Context.Next = @constCast(@ptrCast(@alignCast(args[args.len - 1])));
+                return next.invoke(&.{dispatchValue(payload.* + self.add)});
+            },
+            .cut => {
+                const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+                dispatchLog("wf {s} {s} payload={d}", .{ self.event, self.name, payload.* });
+                return dispatchValue(payload.* + self.returns.?);
+            },
+        }
+    }
+};
+
+fn dispatchSink(alloc: std.mem.Allocator, sink: DispatchSink) *DispatchSink {
+    const p = alloc.create(DispatchSink) catch @panic("cordis: out of memory");
+    p.* = sink;
+    return p;
+}
+
+fn dispatchIntParam(tokens: []const []const u8, key: []const u8) ?i32 {
+    for (tokens) |tok| {
+        if (tok.len > key.len and tok[key.len] == '=' and std.mem.startsWith(u8, tok, key)) {
+            return std.fmt.parseInt(i32, tok[key.len + 1 ..], 10) catch @panic("bad int param");
+        }
+    }
+    return null;
+}
+
+test "golden scenario dispatch" {
+    const gpa = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(gpa);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    g_dispatch_alloc = alloc;
+    var trace: std.ArrayListUnmanaged([]const u8) = .empty;
+    g_dispatch_trace = &trace;
+
+    const scenario = try readScenarioLines(alloc, golden_data.scenario_dispatch);
+    const expected = try readScenarioLines(alloc, golden_data.expected_dispatch);
+
+    const ctx = try Context.init(gpa);
+    defer ctx.deinit();
+
+    var counters: std.StringHashMapUnmanaged(*usize) = .empty;
+
+    for (scenario) |line| {
+        var tokens = std.mem.tokenizeAny(u8, line, " \t");
+        const op = tokens.next().?;
+        const event = tokens.next().?;
+        var args: std.ArrayListUnmanaged([]const u8) = .empty;
+        while (tokens.next()) |tok| try args.append(alloc, tok);
+
+        if (std.mem.eql(u8, op, "listener")) {
+            const sink = dispatchSink(alloc, .{ .event = event, .name = args.items[0] });
+            sink.returns = dispatchIntParam(args.items[1..], "returns");
+            _ = try ctx.onNamed(event, cordis.Listener.bind(DispatchSink, sink, DispatchSink.fire));
+        } else if (std.mem.eql(u8, op, "wf-listener")) {
+            const sink = dispatchSink(alloc, .{ .event = event, .name = args.items[0], .kind = .chain });
+            sink.add = dispatchIntParam(args.items[1..], "add") orelse 0;
+            _ = try ctx.onNamed(event, cordis.Listener.bind(DispatchSink, sink, DispatchSink.fire));
+        } else if (std.mem.eql(u8, op, "wf-cut")) {
+            const sink = dispatchSink(alloc, .{ .event = event, .name = args.items[0], .kind = .cut });
+            sink.returns = dispatchIntParam(args.items[1..], "returns");
+            _ = try ctx.onNamed(event, cordis.Listener.bind(DispatchSink, sink, DispatchSink.fire));
+        } else if (std.mem.eql(u8, op, "quiet")) {
+            const gop = try counters.getOrPut(alloc, event);
+            if (!gop.found_existing) {
+                const c = try alloc.create(usize);
+                c.* = 0;
+                gop.value_ptr.* = c;
+            }
+            const sink = dispatchSink(alloc, .{ .event = event, .kind = .quiet, .counter = gop.value_ptr.* });
+            _ = try ctx.onNamed(event, cordis.Listener.bind(DispatchSink, sink, DispatchSink.fire));
+        } else if (std.mem.eql(u8, op, "bail") or std.mem.eql(u8, op, "serial")) {
+            const payload = dispatchIntParam(args.items, "payload") orelse 0;
+            const result = if (std.mem.eql(u8, op, "bail"))
+                ctx.bail(event, &.{dispatchValue(payload)})
+            else
+                ctx.serial(event, &.{dispatchValue(payload)});
+            if (result) |v| {
+                dispatchLog("{s} {s} result={d}", .{ op, event, @as(*const i32, @ptrCast(@alignCast(v))).* });
+            } else {
+                dispatchLog("{s} {s} result=none", .{ op, event });
+            }
+        } else if (std.mem.eql(u8, op, "waterfall")) {
+            const payload = dispatchIntParam(args.items, "payload") orelse 0;
+            g_wf_event = event;
+            const result = ctx.waterfall(event, &.{dispatchValue(payload)}, &wfTerminal);
+            if (result) |v| {
+                dispatchLog("waterfall {s} result={d}", .{ event, @as(*const i32, @ptrCast(@alignCast(v))).* });
+            } else {
+                dispatchLog("waterfall {s} result=none", .{event});
+            }
+        } else if (std.mem.eql(u8, op, "parallel")) {
+            const payload = dispatchIntParam(args.items, "payload") orelse 0;
+            if (counters.get(event)) |c| c.* = 0;
+            ctx.parallel(event, &.{dispatchValue(payload)});
+            const fired: usize = if (counters.get(event)) |c| c.* else 0;
+            dispatchLog("parallel {s} fired={d}", .{ event, fired });
+        } else {
+            std.debug.print("unknown op {s}\n", .{op});
+            return error.GoldenUnknownOp;
+        }
+    }
+
+    if (trace.items.len != expected.len) {
+        std.debug.print("trace length {d} != expected {d}\ntrace:\n", .{ trace.items.len, expected.len });
+        for (trace.items) |entry| std.debug.print("{s}\n", .{entry});
+        return error.GoldenLengthMismatch;
+    }
+    for (trace.items, expected, 0..) |got, want, i| {
+        if (!std.mem.eql(u8, got, want)) {
+            std.debug.print("trace divergence at line {d}: expected '{s}', got '{s}'\n", .{ i + 1, want, got });
+            return error.GoldenDivergence;
+        }
+    }
+}

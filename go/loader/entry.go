@@ -94,12 +94,24 @@ func (e *Entry) Fiber() *cordis.Fiber {
 	return e.fiber
 }
 
-// Err returns the error that prevented the entry from starting, if any.
+// Err returns the entry's most recent failure: the error that prevented
+// the entry from starting, or the error of a fiber that failed after a
+// successful start (a failed restart or apply). A later successful start
+// clears it.
 func (e *Entry) Err() error {
 	t := e.parent.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return e.err
+}
+
+// recordError routes a fiber failure observed outside the start path (for
+// example by Tree.Await) into the entry's error sink.
+func (e *Entry) recordError(err error) {
+	t := e.parent.tree
+	t.mu.Lock()
+	e.err = err
+	t.mu.Unlock()
 }
 
 // Subgroup returns the group nested inside this entry, if the entry hosts
@@ -349,9 +361,7 @@ func cloneOptions(opts EntryOptions) EntryOptions {
 
 func cloneMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 	return out
 }
 

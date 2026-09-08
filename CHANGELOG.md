@@ -25,10 +25,22 @@ in `packages/` track upstream and are not released from this fork.
   validation.
 - Zig: all five dispatch modes, batch transactions, effect scopes with
   introspection, disposers, registry view.
-- Cross-language assurance: three golden scenarios executed byte-identically
-  by the Go, Rust and Zig runners, `nix flake check` derivations, Go
-  benchmarks, a randomized LIFO-disposal property test and the
+- Cross-language assurance: four golden scenarios executed
+  byte-identically by the Go, Rust and Zig runners (lifecycle, events,
+  cascade and dispatch), `nix flake check` derivations, Go benchmarks, a
+  randomized LIFO-disposal property test and the
   `scripts/parity-matrix.sh` navigator.
+- Go loader: `Resolver.ReplaceType[C]` sugar mirroring `RegisterType[C]`,
+  composed with it on a shared `TypedRegistration` builder that hmr's
+  `SwapType` and the tests use as well; a Go-only golden transcript of the
+  watch/reload lifecycle (`go/loader/testdata/watch-golden.txt`, the
+  loader has no Rust/Zig port); and an hmr concurrency storm test racing
+  parallel `Swap` calls against `Tree.Create`/`Remove`.
+- Go timer: a randomized debounce/throttle property test whose
+  event-simulation oracle runs on a fixed seed inside the synctest bubble.
+- Regression tests pinning the wrapped error messages of
+  `Accessor`/`Mixin` and `Tree.Create`/`Move` (context prefix plus
+  `errors.Is`-preserved cause).
 - Go 1.27 adoption: `testing/synctest` virtual-clock timer tests,
   `strings.CutLast` in plugin name derivation.
 
@@ -43,6 +55,16 @@ in `packages/` track upstream and are not released from this fork.
 - Root `README.md` is now a fork-owned sales page;
   `packages/core/README.md` is byte-identical to upstream again.
 
+- `Tree.Await` now routes fiber failures it observes into the entry's
+  error sink, making `Await` + `Errors()` a complete failure picture
+  instead of discarding runtime (post-start) fiber errors.
+- `ErrInactiveEffect` is declared as the `error` interface so `errors.Is`
+  call sites match the sentinel guard; a Go 1.27 `go fix` modernizer sweep
+  (`rangeint`, `SplitSeq`, `CutPrefix`, `reflect.TypeFor`, `maps.Copy`)
+  is applied across the Go port.
+- hmr rollback errors carry the failed fiber's own `Fiber.Err()` detail
+  (`hmr: entry <id> failed under the new implementation: <cause>`).
+
 ### Fixed
 
 - Thread-safe Rust: `Fiber::name` self-deadlock (nested core locks) that
@@ -53,6 +75,12 @@ in `packages/` track upstream and are not released from this fork.
 - hmr test fixtures restored byte-identical to upstream after a formatting
   pass silently broke the specs' literal string replaces (every reload
   test timed out).
+- `timer.IntervalFunc` no longer schedules a callback after its disposer
+  ran: the pump goroutine owns callback dispatch and re-checks the stop
+  signal after each tick. A slow callback now delays the pump (ticks
+  dropped, standard `time.Ticker` semantics) instead of queueing a
+  post-disposal invocation; an in-flight invocation still completes and
+  the disposer does not wait for it.
 
 ### Releases
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -90,7 +91,7 @@ func splitKV(tokens []string) (deps []string, realm string, config int, lifo boo
 	for _, tok := range tokens {
 		switch {
 		case strings.HasPrefix(tok, "inject="):
-			for _, dep := range strings.Split(strings.TrimPrefix(tok, "inject="), ",") {
+			for dep := range strings.SplitSeq(strings.TrimPrefix(tok, "inject="), ",") {
 				if dep != "" {
 					deps = append(deps, dep)
 				}
@@ -194,8 +195,8 @@ func (r *goldenRunner) run(line string) {
 		deps, _, config, _ := splitKV(args)
 		spec.deps, spec.config = deps, config
 		for _, tok := range args {
-			if strings.HasPrefix(tok, "parent=") {
-				r.children[strings.TrimPrefix(tok, "parent=")] = append(r.children[strings.TrimPrefix(tok, "parent=")], spec)
+			if after, ok := strings.CutPrefix(tok, "parent="); ok {
+				r.children[after] = append(r.children[after], spec)
 			}
 		}
 	case "delete":
@@ -241,7 +242,7 @@ func readGoldenLines(t *testing.T, name string) []string {
 		t.Fatal(err)
 	}
 	var lines []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -407,4 +408,171 @@ func TestGoldenSplitKV(t *testing.T) {
 		}
 	}()
 	_, _, _, _ = splitKV([]string{"config=not-a-number"})
+}
+
+// dispatchRunner executes golden/scenario-dispatch.txt: the bail, serial,
+// waterfall and parallel dispatch modes over logging listeners. Listener
+// payloads are ints; parallel listeners count instead of logging so the
+// trace stays independent of goroutine interleaving.
+type dispatchRunner struct {
+	t        *testing.T
+	ctx      *Context
+	trace    *[]string
+	counters map[string]*atomic.Int64
+}
+
+func (r *dispatchRunner) logf(format string, args ...any) {
+	*r.trace = append(*r.trace, fmt.Sprintf(format, args...))
+}
+
+func (r *dispatchRunner) mustOn(event string, listener Listener) {
+	if _, err := r.ctx.On(event, listener); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+// parseDispatchKV parses key=value tokens into a map.
+func parseDispatchKV(tokens []string) map[string]string {
+	kv := make(map[string]string)
+	for _, tok := range tokens {
+		if i := strings.Index(tok, "="); i > 0 {
+			kv[tok[:i]] = tok[i+1:]
+		}
+	}
+	return kv
+}
+
+func (r *dispatchRunner) run(line string) {
+	tokens := strings.Fields(line)
+	op := tokens[0]
+	args := tokens[1:]
+	kv := parseDispatchKV(args[1:])
+	event := args[0]
+
+	switch op {
+	case "listener":
+		name := args[1]
+		returns, bails := kv["returns"], false
+		if kv["returns"] != "" {
+			bails = true
+		}
+		var ret int
+		if bails {
+			if _, err := fmt.Sscanf(returns, "%d", &ret); err != nil {
+				r.t.Fatal(err)
+			}
+		}
+		r.mustOn(event, func(v ...any) any {
+			payload := v[0].(int)
+			r.logf("fire %s %s payload=%d", event, name, payload)
+			if bails {
+				return payload + ret
+			}
+			return nil
+		})
+	case "wf-listener":
+		name := args[1]
+		var add int
+		if _, err := fmt.Sscanf(kv["add"], "%d", &add); err != nil {
+			r.t.Fatal(err)
+		}
+		r.mustOn(event, func(v ...any) any {
+			payload := v[0].(int)
+			next := v[1].(func(...any) any)
+			r.logf("wf %s %s payload=%d", event, name, payload)
+			return next(payload + add)
+		})
+	case "wf-cut":
+		name := args[1]
+		var ret int
+		if _, err := fmt.Sscanf(kv["returns"], "%d", &ret); err != nil {
+			r.t.Fatal(err)
+		}
+		r.mustOn(event, func(v ...any) any {
+			payload := v[0].(int)
+			r.logf("wf %s %s payload=%d", event, name, payload)
+			return payload + ret
+		})
+	case "quiet":
+		c := r.counters[event]
+		if c == nil {
+			c = &atomic.Int64{}
+			r.counters[event] = c
+		}
+		r.mustOn(event, func(v ...any) any {
+			c.Add(1)
+			return nil
+		})
+	case "bail", "serial":
+		var payload int
+		if _, err := fmt.Sscanf(kv["payload"], "%d", &payload); err != nil {
+			r.t.Fatal(err)
+		}
+		var result any
+		if op == "bail" {
+			result = r.ctx.Bail(event, payload)
+		} else {
+			result = r.ctx.Serial(event, payload)
+		}
+		if result == nil {
+			r.logf("%s %s result=none", op, event)
+		} else {
+			r.logf("%s %s result=%d", op, event, result.(int))
+		}
+	case "waterfall":
+		var payload int
+		if _, err := fmt.Sscanf(kv["payload"], "%d", &payload); err != nil {
+			r.t.Fatal(err)
+		}
+		terminal := func(v ...any) any {
+			p := v[0].(int)
+			r.logf("wf-terminal %s payload=%d", event, p)
+			return p + 1000
+		}
+		result := r.ctx.Waterfall(event, payload, terminal)
+		if result == nil {
+			r.logf("waterfall %s result=none", event)
+		} else {
+			r.logf("waterfall %s result=%d", event, result.(int))
+		}
+	case "parallel":
+		var payload int
+		if _, err := fmt.Sscanf(kv["payload"], "%d", &payload); err != nil {
+			r.t.Fatal(err)
+		}
+		c := r.counters[event]
+		fired := int64(0)
+		if c != nil {
+			c.Store(0)
+		}
+		r.ctx.Parallel(event, payload)
+		if c != nil {
+			fired = c.Load()
+		}
+		r.logf("parallel %s fired=%d", event, fired)
+	default:
+		r.t.Fatalf("unknown op %q", op)
+	}
+}
+
+func TestGoldenDispatch(t *testing.T) {
+	scenario := readGoldenLines(t, "scenario-dispatch.txt")
+	trace := make([]string, 0, 16)
+	r := &dispatchRunner{
+		t:        t,
+		ctx:      New(),
+		trace:    &trace,
+		counters: map[string]*atomic.Int64{},
+	}
+	for _, line := range scenario {
+		r.run(line)
+	}
+	compareGoldenTrace(t, trace, "expected-dispatch.txt")
+}
+
+func TestParseDispatchKV(t *testing.T) {
+	kv := parseDispatchKV([]string{"b", "payload=7", "flag", "returns=-3"})
+	if kv["payload"] != "7" || kv["returns"] != "-3" || kv["flag"] != "" || kv["b"] != "" {
+		t.Fatalf("kv = %v", kv)
+	}
 }

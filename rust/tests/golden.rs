@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use cordis::sync::BorrowExt as _;
 use cordis::sync::Rc;
 
-use cordis::{plugin, start_fn, value, Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Value};
+use cordis::{plugin, start_fn, value, Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Next, Value};
 
 type Trace = Rc<RefCell<Vec<String>>>;
 type FiberMap = Rc<RefCell<HashMap<String, Fiber>>>;
@@ -374,4 +374,162 @@ fn golden_dsl_tokenize() {
     let (op, args) = tokenize("  start   worker inject=a config=1 ");
     assert_eq!(op, "start");
     assert_eq!(args, vec!["worker", "inject=a", "config=1"]);
+}
+
+/// Parse `key=<int>` tokens of one dispatch scenario line.
+fn dispatch_kv<'a>(tokens: &[&'a str]) -> HashMap<&'a str, i32> {
+    let mut kv = HashMap::new();
+    for tok in tokens {
+        if let Some((key, val)) = tok.split_once('=')
+            && let Ok(v) = val.parse::<i32>()
+        {
+            kv.insert(key, v);
+        }
+    }
+    kv
+}
+
+/// Register the listener flavored described by one scenario line.
+#[allow(clippy::too_many_lines)]
+fn register_dispatch_listener(
+    ctx: &Context,
+    trace: &Trace,
+    op: &str,
+    event: &str,
+    tokens: &[&str],
+    kv: &HashMap<&str, i32>,
+) {
+    let name = tokens[2].to_string();
+    let trace2 = Rc::clone(trace);
+    let event2 = event.to_string();
+    let (kind, delta, add) = match op {
+        "listener" => ("plain", kv.get("returns").copied(), 0),
+        "wf-listener" => ("chain", None, kv["add"]),
+        "wf-cut" => ("cut", Some(kv["returns"]), 0),
+        _ => panic!("register_dispatch_listener called for {op}"),
+    };
+    ctx.on_named(
+        event,
+        Rc::new(move |args: &[Value]| {
+            let payload = *args[0].clone().downcast::<i32>().unwrap();
+            let line = Rc::clone(&trace2);
+            match kind {
+                "plain" => {
+                    line.borrow_mut().push(format!("fire {event2} {name} payload={payload}"));
+                    delta.map(|d| value(payload + d))
+                }
+                "cut" => {
+                    line.borrow_mut().push(format!("wf {event2} {name} payload={payload}"));
+                    Some(value(payload + delta.unwrap()))
+                }
+                _ => {
+                    line.borrow_mut().push(format!("wf {event2} {name} payload={payload}"));
+                    let next = args[1].clone().downcast::<Next>().unwrap();
+                    next(&[value(payload + add)])
+                }
+            }
+        }),
+        EventOptions::default(),
+    )
+    .unwrap();
+}
+
+/// Run the dispatch half of one scenario line (bail, serial, waterfall,
+/// parallel) and append its result line.
+fn run_dispatch_op(
+    ctx: &Context,
+    trace: &Trace,
+    counters: &Rc<RefCell<HashMap<String, i32>>>,
+    op: &str,
+    event: &str,
+    kv: &HashMap<&str, i32>,
+) {
+    let log = {
+        let trace = Rc::clone(trace);
+        move |line: String| trace.borrow_mut().push(line)
+    };
+    match op {
+        "bail" | "serial" => {
+            let payload = kv["payload"];
+            let result = if op == "bail" {
+                ctx.bail(event, &[value(payload)])
+            } else {
+                ctx.serial(event, &[value(payload)])
+            };
+            let line = result.map_or_else(
+                || format!("{op} {event} result=none"),
+                |v| format!("{op} {event} result={}", *v.downcast::<i32>().unwrap()),
+            );
+            log(line);
+        }
+        "waterfall" => {
+            let payload = kv["payload"];
+            let trace2 = Rc::clone(trace);
+            let event2 = event.to_string();
+            let terminal: Next = Rc::new(move |args: &[Value]| {
+                let p = *args[0].clone().downcast::<i32>().unwrap();
+                let line = Rc::clone(&trace2);
+                line.borrow_mut().push(format!("wf-terminal {event2} payload={p}"));
+                Some(value(p + 1000))
+            });
+            let line = ctx
+                .waterfall(event, vec![value(payload)], &terminal)
+                .map_or_else(
+                    || format!("waterfall {event} result=none"),
+                    |v| format!("waterfall {event} result={}", *v.downcast::<i32>().unwrap()),
+                );
+            log(line);
+        }
+        "parallel" => {
+            let payload = kv["payload"];
+            counters.borrow_mut().insert(event.to_string(), 0);
+            ctx.parallel(event, &[value(payload)]).unwrap();
+            let fired = counters.borrow_mut()[event];
+            log(format!("parallel {event} fired={fired}"));
+        }
+        _ => panic!("run_dispatch_op called for {op}"),
+    }
+}
+
+#[test]
+fn golden_scenario_dispatch() {
+    let scenario = read_lines("scenario-dispatch.txt");
+    let expected = read_lines("expected-dispatch.txt");
+
+    let ctx = Context::new();
+    let trace: Trace = Rc::new(RefCell::new(Vec::new()));
+    let counters: Rc<RefCell<HashMap<String, i32>>> = Rc::new(RefCell::new(HashMap::new()));
+
+    for line in &scenario {
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        let op = tokens[0];
+        let event = tokens[1].to_string();
+        let kv = dispatch_kv(&tokens[2..]);
+
+        match op {
+            "listener" | "wf-listener" | "wf-cut" => {
+                register_dispatch_listener(&ctx, &trace, op, &event, &tokens, &kv);
+            }
+            "quiet" => {
+                let counters2 = Rc::clone(&counters);
+                let event2 = event.clone();
+                ctx.on_named(
+                    &event,
+                    Rc::new(move |_: &[Value]| {
+                        *counters2.borrow_mut().entry(event2.clone()).or_insert(0) += 1;
+                        None
+                    }),
+                    EventOptions::default(),
+                )
+                .unwrap();
+            }
+            "bail" | "serial" | "waterfall" | "parallel" => {
+                run_dispatch_op(&ctx, &trace, &counters, op, &event, &kv);
+            }
+            other => panic!("unknown op {other}"),
+        }
+    }
+
+    let got = trace.borrow();
+    compare_trace(&got, &expected);
 }

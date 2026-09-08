@@ -33,7 +33,7 @@ func (e *Error) Error() string {
 
 // ErrInactiveEffect is returned by effect, listener, service and plugin
 // registration when the receiving context belongs to an inactive fiber.
-var ErrInactiveEffect = &Error{
+var ErrInactiveEffect error = &Error{
 	Code:    ErrCodeInactiveEffect,
 	Message: "cannot create effect on inactive context",
 }

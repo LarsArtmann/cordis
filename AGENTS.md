@@ -20,7 +20,8 @@ Use the flake (`nix run .#test`, `.#test-go`, `.#test-rust`, `.#test-zig`)
 or run directly:
 
 - Go: `cd go && go test ./...` (also: `go vet`, `-race` clean; statement
-  coverage ≈90% for core/group/hmr/timer, ≈75% for loader).
+  coverage ≈90% for every package including loader — 90.8% measured
+  2026-09-08).
   Requires Go 1.27 (see gotcha below). Timer tests run in a
   `testing/synctest` bubble (virtual clock, ~2 ms, deterministic); write
   new timing tests the same way instead of `time.Sleep`.
@@ -147,12 +148,23 @@ for dynamic names and the `internal/` event namespace:
   (`Error{InactiveEffect, DuplicateService, PluginFailed}`) exclude OOM:
   allocation failure panics (std style).
 
-Golden scenario: `golden/scenario.txt` + `expected.txt` are executed by
-`go/golden_test.go`, `rust/tests/golden.rs` and `zig/tests/golden.zig`
-(Zig embeds the files at build time). All three traces must be
-byte-identical. Regenerate with `GOLDEN_UPDATE=1` on the Go runner and
-re-verify Rust and Zig. Changing semantics? Fix the port, not the golden
-file.
+Golden scenarios (four: lifecycle `scenario.txt`, events
+`scenario-events.txt`, cascade `scenario-cascade.txt`, dispatch
+`scenario-dispatch.txt`) are executed by `go/golden_test.go`,
+`rust/tests/golden.rs` and `zig/tests/golden.zig` (Zig embeds the files at
+build time via `zig/build.zig`). All three traces must be byte-identical.
+Regenerate with `GOLDEN_UPDATE=1` on the Go runner and re-verify Rust and
+Zig. Changing semantics? Fix the port, not the golden file. The loader has
+no Rust/Zig port, so its watch/reload transcript is pinned by a Go-only
+golden trace instead: `go/loader/watch_golden_test.go` +
+`go/loader/testdata/watch-golden.txt` (same `GOLDEN_UPDATE=1` escape
+hatch; do not move it into `golden/`, which is three-runner-only).
+
+**Untracked files are invisible to `nix flake check`:** the flake source
+is the live working tree but Nix flakes in a git repo only copy git-tracked
+files into the store, so new files must be `git add`ed before the flake
+checks can see them (cost one confusing "NotFound in sandbox" round trip
+on 2026-09-08).
 
 ## Upstream facts
 

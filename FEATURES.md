@@ -63,7 +63,7 @@ plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 
 | Feature                                                      | Status                                                                                                      |
 | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (3: lifecycle, events, cascade — `golden/`)                                                |
+| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (4: lifecycle, events, cascade, dispatch — `golden/`)                                      |
 | DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                            |
 | Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                 |
 | `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                            |

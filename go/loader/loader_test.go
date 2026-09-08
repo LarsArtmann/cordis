@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -51,6 +52,55 @@ func writeConfig(t *testing.T, dir string, entries []EntryOptions) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, DefaultConfigName), data, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResolverReplaceType(t *testing.T) {
+	rec := &recorder{}
+	resolver := NewResolver()
+	ReplaceType(resolver, "echo", func(ctx *cordis.Context, conf echoConf) error {
+		rec.add("start:v1:" + conf.Msg)
+		return nil
+	})
+
+	apply := func(msg string) func(ctx *cordis.Context, conf echoConf) error {
+		return func(ctx *cordis.Context, conf echoConf) error {
+			rec.add("start:" + msg + ":" + conf.Msg)
+			return nil
+		}
+	}
+
+	previous, found, err := ReplaceType(resolver, "echo", apply("v2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("ReplaceType on a registered name reported found=false")
+	}
+	if previous.New == nil {
+		t.Fatal("ReplaceType returned an empty previous registration")
+	}
+
+	if previous2, found, err := ReplaceType(resolver, "fresh", apply("v2")); err != nil || found {
+		t.Fatalf("ReplaceType on an unregistered name: found=%v err=%v, want false nil", found, err)
+	} else {
+		if previous2.New != nil {
+			t.Fatal("previous registration must be empty for a fresh name")
+		}
+	}
+
+	tree := NewTree(cordis.New(), resolver)
+	defer tree.Close()
+	if _, err := tree.Create(EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "hi"}}, "", -1); err != nil {
+		t.Fatal(err)
+	}
+	tree.Await()
+	events := rec.snapshot()
+	if !slices.Contains(events, "start:v2:hi") {
+		t.Fatalf("events = %v, swapped implementation did not start", events)
+	}
+	if _, _, err := ReplaceType[echoConf](resolver, "broken", nil); err == nil {
+		t.Fatal("ReplaceType without an apply function must fail")
 	}
 }
 
@@ -282,6 +332,74 @@ func TestIsolateAndInterceptOptions(t *testing.T) {
 	events := rec.snapshot()
 	if !slices.Contains(events, "intercept:v") {
 		t.Fatalf("events = %v, want intercept:v", events)
+	}
+}
+
+// TestAwaitSurfacesRuntimeFailure pins the Await + Errors contract: a
+// fiber that fails after a successful start (here, a poisoned config
+// restart) is routed into the entry's error sink, not silently dropped.
+func TestAwaitSurfacesRuntimeFailure(t *testing.T) {
+	resolver := NewResolver()
+	RegisterType(resolver, "echo", func(ctx *cordis.Context, conf echoConf) error {
+		if conf.Msg == "poison" {
+			return errors.New("boom")
+		}
+		return nil
+	})
+	tree := NewTree(cordis.New(), resolver)
+	defer tree.Close()
+	if _, err := tree.Create(EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "ok"}}, "", -1); err != nil {
+		t.Fatal(err)
+	}
+	tree.Await()
+	if errs := tree.Errors(); len(errs) != 0 {
+		t.Fatalf("Errors() = %v, want a clean start", errs)
+	}
+
+	if err := tree.SetConfig("a", echoConf{Msg: "poison"}); err != nil {
+		t.Logf("SetConfig reported the restart failure synchronously: %v", err)
+	}
+	tree.Await()
+
+	errs := tree.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("Errors() = %v, want the runtime failure", errs)
+	}
+	if got := errs["a"]; got == nil || !strings.Contains(got.Error(), "boom") {
+		t.Fatalf("Errors()[a] = %v, want the fiber error detail", got)
+	}
+}
+
+// TestTreeCreateMoveErrorContext pins the wrapped error messages of
+// Tree.Create and Tree.Move: every failure carries the operation and the
+// offending ids as context, with the cause preserved for errors.Is.
+func TestTreeCreateMoveErrorContext(t *testing.T) {
+	rec := &recorder{}
+	ctx := cordis.New()
+	tree := NewTree(ctx, registerEcho(t, rec))
+	defer tree.Close()
+
+	if _, err := tree.Create(EntryOptions{ID: "x", Name: "echo"}, "missing", -1); err == nil ||
+		err.Error() != `loader: create under "missing": loader: cannot resolve entry missing` {
+		t.Fatalf("Create under a missing group: got %v", err)
+	}
+
+	if _, err := tree.Create(EntryOptions{ID: "b", Name: "nope"}, "", -1); err == nil ||
+		err.Error() != `loader: create "b" under "": loader: unknown plugin "nope"` {
+		t.Fatalf("Create with an unknown plugin: got %v", err)
+	}
+
+	if err := tree.Move("ghost", "", -1); err == nil ||
+		err.Error() != `loader: move "ghost": loader: cannot resolve entry ghost` {
+		t.Fatalf("Move of a missing entry: got %v", err)
+	}
+
+	if _, err := tree.Create(EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "a"}}, "", -1); err != nil {
+		t.Fatal(err)
+	}
+	if err := tree.Move("a", "missing", -1); err == nil ||
+		err.Error() != `loader: move "a" to "missing": loader: cannot resolve entry missing` {
+		t.Fatalf("Move to a missing group: got %v", err)
 	}
 }
 

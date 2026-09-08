@@ -75,8 +75,8 @@ Divergences from TS behavior, by design:
   three ports, matching the insertion-ordered maps upstream; Go sorts by
   fiber uid where its map iteration would otherwise be random.
 
-Cross-language assurance: one golden scenario (`golden/`) executed by the
-Go, Rust and Zig test suites with a byte-identical expected trace, plus
+Cross-language assurance: four golden scenarios (`golden/`) executed by the
+Go, Rust and Zig test suites with byte-identical expected traces, plus
 `nix flake check` derivations running all three suites.
 
 ### Go

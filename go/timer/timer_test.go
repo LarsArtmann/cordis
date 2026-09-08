@@ -101,6 +101,36 @@ func TestIntervalFuncDispose(t *testing.T) {
 	})
 }
 
+// TestIntervalFuncNoCallbackAfterDispose pins the pump-lifetime contract: a
+// callback already running at disposal completes, but no callback starts
+// afterwards, even though ticks fired while it was still running.
+func TestIntervalFuncNoCallbackAfterDispose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx := cordis.New()
+		release := make(chan struct{})
+		var started atomic.Int32
+		d, err := IntervalFunc(ctx, 10*time.Millisecond, func() {
+			started.Add(1)
+			<-release
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		synctest.Sleep(10 * time.Millisecond)
+		d()
+		close(release)
+		synctest.Wait()
+		if started.Load() != 1 {
+			t.Fatalf("exactly one callback must have started, got %d", started.Load())
+		}
+		synctest.Sleep(100 * time.Millisecond)
+		synctest.Wait()
+		if started.Load() != 1 {
+			t.Fatalf("no callback may start after disposal, got %d", started.Load())
+		}
+	})
+}
+
 func TestDebounce(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := cordis.New()

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -62,10 +63,7 @@ func brokenImpl(rec *recorder) func(ctx *cordis.Context, conf echoConf) error {
 }
 
 func typeReg[C any](name string, apply func(*cordis.Context, C) error) loader.Registration {
-	return loader.Registration{
-		New:    func() cordis.PluginHandle { return cordis.NewPlugin(name, apply) },
-		Decode: func(raw any) (any, error) { return loader.DecodeInto[C](raw) },
-	}
+	return loader.TypedRegistration(name, apply)
 }
 
 func setup(t *testing.T) (*hmr.Manager, *loader.Tree, *cordis.Context, *recorder) {
@@ -189,8 +187,20 @@ func TestSwapRollsBackOnFailure(t *testing.T) {
 	mgr, tree, _, rec := setup(t)
 	createEntry(t, tree, loader.EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "cfg"}})
 
+	rollbackErr := error(nil)
 	if _, err := mgr.Swap("echo", typeReg("echo", brokenImpl(rec))); err == nil {
 		t.Fatal("swap with a broken implementation returned no error")
+	} else {
+		rollbackErr = err
+	}
+
+	// The rollback error must carry the failed fiber's own error detail
+	// for diagnosis, not just the entry id.
+	if !strings.Contains(rollbackErr.Error(), "failed under the new implementation") {
+		t.Fatalf("rollback error = %v, missing entry failure context", rollbackErr)
+	}
+	if !strings.Contains(rollbackErr.Error(), "boom") {
+		t.Fatalf("rollback error = %v, missing Fiber.Err detail", rollbackErr)
 	}
 
 	events := rec.snapshot()
@@ -252,6 +262,86 @@ func TestRapidSuccessiveSwaps(t *testing.T) {
 	}
 	if rec.last() != "start:g49:cfg" {
 		t.Fatalf("last event = %s, want the final generation live", rec.last())
+	}
+}
+
+// TestSwapCreateRemoveStorm races parallel swaps against concurrent entry
+// creation and removal. The swap mutex, the tree mutex and the resolver
+// mutex must interleave without deadlock, torn state or lost rollbacks:
+// every entry that survives the storm settles back to ACTIVE, and a final
+// clean swap still applies.
+func TestSwapCreateRemoveStorm(t *testing.T) {
+	mgr, tree, _, rec := setup(t)
+
+	const (
+		swappers       = 4
+		swapsPerWorker = 10
+		creators       = 4
+		entriesEach    = 10
+	)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, creators*entriesEach)
+	for w := range swappers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := range swapsPerWorker {
+				tag := fmt.Sprintf("storm-w%d-g%d", w, i)
+				if _, err := mgr.Swap("echo", typeReg("echo", echoImpl(tag, rec))); err != nil {
+					// A racing Remove can legitimately fail a refresh
+					// and roll the swap back; anything else must not
+					// wedge the manager.
+					if mgr.Generation("echo") < 0 {
+						errs <- fmt.Errorf("generation went negative: %w", err)
+					}
+				}
+			}
+		}(w)
+	}
+	for c := range creators {
+		wg.Add(1)
+		go func(c int) {
+			defer wg.Done()
+			for i := range entriesEach {
+				id := fmt.Sprintf("storm-%d-%d", c, i)
+				if _, err := tree.Create(loader.EntryOptions{ID: id, Name: "echo", Config: echoConf{Msg: id}}, "", -1); err != nil {
+					errs <- fmt.Errorf("create %s: %w", id, err)
+					continue
+				}
+				if i%2 == 0 {
+					if err := tree.Remove(id); err != nil {
+						errs <- fmt.Errorf("remove %s: %w", id, err)
+					}
+				}
+			}
+			// One leftover swap-adjacent id per creator exercises Remove
+			// racing Refresh from the other direction.
+			id := fmt.Sprintf("late-%d", c)
+			if _, err := tree.Create(loader.EntryOptions{ID: id, Name: "echo", Config: echoConf{Msg: id}}, "", -1); err != nil {
+				errs <- fmt.Errorf("create %s: %w", id, err)
+			}
+		}(c)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+
+	tree.Await()
+	for _, e := range tree.Entries() {
+		if f := e.Fiber(); f != nil && f.State() != cordis.StateActive {
+			t.Fatalf("entry %s settled in %s, want active", e.ID(), f.State())
+		}
+	}
+
+	if _, err := mgr.Swap("echo", typeReg("echo", echoImpl("final", rec))); err != nil {
+		t.Fatalf("post-storm swap failed: %v", err)
+	}
+	tree.Await()
+	if fiberState(t, tree, "late-0") != cordis.StateActive {
+		t.Fatal("surviving entry not active after the final swap")
 	}
 }
 
