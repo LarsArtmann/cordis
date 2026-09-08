@@ -37,7 +37,9 @@ pub struct ContextData {
 
 impl Context {
     /// Create a root context with its own registry, event bus and service
-    /// store. The root fiber is always active.
+    /// store. The root fiber is born active: no `internal/status` event
+    /// fires for its creation because no transition ever happened,
+    /// mirroring upstream.
     #[must_use]
     pub fn new() -> Self {
         let core = Core::new();

@@ -24,7 +24,9 @@ in `packages/` track upstream and are not released from this fork.
   snapshot/restore, `internal/status` events, intercept and config
   validation.
 - Zig: all five dispatch modes, batch transactions, effect scopes with
-  introspection, disposers, registry view.
+  introspection, disposers, registry view; typed registry operations
+  (`Registry.hasTyped`/`deleteTyped`) keyed by `TypedPlugin` identity, and
+  a `zig build docs` emission gate enforced by the flake's zig check.
 - Cross-language assurance: four golden scenarios executed
   byte-identically by the Go, Rust and Zig runners (lifecycle, events,
   cascade and dispatch), `nix flake check` derivations, Go benchmarks, a
@@ -67,6 +69,11 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Fixed
 
+- Zig `Registry.delete` iterated the live runtime list while disposing
+  fibers mutated (and, with the last fiber, freed) that same list; the stale
+  slice read poisoned memory and crashed on plugins with two or more
+  fibers. Fiber ids are now snapshotted and the registry entry dropped
+  before disposal, matching Go's `Registry.Delete` and Rust's `delete_id`.
 - Thread-safe Rust: `Fiber::name` self-deadlock (nested core locks) that
   hung CI Ports runs for over an hour; lock-order invariant documented.
 - Go loader: `PollWatcher` captured its baseline at the first poll, so a

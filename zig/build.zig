@@ -55,4 +55,24 @@ pub fn build(b: *std.Build) void {
     });
     const golden = b.addTest(.{ .root_module = golden_mod });
     test_step.dependOn(&b.addRunArtifact(golden).step);
+
+    // Doc emission: `zig build docs` writes the generated module docs to
+    // zig-out/docs. The build runner has no -femit-docs flag in 0.16, so
+    // the pass rides on a library compile that analyzes every public decl.
+    const docs_step = b.step("docs", "Emit the cordis module documentation");
+    const lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "cordis",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cordis.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const docs_install = b.addInstallDirectory(.{
+        .source_dir = lib.getEmittedDocs(),
+        .install_dir = .{ .custom = "docs" },
+        .install_subdir = "",
+    });
+    docs_step.dependOn(&docs_install.step);
 }

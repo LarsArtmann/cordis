@@ -426,7 +426,7 @@ fn dispatchValue(v: i32) cordis.Value {
 }
 
 fn wfTerminal(args: []const cordis.Value) ?cordis.Value {
-    const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+    const payload: *i32 = @ptrCast(@alignCast(@constCast(args[0])));
     dispatchLog("wf-terminal {s} payload={d}", .{ g_wf_event, payload.* });
     payload.* += 1000;
     return args[0];
@@ -447,19 +447,19 @@ const DispatchSink = struct {
                 return null;
             },
             .plain => {
-                const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+                const payload: *i32 = @ptrCast(@alignCast(@constCast(args[0])));
                 dispatchLog("fire {s} {s} payload={d}", .{ self.event, self.name, payload.* });
                 if (self.returns) |ret| return dispatchValue(payload.* + ret);
                 return null;
             },
             .chain => {
-                const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+                const payload: *i32 = @ptrCast(@alignCast(@constCast(args[0])));
                 dispatchLog("wf {s} {s} payload={d}", .{ self.event, self.name, payload.* });
-                const next: *cordis.Context.Next = @constCast(@ptrCast(@alignCast(args[args.len - 1])));
+                const next: *cordis.Context.Next = @ptrCast(@alignCast(@constCast(args[args.len - 1])));
                 return next.invoke(&.{dispatchValue(payload.* + self.add)});
             },
             .cut => {
-                const payload: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+                const payload: *i32 = @ptrCast(@alignCast(@constCast(args[0])));
                 dispatchLog("wf {s} {s} payload={d}", .{ self.event, self.name, payload.* });
                 return dispatchValue(payload.* + self.returns.?);
             },

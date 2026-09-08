@@ -429,7 +429,12 @@ fn start_inner(ctx: &Context, base: &Rc<PluginBase>, config: crate::events::Valu
             })
             .fibers
             .push(id);
-        core.queue(id);
     }
+    // The plugin lifecycle event fires before the first transition, so
+    // listeners observe the fiber still pending, mirroring upstream.
+    fiber
+        .context()
+        .emit_named(crate::fiber::EVENT_PLUGIN, &[crate::events::value(fiber.clone())]);
+    ctx.core.borrow_mut().queue(id);
     Ok(fiber)
 }

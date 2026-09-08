@@ -58,10 +58,12 @@ func writeConfig(t *testing.T, dir string, entries []EntryOptions) {
 func TestResolverReplaceType(t *testing.T) {
 	rec := &recorder{}
 	resolver := NewResolver()
-	ReplaceType(resolver, "echo", func(ctx *cordis.Context, conf echoConf) error {
+	if previous, found, err := ReplaceType(resolver, "echo", func(ctx *cordis.Context, conf echoConf) error {
 		rec.add("start:v1:" + conf.Msg)
 		return nil
-	})
+	}); err != nil || found || previous.New != nil || previous.Decode != nil {
+		t.Fatalf("initial ReplaceType: found=%v previous=%v err=%v, want false zero nil", found, previous, err)
+	}
 
 	apply := func(msg string) func(ctx *cordis.Context, conf echoConf) error {
 		return func(ctx *cordis.Context, conf echoConf) error {

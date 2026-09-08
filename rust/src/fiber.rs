@@ -13,6 +13,25 @@ use crate::core::{Bag, Core, ApplyFn};
 /// upstream. It fires on every fiber state change.
 pub const EVENT_STATUS: &str = "internal/status";
 
+/// The canonical name of the plugin lifecycle event, mirroring
+/// `internal/plugin` upstream.
+///
+/// It fires when a fiber is created (before its first transition, so the
+/// payload fiber is still pending) and when it is disposed (before its
+/// effects roll back, so the payload fiber is still active); the single
+/// payload is the [`Fiber`] handle. The root fiber never fires it: its
+/// disposal is a restart, not a disposal.
+pub const EVENT_PLUGIN: &str = "internal/plugin";
+
+/// The canonical name of the config update interception event, mirroring
+/// `internal/update` upstream.
+///
+/// [`Fiber::update`] runs it as a waterfall with the arguments
+/// `[fiber, config, no_save]` followed by a `next` continuation. A listener
+/// may pass a rewritten config to `next`, or end the chain without calling
+/// `next` to veto the update entirely.
+pub const EVENT_UPDATE: &str = "internal/update";
+
 /// The payload of [`EVENT_STATUS`]: one fiber state change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusChange {
@@ -79,6 +98,10 @@ pub struct FiberData {
 }
 
 impl FiberData {
+    /// The root fiber is born `Active` (uid 0, no runtime). Its creation is
+    /// not a state transition, so no `internal/status` event fires for it;
+    /// its disposal likewise restarts the scope without ever passing through
+    /// [`settle_state`]. Both match upstream's `newRootFiber`.
     pub fn new_root(ctx: Context) -> Self {
         Self {
             id: FiberId(0),
@@ -147,6 +170,12 @@ impl Fiber {
             && !runtime.name.is_empty()
         {
             return runtime.name.clone();
+        }
+        // The runtime map entry is gone (the fiber is dying or disposed):
+        // fall back to the name captured at creation so the fiber keeps its
+        // identity, then to the parent chain for anonymous plugins.
+        if !f.name.is_empty() {
+            return f.name.clone();
         }
         let is_root = f.runtime.is_none();
         let parent = f.parent.clone();
@@ -222,6 +251,9 @@ impl Fiber {
             if let Some((bag, entry)) = entry {
                 Bag::detach(&bag, &entry);
             }
+            fiber
+                .context()
+                .emit_named(EVENT_PLUGIN, &[crate::events::value(fiber.clone())]);
             fiber.core.borrow_mut().queue(fiber.id);
         });
     }
@@ -239,7 +271,9 @@ impl Fiber {
         self.data().borrow_mut().bag = Some(Bag::new());
     }
 
-    /// Unload and reload the fiber with its current config.
+    /// Unload and reload the fiber with its current config. Restarting the
+    /// root fiber rolls back every root scope effect and starts a fresh bag,
+    /// mirroring upstream.
     ///
     /// # Errors
     ///
@@ -247,6 +281,12 @@ impl Fiber {
     pub fn restart(&self) -> crate::Result<()> {
         self.assert_active()?;
         core_enter_leave(self, |fiber| {
+            // The root fiber owns no runtime; the transition machine would
+            // misread it as stale, so it restarts in place like upstream.
+            if fiber.data().borrow().runtime.is_none() {
+                fiber.restart_root();
+                return;
+            }
             {
                 let data = fiber.data();
                 let mut f = data.borrow_mut();
@@ -257,36 +297,61 @@ impl Fiber {
         Ok(())
     }
 
-    /// Replace the fiber's config and restart it. The restart settles through
-    /// the drain queue, so cascading dependency updates never observe torn
-    /// states.
-    /// Typed variant of [`Fiber::update`]: replaces the config with `C`.
+    /// Replace the fiber's config and restart it. The update is interceptable
+    /// through the [`EVENT_UPDATE`] waterfall (arguments `[fiber, config,
+    /// no_save]` followed by the `next` continuation, mirroring upstream):
+    /// listeners may rewrite the config before calling `next`, or veto the
+    /// update by ending the chain without calling it. The restart settles
+    /// through the drain queue, so cascading dependency updates never
+    /// observe torn states. Typed variant of [`Fiber::update`].
     ///
     /// # Errors
     ///
-    /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
-    /// [`Fiber::update`].
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed and
+    /// [`crate::Error::RootUpdate`] for the root fiber, which owns no plugin
+    /// runtime and therefore has no replaceable config.
     pub fn update_config<C: crate::sync::Shared>(&self, config: C) -> crate::Result<()> {
         self.update(crate::events::value(config))
     }
 
-    /// Replace the fiber's config and restart it. The restart settles through
-    /// the drain queue, so cascading dependency updates never observe torn
-    /// states.
+    /// Replace the fiber's config and restart it, interceptable through the
+    /// [`EVENT_UPDATE`] waterfall. The terminal continuation stores the
+    /// config the chain settled on and queues the restart, mirroring
+    /// upstream's `internal/update` listener contract.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed.
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed and
+    /// [`crate::Error::RootUpdate`] for the root fiber.
     pub fn update(&self, config: crate::events::Value) -> crate::Result<()> {
         self.assert_active()?;
+        if self.data().borrow().runtime.is_none() {
+            return Err(crate::Error::RootUpdate);
+        }
         core_enter_leave(self, |fiber| {
-            {
-                let data = fiber.data();
-                let mut f = data.borrow_mut();
-                f.config = config;
-                f.restart_requested = true;
-            }
-            fiber.core.borrow_mut().queue(fiber.id);
+            let ctx = fiber.context();
+            let target = fiber.clone();
+            let terminal: crate::events::Next = Rc::new(move |args: &[crate::events::Value]| {
+                {
+                    let data = target.data();
+                    let mut f = data.borrow_mut();
+                    if let Some(next_config) = args.get(1) {
+                        f.config = Rc::clone(next_config);
+                    }
+                    f.restart_requested = true;
+                }
+                target.core.borrow_mut().queue(target.id);
+                Some(crate::events::value(()))
+            });
+            ctx.waterfall(
+                EVENT_UPDATE,
+                vec![
+                    crate::events::value(fiber.clone()),
+                    config,
+                    crate::events::value(false),
+                ],
+                &terminal,
+            );
         });
         Ok(())
     }

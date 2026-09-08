@@ -251,17 +251,64 @@ test "registry view counts and deletes plugins" {
 
     const reg = ctx.registry();
     try std.testing.expectEqual(@as(usize, 0), reg.size());
+    try std.testing.expect(!reg.hasTyped(A));
+    try std.testing.expect(!reg.hasTyped(B));
 
     const fa = try A.start(ctx, {});
     _ = try B.start(ctx, {});
     try std.testing.expectEqual(@as(usize, 2), reg.size());
-    try std.testing.expect(reg.has(&A.view));
-    try std.testing.expect(reg.has(&B.view));
+    try std.testing.expect(reg.hasTyped(A));
+    try std.testing.expect(reg.hasTyped(B));
 
-    reg.delete(&A.view);
+    reg.deleteTyped(A);
     try std.testing.expectEqual(cordis.FiberState.disposed, fa.state());
-    try std.testing.expect(!reg.has(&A.view));
+    try std.testing.expect(!reg.hasTyped(A));
     try std.testing.expectEqual(@as(usize, 1), reg.size());
+}
+
+test "registry deleteTyped disposes every fiber of the plugin type" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    const State = struct {
+        fn apply(_: *Context, _: void) cordis.Error!void {}
+    };
+    const A = cordis.TypedPlugin("a", void, State.apply, &.{});
+    const B = cordis.TypedPlugin("b", void, State.apply, &.{});
+
+    const reg = ctx.registry();
+    const first = try A.start(ctx, {});
+    const second = try A.start(ctx, {});
+    _ = try B.start(ctx, {});
+    try std.testing.expectEqual(@as(usize, 2), reg.size());
+
+    reg.deleteTyped(A);
+    try std.testing.expectEqual(cordis.FiberState.disposed, first.state());
+    try std.testing.expectEqual(cordis.FiberState.disposed, second.state());
+    try std.testing.expectEqual(cordis.FiberState.active, (try B.start(ctx, {})).state());
+
+    // Deleting an unknown plugin is a no-op.
+    reg.deleteTyped(A);
+    try std.testing.expectEqual(@as(usize, 1), reg.size());
+}
+
+test "registry has and delete address dynamic plugins by address" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    const S = struct {
+        fn apply(_: *const cordis.Plugin, _: *Context, _: ?cordis.Value) cordis.Error!void {}
+    };
+    const reg = ctx.registry();
+
+    const body = ctx.core.a().create(cordis.Plugin) catch unreachable;
+    body.* = .{ .name = "dynamic", .apply = S.apply };
+    const fiber = try body.start(ctx, null);
+    try std.testing.expect(reg.has(body));
+
+    reg.delete(body);
+    try std.testing.expectEqual(cordis.FiberState.disposed, fiber.state());
+    try std.testing.expect(!reg.has(body));
 }
 
 const UserRenamed = struct {
@@ -309,8 +356,8 @@ test "waterfall composes listeners around a terminal" {
     const ListenerState = struct {
         fn call(raw: *anyopaque, args: []const cordis.Value) ?cordis.Value {
             _ = raw;
-            const next: *cordis.Context.Next = @constCast(@ptrCast(@alignCast(args[args.len - 1])));
-            const n: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+            const next: *cordis.Context.Next = @ptrCast(@alignCast(@constCast(args[args.len - 1])));
+            const n: *i32 = @ptrCast(@alignCast(@constCast(args[0])));
             n.* *= 2;
             return next.invoke(args[0 .. args.len - 1]);
         }
@@ -320,7 +367,7 @@ test "waterfall composes listeners around a terminal" {
 
     const Terminal = struct {
         fn run(args: []const cordis.Value) ?cordis.Value {
-            const n: *i32 = @constCast(@ptrCast(@alignCast(args[0])));
+            const n: *i32 = @ptrCast(@alignCast(@constCast(args[0])));
             n.* += 1;
             return args[0];
         }

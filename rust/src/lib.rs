@@ -34,7 +34,7 @@ mod snapshot;
 
 pub use context::{Context, Disposer, Filter, Guard};
 pub use events::{event_name, service_name, value, EventOptions, Listener, Next, Value};
-pub use fiber::{EffectMeta, Fiber, FiberState, StatusChange, EVENT_STATUS};
+pub use fiber::{EffectMeta, Fiber, FiberState, StatusChange, EVENT_PLUGIN, EVENT_STATUS, EVENT_UPDATE};
 pub use plugin::{plugin, plugin_type_id, start, start_fn, FnPlugin, Plugin, Registry, Runtime};
 pub use snapshot::{FiberSnapshot, RegistrySnapshot, RuntimeSnapshot};
 
@@ -59,6 +59,9 @@ pub enum Error {
     MissingService(String),
     /// A service or config had an unexpected type.
     TypeMismatch { name: String },
+    /// The root fiber owns no plugin runtime, so its config cannot be
+    /// updated.
+    RootUpdate,
 }
 
 impl fmt::Display for Error {
@@ -78,6 +81,7 @@ impl fmt::Display for Error {
                 write!(f, "cannot get required service {name:?} in inactive context")
             }
             Self::TypeMismatch { name } => write!(f, "service {name:?} has an unexpected type"),
+            Self::RootUpdate => write!(f, "cannot update the root fiber"),
         }
     }
 }

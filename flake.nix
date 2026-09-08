@@ -55,7 +55,7 @@
                 chmod -R u+w cordis-go
                 cd cordis-go
                 go vet ./...
-                go test -race -count=1 ./...
+                go test -race -count=3 ./...
                 touch $out
               '';
 
@@ -90,7 +90,11 @@
                 cp -r ${source} cordis
                 chmod -R u+w cordis
                 cd cordis/zig
+                zig fmt --check build.zig src tests
                 zig build test --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
+                # Doc emission gate: fails on code the compiler rejects; the
+                # library compile walks every public decl.
+                zig build docs --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
                 touch $out
               '';
         }
@@ -173,7 +177,7 @@
         {
           test-go = mkTest "test-go" ''
             export GOCACHE="''${GOCACHE_OVERRIDE:-$(mktemp -d)/go-build}"
-            cd go && go vet ./... && go test -race -count=1 ./...
+            cd go && go vet ./... && go test -race -count=3 ./...
           '';
           test-rust = mkTest "test-rust" ''
             export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
@@ -189,7 +193,7 @@
             mkdir -p "$CARGO_HOME"
             set -e
             echo "== Go =="
-            (cd go && go vet ./... && go test -race -count=1 ./...)
+            (cd go && go vet ./... && go test -race -count=3 ./...)
             echo "== Rust =="
             (cd rust && cargo clippy --all-targets && cargo test)
             echo "== Zig =="

@@ -226,6 +226,14 @@ pub const EffectMeta = struct {
     children: []const EffectMeta,
 };
 
+/// The registry identity of a comptime plugin type: the address of its
+/// embedded view, the same key `TypedPlugin.start` registers under.
+fn pluginView(comptime P: type) *const Plugin {
+    if (!@hasDecl(P, "view") or @TypeOf(P.view) != Plugin)
+        @compileError("cordis: registry typed operations expect a cordis.TypedPlugin(...) type, got " ++ @typeName(P));
+    return &P.view;
+}
+
 /// A read view over the plugin registry of one context tree.
 pub const Registry = struct {
     core: *Core,
@@ -240,16 +248,35 @@ pub const Registry = struct {
         return self.core.runtimes.contains(@intFromPtr(plugin));
     }
 
+    /// The typed variant of `has`: whether the comptime plugin type `P`
+    /// (a `TypedPlugin` instantiation) has any fiber in this tree.
+    pub fn hasTyped(self: Registry, comptime P: type) bool {
+        return self.has(pluginView(P));
+    }
+
     /// Dispose every fiber of `plugin` and remove it from the registry.
     pub fn delete(self: Registry, plugin: *const Plugin) void {
         self.core.enter();
         defer self.core.leave();
         const key = @intFromPtr(plugin);
         const list = self.core.runtimes.getPtr(key) orelse return;
-        for (list.items) |id| {
+        // Copy the fiber ids out and drop the registry entry first:
+        // disposing removes each id from that same list (poisoning vacated
+        // slots) and frees the list with the last one, exactly like the
+        // snapshot-then-dispose order of the Go and Rust registries.
+        const ids = self.core.gpa.dupe(usize, list.items) catch @panic("cordis: out of memory");
+        defer self.core.gpa.free(ids);
+        list.deinit(self.core.gpa);
+        _ = self.core.runtimes.remove(key);
+        for (ids) |id| {
             (Fiber{ .core = self.core, .id = id }).dispose();
         }
-        _ = self.core.runtimes.remove(key);
+    }
+
+    /// The typed variant of `delete`: dispose every fiber of the comptime
+    /// plugin type `P` and remove it from the registry.
+    pub fn deleteTyped(self: Registry, comptime P: type) void {
+        self.delete(pluginView(P));
     }
 };
 

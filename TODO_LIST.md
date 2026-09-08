@@ -23,15 +23,6 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
       allocations" claim recorded in ROADMAP (source:
       docs/status/2026-09-08_04-32 §f23)
 
-## Zig
-
-- [ ] Registry `has`/`delete` keyed by `TypedPlugin` identity (the golden
-      runner still goes through address-keyed dynamic plugins)
-- [ ] `zig build -femit-docs` pass; fix broken doc comments
-- [ ] Record Zig 0.16 std gotchas in AGENTS.md (`std.Io.Dir.cwd`,
-      `ArrayListUnmanaged .empty`, anonymous non-zig imports → WriteFiles +
-      `@embedFile`)
-
 ## Repo
 
 - [ ] CI job running `nix flake check` so the flake gate is enforced

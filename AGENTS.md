@@ -31,7 +31,9 @@ or run directly:
   delete it and do not put port code in it — the port lives in the nested
   `go/` module.
 - Rust: `cd rust && cargo test` (clippy clean, `cargo clippy --all-targets`)
-- Zig: `cd zig && zig build test` (leak-checked via testing.allocator)
+- Zig: `cd zig && zig build test` (leak-checked via testing.allocator);
+  `cd zig && zig build docs` must also pass — the doc-emission gate is wired
+  into the flake's zig check next to `zig fmt --check`.
 
 ### Environment gotcha (this machine)
 
@@ -73,6 +75,32 @@ system-profile copy is built with Go 1.26 and warns about x/tools skew.
 - TS deps (chokidar, js-yaml, ...) must match upstream's versions; sed-style
   "bump everything" passes have twice introduced non-existent versions
   (js-yaml ^5.4.1) or API breaks.
+
+## Zig 0.16 std gotchas (all verified against 0.16.0 on 2026-09-08)
+
+- **`std.fs.Dir` is gone; it is `std.Io.Dir` now.** The filesystem API moved
+  into `std.Io` (`std.Io.Dir`, `std.Io.File`); `std.fs` keeps only
+  `path` and a few re-exported constants. `std.fs.cwd()` →
+  `std.Io.Dir.cwd()`.
+- **Initialize ArrayLists with `.empty`.** `items`/`capacity` have no field
+  defaults, so `.{}` fails with "missing struct field: items";
+  `std.ArrayListUnmanaged` is now an alias of `std.ArrayList`, and lists are
+  unmanaged — methods take the allocator (`list.append(gpa, x)`).
+- **Non-zig `@import` is an error and `@embedFile` cannot leave the module
+  root** ("no module named 'data.txt'" / "embed of file outside package
+  path"). To embed files living outside the module (e.g. `../golden/`), copy
+  them into the build cache with `b.addWriteFiles()` and reference them from
+  a generated `.zig` shim using `@embedFile` — the `golden_data` pattern in
+  `zig/build.zig`.
+- **`zig build -femit-docs` does not exist** on the build runner in 0.16.
+  Add a `docs` step instead: `Compile.getEmittedDocs()` (a `Compile` method,
+  not `Module`) piped through `b.addInstallDirectory` — note
+  `InstallDir.Options` takes `source_dir`, not `source`.
+- **`orderedRemove` poisons vacated slots with `undefined` (0xAA in Debug).**
+  Iterating a slice captured before a remove reads the poison and panics
+  with index-out-of-bounds. Snapshot-then-mutate instead: `Registry.delete`
+  copies the fiber ids out and drops the registry entry before disposing
+  (same order as Go's `Registry.Delete` and Rust's `delete_id`).
 
 ## Port architecture (all three languages share this)
 

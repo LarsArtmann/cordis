@@ -590,3 +590,222 @@ fn snapshot_restore_roundtrip() {
     assert_eq!(now.runtimes[0].fibers[0].state, FiberState::Active);
     drop(fiber);
 }
+
+#[test]
+fn plugin_events_fire_on_create_and_dispose() {
+    use cordis::{EVENT_PLUGIN, Fiber};
+
+    let ctx = Context::new();
+    let seen: Rc<RefCell<Vec<(String, FiberState, i64)>>> = Rc::new(RefCell::new(Vec::new()));
+    {
+        let seen = Rc::clone(&seen);
+        ctx.on_named(
+            EVENT_PLUGIN,
+            Rc::new(move |args: &[Value]| {
+                let fiber = args.first().and_then(|v| v.downcast_ref::<Fiber>())?;
+                seen.borrow_mut().push((fiber.name(), fiber.state(), fiber.uid()));
+                None
+            }),
+            opts(),
+        )
+        .unwrap();
+    }
+
+    let p = plugin("watched", |_ctx: &Context, (): &()| Ok(()));
+    let fiber = start_fn(&ctx, &p, ()).unwrap();
+    // Creation fires once, before the first transition: the payload fiber is
+    // still pending and already carries its identity.
+    let uid = fiber.uid();
+    assert_eq!(
+        *seen.borrow(),
+        vec![("watched".to_string(), FiberState::Pending, uid)]
+    );
+
+    seen.borrow_mut().clear();
+    fiber.dispose();
+    // Disposal fires once, before the effects roll back: the payload fiber
+    // is still active, keeps its name, and its uid is not yet retired to -1.
+    assert_eq!(
+        *seen.borrow(),
+        vec![("watched".to_string(), FiberState::Active, uid)]
+    );
+    assert_eq!(fiber.state(), FiberState::Disposed);
+}
+
+#[test]
+fn update_waterfall_rewrites_config() {
+    use cordis::{EVENT_UPDATE, Fiber};
+
+    let ctx = Context::new();
+    let observed: Rc<RefCell<Vec<(String, i32, bool)>>> = Rc::new(RefCell::new(Vec::new()));
+    {
+        let observed = Rc::clone(&observed);
+        ctx.on_named(
+            EVENT_UPDATE,
+            Rc::new(move |args: &[Value]| {
+                let fiber = args.first().and_then(|v| v.downcast_ref::<Fiber>())?;
+                let config = args.get(1).and_then(|v| v.downcast_ref::<i32>()).copied()?;
+                let no_save = args.get(2).and_then(|v| v.downcast_ref::<bool>()).copied()?;
+                observed.borrow_mut().push((fiber.name(), config, no_save));
+                let next = args.get(3).and_then(|v| v.clone().downcast::<Next>().ok())?;
+                next(&[args.first().cloned()?, value(config * 10), value(no_save)])
+            }),
+            opts(),
+        )
+        .unwrap();
+    }
+
+    let applied: Rc<RefCell<Vec<i32>>> = Rc::new(RefCell::new(Vec::new()));
+    let p = plugin("cfg", {
+        let applied = Rc::clone(&applied);
+        move |_ctx: &Context, cfg: &i32| {
+            applied.borrow_mut().push(*cfg);
+            Ok(())
+        }
+    });
+    let fiber = start_fn(&ctx, &p, 1_i32).unwrap();
+    fiber.update(value(7_i32)).unwrap();
+
+    // The listener saw the raw update (fiber, config, no_save) and rewrote
+    // the config tenfold; the plugin body re-ran with the rewritten value.
+    assert_eq!(*observed.borrow(), vec![("cfg".to_string(), 7, false)]);
+    assert_eq!(*applied.borrow(), vec![1, 70]);
+    assert_eq!(fiber.state(), FiberState::Active);
+}
+
+#[test]
+fn update_waterfall_veto_stops_the_restart() {
+    use cordis::EVENT_UPDATE;
+
+    let ctx = Context::new();
+    ctx.on_named(EVENT_UPDATE, Rc::new(|_| Some(value(()))), opts())
+        .unwrap();
+
+    let applied: Rc<RefCell<Vec<i32>>> = Rc::new(RefCell::new(Vec::new()));
+    let p = plugin("vetoed", {
+        let applied = Rc::clone(&applied);
+        move |_ctx: &Context, cfg: &i32| {
+            applied.borrow_mut().push(*cfg);
+            Ok(())
+        }
+    });
+    let fiber = start_fn(&ctx, &p, 1_i32).unwrap();
+    fiber.update(value(2_i32)).unwrap();
+
+    // The listener ended the chain without calling next, so the config and
+    // the running body are untouched.
+    assert_eq!(*applied.borrow(), vec![1]);
+    assert_eq!(fiber.state(), FiberState::Active);
+}
+
+#[test]
+fn root_fiber_rejects_update() {
+    let ctx = Context::new();
+    assert_eq!(ctx.fiber().update(value(1_i32)), Err(Error::RootUpdate));
+    // The root is untouched: still active with its original identity.
+    assert_eq!(ctx.fiber().state(), FiberState::Active);
+    assert_eq!(ctx.fiber().uid(), 0);
+}
+
+#[test]
+fn root_restart_rolls_back_and_stays_active() {
+    let ctx = Context::new();
+    let cleanups: Rc<RefCell<Vec<&str>>> = Rc::new(RefCell::new(Vec::new()));
+    ctx.attach({
+        let cleanups = Rc::clone(&cleanups);
+        move || cleanups.borrow_mut().push("root-effect")
+    })
+    .unwrap();
+
+    ctx.fiber().restart().unwrap();
+    // The root scope rolled back, but the fiber itself survived with its
+    // identity intact (uid 0, active), mirroring upstream's restartRoot.
+    assert_eq!(*cleanups.borrow(), vec!["root-effect"]);
+    assert_eq!(ctx.fiber().state(), FiberState::Active);
+    assert_eq!(ctx.fiber().uid(), 0);
+
+    // The fresh bag accepts new effects.
+    ctx.attach(|| {}).unwrap();
+}
+
+#[test]
+fn root_restart_drains_root_scoped_listeners() {
+    use cordis::{StatusChange, EVENT_STATUS};
+
+    let ctx = Context::new();
+    let disposed_seen = Rc::new(RefCell::new(0));
+    {
+        let disposed_seen = Rc::clone(&disposed_seen);
+        ctx.on_named(
+            EVENT_STATUS,
+            Rc::new(move |args: &[Value]| {
+                if let Some(change) = args.first().and_then(|v| v.downcast_ref::<StatusChange>())
+                    && change.new == FiberState::Disposed
+                {
+                    *disposed_seen.borrow_mut() += 1;
+                }
+                None
+            }),
+            opts(),
+        )
+        .unwrap();
+    }
+
+    ctx.fiber().restart().unwrap();
+    // The restart rolled the root scope back, taking the listener with it,
+    // and never passed through settle_state: no disposed event anywhere.
+    assert_eq!(*disposed_seen.borrow(), 0);
+
+    // A fresh listener observes normal plugin transitions again.
+    let seen = Rc::new(RefCell::new(0));
+    {
+        let seen = Rc::clone(&seen);
+        ctx.on_named(
+            EVENT_STATUS,
+            Rc::new(move |_| {
+                *seen.borrow_mut() += 1;
+                None
+            }),
+            opts(),
+        )
+        .unwrap();
+    }
+    let p = plugin("svc", |_ctx: &Context, (): &()| Ok(()));
+    start_fn(&ctx, &p, ()).unwrap();
+    assert_eq!(*seen.borrow(), 2);
+}
+
+#[test]
+fn root_fiber_birth_emits_no_status() {
+    use cordis::{StatusChange, EVENT_STATUS};
+
+    let ctx = Context::new();
+    let seen: Rc<RefCell<Vec<StatusChange>>> = Rc::new(RefCell::new(Vec::new()));
+    {
+        let seen = Rc::clone(&seen);
+        ctx.on_named(
+            EVENT_STATUS,
+            Rc::new(move |args: &[Value]| {
+                if let Some(change) = args.first().and_then(|v| v.downcast_ref::<StatusChange>()) {
+                    seen.borrow_mut().push(change.clone());
+                }
+                None
+            }),
+            opts(),
+        )
+        .unwrap();
+    }
+
+    // The root fiber is born active: a listener registered on a fresh
+    // context has received no status event, because creation is not a
+    // state transition.
+    assert!(seen.borrow().is_empty());
+    assert_eq!(ctx.fiber().state(), FiberState::Active);
+    assert_eq!(ctx.fiber().uid(), 0);
+
+    // Real plugin transitions fire the usual pending -> loading -> active
+    // pair, so the empty log above pins the birth contract, not dead wiring.
+    let p = plugin("svc", |_ctx: &Context, (): &()| Ok(()));
+    start_fn(&ctx, &p, ()).unwrap();
+    assert_eq!(seen.borrow().len(), 2, "pending -> loading -> active");
+}
