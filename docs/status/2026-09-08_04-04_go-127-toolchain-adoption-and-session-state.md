@@ -90,18 +90,18 @@
 
 **P0 — protect & unblock (before anything else)**
 
-1. Decide ownership of the UU conflicts on `go/go.mod`, `ROADMAP.md`, `go/timer/timer_test.go` and resolve them (my worktree versions are the verified ones; backups exist).
-2. Decide whether the foreign staged bulk diff (packages/_, rust/_) proceeds, and keep all other hands off until it commits or unwinds.
-3. Reconcile "relax Go toolchain pin" (HEAD intent) vs `go_1_27` pin (worktree) — pick one, align flake.nix + AGENTS.md.
-4. After resolution: re-run the full battery (vet, `go test -race -count=3 ./...`, golden ×2, `nix build .#checks.x86_64-linux.go`).
-5. Commit the Go 1.27 adoption as one coherent commit (module bump, flake, synctest tests, CutLast, ROADMAP/AGENTS).
-6. Compare committed result against `/tmp/cordis-session-backup-20260908/` (integrity ritual).
-7. `dprint check` on ROADMAP.md / AGENTS.md / any json edited; fix formatting drift from this session.
-8. HARVEST section (f) into TODO_LIST.md (docs-health HARVEST rules; P2/P3 items are ROADMAP-fuel, not commitments).
-9. CHANGELOG.md entry for the Go 1.27 adoption (file exists as foreign staged addition — coordinate).
-10. FEATURES.md: add toolchain + synctest-infra entries if feature-inventory-worthy.
-11. Annotate 2026-09-04/05 status reports: superseded toolchain facts (docs-health ANNOTATE, non-destructive).
-12. Re-measure coverage; fix or re-confirm "~85%" in AGENTS.md.
+1. ~~Decide ownership of the UU conflicts on `go/go.mod`, `ROADMAP.md`, `go/timer/timer_test.go` and resolve them (my worktree versions are the verified ones; backups exist).~~ done at `51cddf2`
+2. ~~Decide whether the foreign staged bulk diff (packages/_, rust/_) proceeds, and keep all other hands off until it commits or unwinds.~~ done at `51cddf2`
+3. ~~Reconcile "relax Go toolchain pin" (HEAD intent) vs `go_1_27` pin (worktree) — pick one, align flake.nix + AGENTS.md.~~ done at `51cddf2`
+4. ~~After resolution: re-run the full battery (vet, `go test -race -count=3 ./...`, golden ×2, `nix build .#checks.x86_64-linux.go`).~~ done (recovery session verified the full battery green; suites green on 2026-09-08)
+5. ~~Commit the Go 1.27 adoption as one coherent commit (module bump, flake, synctest tests, CutLast, ROADMAP/AGENTS).~~ done at `51cddf2`
+6. ~~Compare committed result against `/tmp/cordis-session-backup-20260908/` (integrity ritual).~~ done (performed per the resolution appendix — byte-identical or additive)
+7. ~~`dprint check` on ROADMAP.md / AGENTS.md / any json edited; fix formatting drift from this session.~~ done (recovery session ran dprint fmt)
+8. ~~HARVEST section (f) into TODO_LIST.md (docs-health HARVEST rules; P2/P3 items are ROADMAP-fuel, not commitments).~~ done (docs-health pass this docs-health pass routed §f into TODO_LIST/ROADMAP)
+9. ~~CHANGELOG.md entry for the Go 1.27 adoption (file exists as foreign staged addition — coordinate).~~ done (docs-health pass CHANGELOG.md rebuilt by this pass)
+10. ~~FEATURES.md: add toolchain + synctest-infra entries if feature-inventory-worthy.~~ done (docs-health pass FEATURES.md refreshed by this pass)
+11. ~~Annotate 2026-09-04/05 status reports: superseded toolchain facts (docs-health ANNOTATE, non-destructive).~~ done (docs-health pass the 2026-09-04/05 reports annotated by this pass)
+12. ~~Re-measure coverage; fix or re-confirm "~85%" in AGENTS.md.~~ done (docs-health pass measured 2026-09-08 — core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6%)
 
 **P1 — CI / build hermeticity**
 13. Pin `go-version: 1.27.x` in ports.yml or write down the `stable` policy + failure mode.
@@ -171,3 +171,8 @@ Section (g) answers arrived; the hazard is closed. Current HEAD: `61ec9f9`, work
 4. **Verification re-run post-resolution (this session, not trusted from the other):** `go vet` + full suite green across all 6 packages (core, group, hmr, loader, timer ×2), golden canary green. `nix flake check` green is claimed by `61ec9f9`'s session.
 5. **Cross-reference:** the same hours produced the other session's report (buildflow recovery, upstream rebase to `caab04e`, root Go module stub) — read `61ec9f9`'s status report alongside this one; the two document complementary halves of one tangled night.
 6. **New info affecting section (f):** item 16 (aarch64 checks) is the known buildflow platform-mismatch blocker, upstream-side per the other report — re-route that item accordingly. The root `go.mod` stub answers part of item 37's module-layout question (repo root is a stub module; the port stays in `go/`).
+
+Docs-health pass addendum (2026-09-08): §f P0 items 1–12 now carry inline
+verdicts above. The remaining P1–P4 items are tracked where they belong:
+bounded work in `TODO_LIST.md`, ideas and user-gated decisions in
+`ROADMAP.md` (Open decisions).

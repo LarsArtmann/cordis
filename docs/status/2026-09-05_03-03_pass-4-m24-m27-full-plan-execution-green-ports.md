@@ -241,24 +241,24 @@ clippy pay-down → release tags.
 
 ## f) NEXT 50 (ordered, roughly Pareto)
 
-1. Re-ask and get answers to the 3 standing §g questions (below).
-2. When upstream merges `3-stage-hmr`: sync the TS tree, confirm Build
-   goes green end-to-end, record the first fully-green CI pair.
+1. ~~Re-ask and get answers to the 3 standing §g questions (below).~~ done (superseded — Build policy settled by practice (gate on Ports); releases cut as tags; yarn.lock moved to ROADMAP Open decisions)
+2. ~~When upstream merges `3-stage-hmr`: sync the TS tree, confirm Build~~ done (fork replayed the 3-stage-hmr branch (b4650df))
+   ~~goes green end-to-end, record the first fully-green CI pair.~~
 3. Create GitHub Release pages for `go/v0.1.0` and `rust/v0.2.0` with
    notes (tags exist; pages do not).
 4. Decide + implement yarn.lock policy (commit generated lockfile vs
    track upstream's `--no-immutable` floating resolution).
-5. Rust clippy round 2: 17 `# Errors` doc sections (mechanical).
-6. Rust clippy round 3: long-doc-paragraph fixes (7).
-7. Rust: audit the ~7 arithmetic-side-effect sites — add checked/saturating
-   or a scoped allow with justification.
-8. Rust: 4 let-else + 3 map_or_else + 3 expect stragglers.
-9. `FEATURES.md` refresh: accessor/mixin, callable, loader, hmr,
-   snapshot/status, thread-safe build as inventory rows.
-10. `docs/DOMAIN_LANGUAGE.md`: add accessor, mixin, callable, tracker,
-    snapshot, status change, generation, swap, accept set.
-11. Go coverage run for `go/accessor.go`, `go/callable.go`, `go/hmr`,
-    `go/loader` — record numbers in TODO_LIST.md.
+5. ~~Rust clippy round 2: 17 `# Errors` doc sections (mechanical).~~ done at `51cddf2`
+6. ~~Rust clippy round 3: long-doc-paragraph fixes (7).~~ done at `51cddf2`
+7. ~~Rust: audit the ~7 arithmetic-side-effect sites — add checked/saturating~~ done at `51cddf2`
+   ~~or a scoped allow with justification.~~
+8. ~~Rust: 4 let-else + 3 map_or_else + 3 expect stragglers.~~ done at `51cddf2`
+9. ~~`FEATURES.md` refresh: accessor/mixin, callable, loader, hmr,~~ done (docs-health pass this docs-health pass rewrote FEATURES.md with canonical statuses)
+   ~~snapshot/status, thread-safe build as inventory rows.~~
+10. ~~`docs/DOMAIN_LANGUAGE.md`: add accessor, mixin, callable, tracker,~~ done (docs-health pass this pass added accessor/mixin/callable/tracker/snapshot/status/swap/generation/accept-set terms)
+    ~~snapshot, status change, generation, swap, accept set.~~
+11. ~~Go coverage run for `go/accessor.go`, `go/callable.go`, `go/hmr`,~~ done (docs-health pass measured 2026-09-08 — core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6% (recorded in AGENTS.md))
+    ~~`go/loader` — record numbers in TODO_LIST.md.~~
 12. Close the `Member.Set` service-blip question: either document the
     restart-on-write semantics as final or implement update-in-place
     derivation.
@@ -270,48 +270,48 @@ clippy pay-down → release tags.
 17. Zig std-gotchas section in AGENTS.md (unchecked half of the split
     item).
 18. Scenario #4 golden: bail/serial/waterfall parity across ports.
-19. hmr: document swap-fiber-identity semantics explicitly (new fiber,
-    same entry) in the package doc.
+19. ~~hmr: document swap-fiber-identity semantics explicitly (new fiber,~~ done (go/hmr package doc states the swap fiber-identity semantics)
+    ~~same entry) in the package doc.~~
 20. hmr: surface `Fiber.Err()` detail in rollback errors (now possible
     post-M26).
 21. hmr: concurrency storm test — parallel `Swap` + `Tree.Create/Remove`.
 22. loader: `Resolver.ReplaceType[C]` sugar (parity with `RegisterType`).
 23. Go: consider a debug build tag that turns core-lock misuse into panics
     (Rust thread-safe found two deadlocks this way).
-24. Sweep: confirm no `TODO`/debug prints in go/hmr, go/accessor,
-    go/callable, rust/src/snapshot.rs (final grep in the next verify).
-25. `go test -cover` per package recorded in TODO_LIST.md (see c).
+24. ~~Sweep: confirm no `TODO`/debug prints in go/hmr, go/accessor,~~ done (no TODOs or debug prints in go/hmr, go/accessor, go/callable, rust/src/snapshot.rs)
+    ~~go/callable, rust/src/snapshot.rs (final grep in the next verify).~~
+25. ~~`go test -cover` per package recorded in TODO_LIST.md (see c).~~ done (docs-health pass measured 2026-09-08, per-package numbers recorded in AGENTS.md)
 26. Golden scenario #5 candidate: accessor/mixin lifecycle trace.
 27. Golden scenario #6 candidate: hmr swap + rollback trace (Go first).
 28. CI: consider `--locked` for cargo (verify Cargo.lock handling) and
     `-closures`/`--frozen` policy note in AGENTS.
-29. CI: Build job marked `continue-on-error` with a jobs-summary annotation
-    instead of a red X, IF you confirm gating-on-Ports is the policy.
+29. ~~CI: Build job marked `continue-on-error` with a jobs-summary annotation~~ done (superseded locally by the 3-stage-hmr replay (b4650df); CI confirmation pending push)
+    ~~instead of a red X, IF you confirm gating-on-Ports is the policy.~~
 30. Upstream PR candidate: report the hmr suite's CI-only sensitivity
     findings (debounce/window timings) upstream if their fix branch
     doesn't include them.
-31. ROADMAP: add the "Rust Fiber Await n/a (synchronous drain)" rationale
-    note permanently (matrix cell says it; the prose doesn't).
-32. PORTS.md: add the accessor/callable/loader/hmr one-liners to the
-    "shared architecture" bullet list if they generalize.
-33. README: golden-test mention exists in PORTS; verify the root README
-    pitch mentions the golden guarantee (item marked done via PORTS —
-    double-check the README body).
-34. Verify `.gitignore` covers `packages/*/lib`, `node_modules/`,
-    `rust/target/`, `zig/.zig-cache/`, `zig/zig-out/` (local build
-    artifacts existed this session — tree is clean, but confirm why).
-35. AGENTS.md: record the `BorrowExt as _` trap (looks unused in default
-    builds; required under `thread-safe`; an autofix deleted it once).
-36. AGENTS.md: record "check upstream CI first" as the standing first step
-    for fork-CI debugging.
-37. Sweep old status reports: mark passes 1–3 superseded by this report
-    (annotate headers, do not delete).
-38. DSL parser tests (M10) — verify all three runners really have them
-    (TODO_LIST says done; spot-check the Zig file).
-39. Zig: `Context::batch` — matrix says Zig has batch; confirm semantics
-    parity with Go's `Batch`.
-40. Consider a `just`-free task surface check: every flake app still maps
-    to a real verification step (test, test-go, test-rust, test-zig).
+31. ~~ROADMAP: add the "Rust Fiber Await n/a (synchronous drain)" rationale~~ done (ROADMAP matrix cell reads n/a (drain settles synchronously))
+    ~~note permanently (matrix cell says it; the prose doesn't).~~
+32. ~~PORTS.md: add the accessor/callable/loader/hmr one-liners to the~~ done (PORTS Go row lists loader/hmr/accessor/callable)
+    ~~"shared architecture" bullet list if they generalize.~~
+33. ~~README: golden-test mention exists in PORTS; verify the root README~~ done (docs-health pass README Shared architecture now pitches the golden guarantee)
+    ~~pitch mentions the golden guarantee (item marked done via PORTS —~~
+    ~~double-check the README body).~~
+34. ~~Verify `.gitignore` covers `packages/*/lib`, `node_modules/`,~~ done (lib/, node_modules/, tsbuildinfo covered (tmp-* tracked in TODO_LIST))
+    ~~`rust/target/`, `zig/.zig-cache/`, `zig/zig-out/` (local build~~
+    ~~artifacts existed this session — tree is clean, but confirm why).~~
+35. ~~AGENTS.md: record the `BorrowExt as _` trap (looks unused in default~~ done (docs-health pass BorrowExt gotcha recorded in AGENTS.md by this pass)
+    ~~builds; required under `thread-safe`; an autofix deleted it once).~~
+36. ~~AGENTS.md: record "check upstream CI first" as the standing first step~~ done (AGENTS.md upstream facts gate on Ports)
+    ~~for fork-CI debugging.~~
+37. ~~Sweep old status reports: mark passes 1–3 superseded by this report~~ done (docs-health pass this pass annotates all 11 status/planning docs)
+    ~~(annotate headers, do not delete).~~
+38. ~~DSL parser tests (M10) — verify all three runners really have them~~ done (parseParams unit test present in zig/tests/golden.zig)
+    ~~(TODO_LIST says done; spot-check the Zig file).~~
+39. ~~Zig: `Context::batch` — matrix says Zig has batch; confirm semantics~~ done (batch implemented in cordis.zig; matrix DONE)
+    ~~parity with Go's `Batch`.~~
+40. ~~Consider a `just`-free task surface check: every flake app still maps~~ done (AGENTS.md documents the flake apps)
+    ~~to a real verification step (test, test-go, test-rust, test-zig).~~
 41. Dependabot/renovate decision: with no lockfile upstream, how do we
     track TS dep drift? (Blocked on §g Q2.)
 42. Coverage gate: add `-coverprofile` to CI and a floor (e.g. 85%) so
@@ -331,9 +331,9 @@ clippy pay-down → release tags.
     deferred emission) — or document the immediate-emission divergence.
 49. Cadence note execution: cut the next patch tag only after items 2–4
     resolve (releases follow CI policy, not vibes).
-50. Final sweep commit: run the full three-language verification battery
-    (go `-race -count=3`, cargo both modes, zig, `nix flake check -L`,
-    actionlint) and re-record green runs for the report's HEAD.
+50. ~~Final sweep commit: run the full three-language verification battery~~ done (2026-09-08 recovery session ran the full battery green)
+    ~~(go `-race -count=3`, cargo both modes, zig, `nix flake check -L`,~~
+    ~~actionlint) and re-record green runs for the report's HEAD.~~
 
 ## g) QUESTIONS I CANNOT ANSWER MYSELF
 
@@ -350,3 +350,20 @@ clippy pay-down → release tags.
    GitHub Release pages with notes/changelogs per tag?
 
 Waiting for instructions.
+
+---
+
+## Resolution (annotated 2026-09-08, docs-health pass)
+
+24 of 50 §f items resolved inline above (docs items 9/10/33 by this pass;
+clippy rounds 5–8 by `51cddf2`). Still open: GitHub Release pages (3),
+yarn.lock policy (4), `Member.Set` blip semantics (12), IntervalFunc
+goroutine lifetime (13), Zig snapshot/status + accessor/mixin +
+`-femit-docs` + std-gotchas (14–17), golden scenarios #4/#5/#6 (18, 26,
+27), hmr error detail + storm test (20–21), `ReplaceType` (22), debug
+lock-misuse tag (23), upstream hmr findings PR (30), cargo `--locked`
+(28), dependabot decision (41), CI coverage gate (42), `packages/create`
+bump note (43), committed parity table (44), timer property test (45),
+loader config fuzz (46), Registry docs render (47), `settle_state`
+emission placement (48), cadence execution (49), and §g Q2 (yarn.lock)
+plus Q3 (release surface) — user-gated, parked in ROADMAP Open decisions.

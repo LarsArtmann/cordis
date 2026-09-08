@@ -5,7 +5,7 @@
 **A meta-framework of spatiotemporal composability, beyond TypeScript.**
 
 [![Ports CI](https://github.com/LarsArtmann/cordis/actions/workflows/ports.yml/badge.svg)](https://github.com/LarsArtmann/cordis/actions/workflows/ports.yml)
-[![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)](go/go.mod)
+[![Go 1.27+](https://img.shields.io/badge/go-1.27%2B-00ADD8.svg)](go/go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 **Go** (flagship) · **Rust** · **Zig** · **TypeScript** (original)
@@ -32,12 +32,12 @@ memory-safe languages. **Go is the flagship port** and the reference
 implementation; Rust and Zig follow its architecture. The TypeScript original
 remains intact in [`packages/`](packages/).
 
-| Language   | Directory                | Status                                                                                                                       | Test command                                      |
-| ---------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Go         | [`go/`](go/)             | Core complete: full lifecycle, all five event dispatch modes, isolation realms, registry, logger; race-tested, ~85% coverage | `cd go && go test ./...`                          |
-| Rust       | [`rust/`](rust/)         | Foundation: contexts, fibers, effects, events, services, isolation, inject reactivity                                        | `cd rust && cargo test`                           |
-| Zig        | [`zig/`](zig/)           | Foundation: contexts, fibers, events, services, isolation, inject reactivity                                                 | `cd zig && zig build test`                        |
-| TypeScript | [`packages/`](packages/) | Reference implementation                                                                                                     | `yarn test` (see [core](packages/core/README.md)) |
+| Language   | Directory                | Status                                                                                                                                                              | Test command                                      |
+| ---------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Go         | [`go/`](go/)             | Core plus the ecosystem: loader (watch/reload), hmr (swap + rollback), timer, group, accessor/mixin, callable services; race-tested, type-keyed APIs, `slog` bridge | `cd go && go test ./...`                          |
+| Rust       | [`rust/`](rust/)         | Core plus `thread-safe` (Mutex) build, snapshots, status events, typed APIs, RAII guards                                                                            | `cd rust && cargo test`                           |
+| Zig        | [`zig/`](zig/)           | Core plus all five dispatch modes, batch, effects with introspection, disposers, comptime typed APIs                                                                | `cd zig && zig build test`                        |
+| TypeScript | [`packages/`](packages/) | Reference implementation (tracks upstream)                                                                                                                          | `yarn test` (see [core](packages/core/README.md)) |
 
 See [ROADMAP.md](ROADMAP.md) for the full parity matrix.
 
@@ -58,19 +58,22 @@ type Database struct{ DSN string }
 
 func (db *Database) Query(q string) string { return "rows for " + q + " via " + db.DSN }
 
+// UserCreated is a typed event: its name derives from the type, so
+// emitters and listeners cannot drift apart on a string.
+type UserCreated struct{ ID int }
+
 var DatabasePlugin = cordis.NewPlugin("database", func(ctx *cordis.Context, cfg DatabaseConfig) error {
-	_, err := ctx.Provide("database", &Database{DSN: cfg.DSN})
+	_, err := cordis.Provide(ctx, &Database{DSN: cfg.DSN})
 	return err
 })
 
 var UserServicePlugin = cordis.NewPlugin("user-service", func(ctx *cordis.Context, _ struct{}) error {
-	db := cordis.MustGet[*Database](ctx, "database")
-	_, err := ctx.On("user-created", func(args ...any) any {
+	db := cordis.MustGet[*Database](ctx)
+	_, err := cordis.On(ctx, func(event UserCreated) {
 		fmt.Println(db.Query("SELECT * FROM users"))
-		return nil
 	})
 	return err
-}).Inject("database") // stays pending until "database" is provided
+}).Inject(cordis.ServiceName[*Database]()) // stays pending until *Database exists
 
 func main() {
 	ctx := cordis.New()
@@ -85,7 +88,7 @@ func main() {
 		panic(err)
 	}
 
-	ctx.Emit("user-created")
+	cordis.Emit(ctx, UserCreated{ID: 1})
 	// Output: rows for SELECT * FROM users via postgres://localhost/app
 }
 ```
@@ -109,6 +112,10 @@ All three ports implement the same invariants:
   re-enter the framework from any goroutine.
 - **Realm-keyed services.** `Isolate` shadows a service behind a fresh realm
   key without leaking in either direction; shared labels opt into sharing.
+- **One spec, three runners.** Three golden scenarios (`golden/`) execute
+  byte-identically in the Go, Rust and Zig test suites — lifecycle, events
+  and cascades are machine-pinned across ports, not documented and hoped
+  for.
 
 Details: [PORTS.md](PORTS.md).
 
@@ -150,9 +157,10 @@ All three suites run through the Nix flake: `nix run .#test` (or
 ## Status
 
 Cordis is under active development. The API is not yet stable and may change
-without notice. The Go port covers the full core feature matrix (see
-[ROADMAP.md](ROADMAP.md)); Rust and Zig implement the foundation with the
-remaining features prioritized there.
+without notice. The Go port covers the full core feature matrix plus the
+ecosystem packages (see [ROADMAP.md](ROADMAP.md)); Rust and Zig implement
+the core with a native API layer, and their remaining gaps are prioritized
+there.
 
 CI ([ports.yml](.github/workflows/ports.yml)) runs `go vet` plus race-enabled
 tests, clippy with warnings denied, and leak-checked Zig tests on every push

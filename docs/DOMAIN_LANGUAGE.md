@@ -80,6 +80,22 @@ name of the anonymous-plugin convenience (`Context.Inject`/`inject`).
 mirroring `ctx.intercept()` upstream. The logger service honors logger
 intercepts (name, level).
 
+**Accessor** — a derived service computed from a source service
+(`Accessor[S,V]`): it appears with its source, disappears with it, and
+re-derives when the source restarts. An optional setter writes back
+through the returned `Member` handle.
+
+**Mixin** — member-shaped sugar over an accessor: exposes one field of a
+service under its own service name.
+
+**Callable service** — a service whose value is a function
+(`Callable[Req,Res]`), bound to its providing context; calls resolve
+through that context and panics become errors.
+
+**Tracker** — the attribution of effects created while a service
+operation runs to the calling fiber (`ProvideService` fills the embedded
+`ServiceMeta` with the owning context and resolved name).
+
 ## Events
 
 **Event** — a typed (primary) or string (internal namespace) message
@@ -95,6 +111,39 @@ filtered context reach only listeners whose owner context passes the
 filter. **Global listeners** bypass filters. **Realm filter** — the filter
 matching listeners in the emitter's realm for one service name.
 
+**Status event** — the `internal/status` event carrying a
+`StatusChange{uid, name, old, new}` emitted when a fiber settles into a
+new state; the plugin name is cached on the fiber so dying fibers stay
+identifiable.
+
+## Hot module replacement
+
+**Swap** — replacing a module's implementation in the Go `hmr` port:
+every live entry whose plugin reaches the swapped module through declared
+imports is disposed and relinked; everything else declines by omission.
+A failed swap rolls back to the previous implementation.
+
+**Generation** — a per-module counter giving each swapped implementation
+an observable identity; module identity survives swaps while fiber
+instances do not (a swap starts a fresh fiber with the entry's config
+preserved).
+
+**Accept set** — the fixed point of the declared import graph reachable
+from the swapped module: exactly the entries disposed and relinked by one
+swap.
+
+## Loader
+
+**Entry** — one plugin instance declared by a config file, with its
+resolved plugin, options and group membership. **EntryTree** — the tree
+of entries and groups; file-backed trees **commit** an `EntryChange`
+(recorded before the mutation, with a legacy snapshot) to reconcile the
+on-disk file precisely instead of re-serializing everything.
+
+**Resolver** — the plugin registry of the Go loader: maps names to
+registrations, decodes raw config through the registration's typed
+decoder, and supports in-place replacement for hmr swaps.
+
 ## Runtime plumbing
 
 **Runtime** — every live fiber of one plugin. Starting a plugin twice
@@ -102,6 +151,11 @@ creates two fibers of one runtime.
 
 **Registry** — the view of all runtimes in a context tree: size, has,
 delete (dispose every fiber, restoring the pre-start state).
+
+**Snapshot / restore** — the Rust registry checkpoint: `snapshot()`
+captures the registry view; `restore()` disposes the delta, restarts
+removed runtimes from the stash with their last config on the caller's
+context, and requeues surviving pending fibers.
 
 **Logger service** — the per-tree logging facility with levels, exporters
 and a bounded buffer. Go bridges it to `log/slog` via `NewSlogHandler`.

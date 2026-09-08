@@ -6,28 +6,29 @@ its architecture.
 
 ## Parity matrix
 
-| Feature                                                | Go                 | Rust                              | Zig                                    |
-| ------------------------------------------------------ | ------------------ | --------------------------------- | -------------------------------------- |
-| Context tree (extend)                                  | DONE               | DONE                              | DONE                                   |
-| Isolation realms + shared labels                       | DONE               | DONE                              | DONE                                   |
-| Intercept (per-scope service config)                   | DONE               | DONE                              | -                                      |
-| Effects: nested, labeled, LIFO rollback, introspection | DONE               | DONE                              | partial (no labels tree introspection) |
-| Events: emit / parallel / serial / bail / waterfall    | DONE               | DONE                              | DONE                                   |
-| Event filters + global listeners                       | DONE               | DONE                              | DONE                                   |
-| Fiber states, dispose, restart, update                 | DONE               | DONE                              | DONE                                   |
-| Inject reactivity (pending / unload / reload in place) | DONE               | DONE                              | DONE                                   |
-| Registry (size / has / delete, snapshot restore)       | DONE               | DONE                              | -                                      |
-| Status events (internal/status)                        | DONE               | DONE                              | -                                      |
-| Config validation                                      | DONE               | DONE                              | -                                      |
-| Fiber Await (+ stdlib-context variant in Go)           | DONE               | n/a (drain settles synchronously) | -                                      |
-| Batch transactions                                     | DONE               | DONE                              | DONE                                   |
-| Logger service (levels, exporters, buffer)             | DONE               | -                                 | -                                      |
-| Accessor / mixin derived services                      | DONE               | -                                 | -                                      |
-| Callable services + tracker                            | DONE               | -                                 | -                                      |
-| Timer (interval, debounce, throttle)                   | DONE               | -                                 | -                                      |
-| Loader (config entries, watch/reload)                  | DONE               | -                                 | -                                      |
-| HMR (implementation swap, rollback)                    | DONE               | -                                 | -                                      |
-| Concurrent access safety                               | DONE (race tested) | thread-safe build (Mutex)         | single-threaded                        |
+| Feature                                                     | Go                 | Rust                              | Zig                     |
+| ----------------------------------------------------------- | ------------------ | --------------------------------- | ----------------------- |
+| Context tree (extend)                                       | DONE               | DONE                              | DONE                    |
+| Isolation realms + shared labels                            | DONE               | DONE                              | DONE                    |
+| Intercept (per-scope service config)                        | DONE               | DONE                              | -                       |
+| Effects: nested, labeled, LIFO rollback, introspection      | DONE               | DONE                              | DONE                    |
+| Events: emit / parallel / serial / bail / waterfall         | DONE               | DONE                              | DONE                    |
+| Event filters + global listeners                            | DONE               | DONE                              | DONE                    |
+| Fiber states, dispose, restart, update                      | DONE               | DONE                              | DONE                    |
+| Inject reactivity (pending / unload / reload in place)      | DONE               | DONE                              | DONE                    |
+| Registry (size / has / delete, snapshot restore)            | DONE               | DONE                              | view only (no snapshot) |
+| Interception events (internal/get\|set\|listener\|dispatch) | DONE               | -                                 | -                       |
+| Status events (internal/status)                             | DONE               | DONE                              | -                       |
+| Config validation                                           | DONE               | DONE                              | -                       |
+| Fiber Await (+ stdlib-context variant in Go)                | DONE               | n/a (drain settles synchronously) | -                       |
+| Batch transactions                                          | DONE               | DONE                              | DONE                    |
+| Logger service (levels, exporters, buffer)                  | DONE               | -                                 | -                       |
+| Accessor / mixin derived services                           | DONE               | -                                 | -                       |
+| Callable services + tracker                                 | DONE               | -                                 | -                       |
+| Timer (interval, debounce, throttle)                        | DONE               | -                                 | -                       |
+| Loader (config entries, watch/reload)                       | DONE               | -                                 | -                       |
+| HMR (implementation swap, rollback)                         | DONE               | -                                 | -                       |
+| Concurrent access safety                                    | DONE (race tested) | thread-safe build (Mutex)         | single-threaded         |
 
 ## Planned, in priority order
 
@@ -80,25 +81,24 @@ Go, Rust and Zig test suites with a byte-identical expected trace, plus
 
 ### Go
 
-1. `internal/listener`, `internal/dispatch`, `internal/get`, `internal/set`
-   interception events (needed by loader and hmr ports).
-2. Service accessor/mixin system (Property.Accessor upstream).
-3. Callable services and tracker based effect attribution
-   (Service.tracker upstream): effects created through a service are
-   attributed to the calling fiber.
-4. Port `packages/loader` (config file driven plugin management).
-5. Port `packages/hmr` (hot module replacement).
-6. Port `packages/timer` and `packages/group` conveniences.
+1. Parity reassessment after the 2026-09-08 upstream sync: decide how the
+   three-stage reload (#111), include journal (#121), bare-specifier
+   resolution (#123), `hmr.watch()` (#128) and the replayed `3-stage-hmr`
+   loader semantics map onto `go/loader`/`go/hmr` — port, or document the
+   divergence here.
+2. Native API phase 3 (idea): generic methods (`ctx.Get[T]()`) are feasible
+   under Go 1.27 (research-verified 2026-09-08, including the interface
+   limitation) but would fragment the surface against the named
+   `Context` methods; free-function deprecation timeline undecided — see
+   Open decisions.
+3. Logger golden scenario (the logger service has no golden coverage).
 
 ### Rust
 
-1. Thread-safe variant (`Arc`/`Mutex` core) behind a feature flag, keeping
-   the single-threaded crate as the default.
-2. True parallel dispatch with scoped threads.
-3. Effect introspection parity (`EffectMeta` trees are implemented; expose
+1. `internal/plugin` + `internal/update` interception events (Go parity).
+2. Effect introspection parity (`EffectMeta` trees are implemented; expose
    nested labels on more registration kinds).
-4. Config validation + `update` with typed configs.
-5. Batch API (currently transitions drain per call; add `Context::batch`).
+3. Logger service.
 
 ### Zig
 
@@ -108,13 +108,40 @@ events, shared isolation labels.
 
 1. Snapshot/restore and status events (Rust parity).
 2. Accessor/mixin derived services (Go parity).
-3. Disposer-returning `on` / `provide` for early disposal.
+3. Logger service.
 4. Loader / hmr equivalents — pending the module-layout decision.
 
 ### Repo
 
-1. First green `ports.yml` CI run (actions verified; requires a push).
-2. More golden scenarios covering events and the logger.
+Bounded repo tasks (CI guards, lint gates, post-push verification) live in
+`TODO_LIST.md`; `nix flake check` remains the local port gate until a CI
+job enforces it remotely.
+
+### Upstream sync (2026-09-08)
+
+`main` was rebased onto upstream `caab04e`; the fork's TS tree now carries
+the three-stage reload (#111), include journal (#121), bare-specifier
+resolution (#123), `hmr.watch()` (#128) and the upstream `3-stage-hmr`
+fix branch replayed on top (`b4650df`: commit-based loader entry changes,
+atomic include writes). Local TS suite: 248/248. The parity gaps this
+opens for the ports are tracked in the Go section above.
+
+### Open decisions (user-gated)
+
+- **Push policy:** local `main` diverged from `origin/main` after the
+  rebase; completing the sync needs force-with-lease approval.
+- **`yarn.lock` policy:** commit a generated lockfile (reproducible CI) vs
+  stay lock-free tracking upstream; a missing lockfile broke installs
+  twice in fork history.
+- **TS toolchain stance:** track upstream exactly (their pins, their
+  breakage) vs fork-pinned dependencies; currently the fork matches
+  upstream except a deliberate `@types/node ^26.5.0` bump.
+- **hmr fixture style:** keep fixtures byte-identical to upstream (their
+  specs string-replace into them) vs fork-styling fixtures and rewriting
+  the specs' replace patterns.
+- **One-session-per-worktree convention** for concurrent agents.
+- **Oxlint policy for upstream TS** (report-only today).
+- **Generic-method API deprecation timeline** (see Go section).
 
 ### Release cadence
 

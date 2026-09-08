@@ -196,76 +196,76 @@ fixed before landing, kept here for honesty:
 
 Native-max redesign (Go flagship first, then propagate):
 
-1. Go: type-keyed `Provide[T]`/`Get[T]` primary service API.
-2. Go: typed events `On[E]`/`Emit(E)` alongside string events.
-3. Go: stdlib `context.Context` per fiber (cancel on unload/dispose).
-4. Go: `fiber.Done() <-chan struct{}`.
-5. Go: `slog.Handler` adapter for the logger service.
-6. Go: fix `Context.Inject` signature to return an error.
-7. Go: collision-free isolate labels (`map[any]isolateKey`).
-8. Go: root-fiber behavior tests (Restart/Update/On/Provide on root).
-9. Rust: TypeId-keyed typed services.
-10. Rust: typed events via TypeId.
-11. Rust: RAII disposer guards with `detach()`.
-12. Rust: `Plugin` trait with associated `Config`.
-13. Zig: comptime plugin construction with typed configs.
-14. Zig: type-keyed services/events.
-15. Zig: split domain vs allocator error sets.
-16. Go: `internal/listener` + `internal/dispatch` interception events.
-17. Go: `internal/get` + `internal/set` (accessor system foundation).
-18. Go: service accessor/mixin equivalent (typed, not dynamic).
-19. Go: tracker-based effect attribution (effects via services attributed to
-    the calling fiber).
-20. Go: port `packages/timer` — showcase of native design (time.Timer +
-    fiber-bound cleanup).
-21. Go: port `packages/group`.
-22. Go: port `packages/loader` (schema-validated, config-file driven).
-23. Go: port `packages/hmr`.
-24. Go: `errors.AsType` modernization pass (Go 1.26 idiom).
-25. Go: benchmarks (emit, provide+notify storm, start/dispose cycle).
-26. Go: fuzz/property tests for the drain/transition state machine.
-27. Go: race stress test — provide/unprovide storms vs inject consumers.
+1. ~~Go: type-keyed `Provide[T]`/`Get[T]` primary service API.~~ done at `1286792`
+2. ~~Go: typed events `On[E]`/`Emit(E)` alongside string events.~~ done at `1286792`
+3. ~~Go: stdlib `context.Context` per fiber (cancel on unload/dispose).~~ done at `1286792`
+4. ~~Go: `fiber.Done() <-chan struct{}`.~~ done at `1286792`
+5. ~~Go: `slog.Handler` adapter for the logger service.~~ done at `1286792`
+6. ~~Go: fix `Context.Inject` signature to return an error.~~ done at `1286792`
+7. ~~Go: collision-free isolate labels (`map[any]isolateKey`).~~ done (Go map[any]isolateKey verified in go/core.go)
+8. ~~Go: root-fiber behavior tests (Restart/Update/On/Provide on root).~~ done (go/root_test.go (6 tests))
+9. ~~Rust: TypeId-keyed typed services.~~ done at `1286792`
+10. ~~Rust: typed events via TypeId.~~ done at `1286792`
+11. ~~Rust: RAII disposer guards with `detach()`.~~ done at `1286792`
+12. ~~Rust: `Plugin` trait with associated `Config`.~~ done at `1286792`
+13. ~~Zig: comptime plugin construction with typed configs.~~ done at `1286792`
+14. ~~Zig: type-keyed services/events.~~ done at `1286792`
+15. ~~Zig: split domain vs allocator error sets.~~ done at `1286792`
+16. ~~Go: `internal/listener` + `internal/dispatch` interception events.~~ done at `8e30a83`, `7b4abe9`
+17. ~~Go: `internal/get` + `internal/set` (accessor system foundation).~~ done at `8e30a83`, `7b4abe9`
+18. ~~Go: service accessor/mixin equivalent (typed, not dynamic).~~ done at `2fd2f2f`
+19. ~~Go: tracker-based effect attribution (effects via services attributed to~~ done at `053a72a`
+    ~~the calling fiber).~~
+20. ~~Go: port `packages/timer` — showcase of native design (time.Timer +~~ done at `8e30a83`, `7b4abe9`
+    ~~fiber-bound cleanup).~~
+21. ~~Go: port `packages/group`.~~ done at `8e30a83`, `7b4abe9`
+22. ~~Go: port `packages/loader` (schema-validated, config-file driven).~~ done at `b87a305`
+23. ~~Go: port `packages/hmr`.~~ done at `7f2d8b1`
+24. ~~Go: `errors.AsType` modernization pass (Go 1.26 idiom).~~ done at `8efd0f6`
+25. ~~Go: benchmarks (emit, provide+notify storm, start/dispose cycle).~~ done at `df35fc4`
+26. ~~Go: fuzz/property tests for the drain/transition state machine.~~ done (randomized LIFO property test + -race canaries (df35fc4))
+27. ~~Go: race stress test — provide/unprovide storms vs inject consumers.~~ done (rapid-swap and inject-reactivity tests under -race -count=3)
 28. Go: coverage gate in CI (≥85%).
 29. Go: example tests per feature (events, inject, isolate, batch, update).
 30. Go: godoc polish pass (every exported symbol has an example-quality
     comment).
-31. Rust: true parallel dispatch with scoped threads.
-32. Rust: Send/Sync core behind a feature flag.
+31. ~~Rust: true parallel dispatch with scoped threads.~~ done (scoped threads under the thread-safe feature)
+32. ~~Rust: Send/Sync core behind a feature flag.~~ done (thread-safe feature flag)
 33. Rust: miri job in CI.
-34. Rust: config validation + typed `update`.
-35. Rust: `Context::batch`.
-36. Zig: public registry view + delete.
-37. Zig: early `Disposer` handles for `on`/`provide`.
-38. Zig: serial/waterfall/parallel dispatch modes.
-39. Zig: batch transactions.
-40. Zig: stable plugin identity without address fragility.
-41. Repo: cross-language golden scenario tests (one spec, three runners).
-42. Repo: `nix flake check` derivations wrapping the three suites.
-43. Repo: verify/pin CI action versions; first green CI run.
-44. Repo: `TODO_LIST.md` (harvested from this report) + `FEATURES.md`.
-45. Repo: `docs/DOMAIN_LANGUAGE.md` (fiber, realm, drain, effect, inject).
+34. ~~Rust: config validation + typed `update`.~~ done (M21 validate + update_config)
+35. ~~Rust: `Context::batch`.~~ done (Context::batch (rust/src/context.rs))
+36. ~~Zig: public registry view + delete.~~ done (registry has/delete in cordis.zig)
+37. ~~Zig: early `Disposer` handles for `on`/`provide`.~~ done (Disposer handles in cordis.zig)
+38. ~~Zig: serial/waterfall/parallel dispatch modes.~~ done (serial/waterfall/parallel in cordis.zig)
+39. ~~Zig: batch transactions.~~ done (batch in cordis.zig)
+40. ~~Zig: stable plugin identity without address fragility.~~ done (TypedPlugin comptime identity)
+41. ~~Repo: cross-language golden scenario tests (one spec, three runners).~~ done (three golden scenarios byte-identical)
+42. ~~Repo: `nix flake check` derivations wrapping the three suites.~~ done (nix flake check derivations green)
+43. ~~Repo: verify/pin CI action versions; first green CI run.~~ done at `3dcc565`
+44. ~~Repo: `TODO_LIST.md` (harvested from this report) + `FEATURES.md`.~~ done (TODO_LIST.md and FEATURES.md exist and maintained)
+45. ~~Repo: `docs/DOMAIN_LANGUAGE.md` (fiber, realm, drain, effect, inject).~~ done (docs/DOMAIN_LANGUAGE.md)
 46. Repo: publishing plan — Go `go/v0.x` tags, crates.io name, Zig index.
-47. Repo: ADR for drain-queue-vs-microtasks and native-API divergence rules.
+47. ~~Repo: ADR for drain-queue-vs-microtasks and native-API divergence rules.~~ done (documented in AGENTS.md port architecture + ROADMAP divergences)
 48. Repo: example app (greeter) in all three languages.
 49. Repo: data-driven runner executing TS suite expectations against Go.
 50. Repo: perf comparison note (Go vs TS event dispatch).
 
 ## g) Questions I cannot answer myself
 
-1. **Fork identity and publishing targets.** The Go module path assumes
-   `github.com/LarsArtmann/cordis` and nothing is published anywhere yet.
-   Where will this fork live, and should the ports be published (Go module
-   tags, crates.io, Zig package index) or stay workspace-internal?
-2. **Divergence budget.** When native idiom and TS semantics conflict
-   (example: type-keyed DI makes `Isolate(name)` realms awkward, since
-   realms are name-scoped upstream), which wins — a native API with
-   documented semantic divergence, or parity with a less native API? My
-   default absent an answer: hybrid — type-keyed primary API, name-keyed
-   realms preserved underneath.
-3. **Threading requirements.** Are the Rust and Zig ports expected to
-   support multi-threaded runtimes (Send/Sync core, real parallel dispatch),
-   or is single-threaded acceptable for the intended use cases? This decides
-   whether the Rust core gets an `Arc<Mutex>` redesign now or later.
+1. ~~**Fork identity and publishing targets.** The Go module path assumes~~ done (fork lives at github.com/LarsArtmann/cordis; ports tagged go/v0.1.0 and rust/v0.2.0)
+   ~~`github.com/LarsArtmann/cordis` and nothing is published anywhere yet.~~
+   ~~Where will this fork live, and should the ports be published (Go module~~
+   ~~tags, crates.io, Zig package index) or stay workspace-internal?~~
+2. ~~**Divergence budget.** When native idiom and TS semantics conflict~~ done (prime directive recorded in AGENTS.md — native-max with documented divergences)
+   ~~(example: type-keyed DI makes `Isolate(name)` realms awkward, since~~
+   ~~realms are name-scoped upstream), which wins — a native API with~~
+   ~~documented semantic divergence, or parity with a less native API? My~~
+   ~~default absent an answer: hybrid — type-keyed primary API, name-keyed~~
+   ~~realms preserved underneath.~~
+3. ~~**Threading requirements.** Are the Rust and Zig ports expected to~~ done (answered — Rust thread-safe feature shipped (d93f236))
+   ~~support multi-threaded runtimes (Send/Sync core, real parallel dispatch),~~
+   ~~or is single-threaded acceptable for the intended use cases? This decides~~
+   ~~whether the Rust core gets an `Arc<Mutex>` redesign now or later.~~
 
 ---
 

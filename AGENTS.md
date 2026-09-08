@@ -7,8 +7,10 @@ Go, Rust and Zig ports next to the TypeScript original in `packages/`.
 ## Layout
 
 - `packages/` — TypeScript original (yarn workspaces, vitest).
-- `go/` — Go module `github.com/LarsArtmann/cordis/go`, package `cordis`.
-- `rust/` — Cargo crate `cordis` (single-threaded, `Rc`/`RefCell`).
+- `go/` — Go module `github.com/LarsArtmann/cordis/go`, package `cordis`
+  plus the `timer`, `group`, `loader` and `hmr` subpackages.
+- `rust/` — Cargo crate `cordis` (single-threaded `Rc`/`RefCell` by
+  default, opt-in `thread-safe` Mutex build).
 - `zig/` — Zig module (0.16), arena-based memory, tested via build.zig.
 - `PORTS.md` — shared port architecture. `ROADMAP.md` — parity matrix.
 
@@ -17,7 +19,8 @@ Go, Rust and Zig ports next to the TypeScript original in `packages/`.
 Use the flake (`nix run .#test`, `.#test-go`, `.#test-rust`, `.#test-zig`)
 or run directly:
 
-- Go: `cd go && go test ./...` (also: `go vet`, `-race` clean, ~85% coverage).
+- Go: `cd go && go test ./...` (also: `go vet`, `-race` clean; statement
+  coverage ≈90% for core/group/hmr/timer, ≈75% for loader).
   Requires Go 1.27 (see gotcha below). Timer tests run in a
   `testing/synctest` bubble (virtual clock, ~2 ms, deterministic); write
   new timing tests the same way instead of `time.Sleep`.
@@ -162,9 +165,12 @@ file.
   TS behavior locally: `nix shell nixpkgs#nodejs_24 nixpkgs#corepack -c sh -c
   'export PATH=/tmp/corepack-bin:$PATH; yarn install && yarn build'`.
   Generated `yarn.lock` / `node_modules/` must never be committed.
-- Upstream main's `packages/hmr` test suite flakes (11 waitFor timeouts) —
-  an upstream cache-invalidation bug; their `3-stage-hmr` branch fixes it.
-  Do not debug the fork's Build workflow for those 11 tests; gate on Ports.
+- Upstream main's `packages/hmr` test suite used to flake (11 waitFor
+  timeouts — an upstream cache-invalidation bug, fixed on their unmerged
+  `3-stage-hmr` branch). The fork replayed that branch on top of the rebase
+  (`b4650df`): commit-based loader entry changes, atomic include writes,
+  `hmr.watch()`. Local TS suite is green (248/248); treat the next CI Build
+  run as the confirmation, and gate on Ports until then.
 - The root `README.md` is a fork-owned real file (user demand, 2026-09-07;
   replaced upstream's symlink to `packages/core/README.md`). Never recreate
   the symlink and never put fork content into `packages/**/README.md` —
@@ -175,13 +181,14 @@ file.
   conflict points was format-only, so fork TS content is authoritative for
   semantics and future conflicts should re-apply fork deltas onto upstream
   blobs. Upstream `hmr.watch()` (#128) was already in the fork base.
-- KNOWN BLOCKER (upstream-side, 2026-09-08): `yarn install` fails with the
-  root devDependency `typescript: ^7.0.2` — every TS 7 tarball ships only
-  `bin/tsc` (no `lib/_tsc.js`), and yarn 4.14.1's builtin `compat/typescript`
-  patch lstats that file and crashes. The pre-rebase tree already carried
-  `^7.0.2`, and its older `node_modules` masked the issue. Fixing means
-  pinning/downgrading TS or a yarn bump — both are upstream toolchain
-  decisions; the fork gates on Ports (`nix flake check`), not the TS Build.
+- RESOLVED (2026-09-08): `yarn install` used to hard-crash with
+  `typescript: ^7.0.2` (every TS 7 tarball ships only `bin/tsc`, no
+  `lib/_tsc.js`, and yarn 4.14.1's builtin `compat/typescript` patch
+  lstats that file). Upstream has since reverted to `^5.9.3`; the fork
+  matches upstream's pins and installs cleanly. The fork's only manifest
+  delta is a deliberate `@types/node ^26.5.0` bump (tsc-verified).
+  TS dep bumps remain upstream decisions — re-check
+  `git diff <upstream> -- '**/package.json'` after every sync.
 
 ## Repo hygiene facts
 
@@ -223,5 +230,9 @@ file.
   nested same-thread locking deadlocks instead of panicking
   (`Fiber::name` did exactly this). Audit every new borrow scope against
   this rule; a deadlock shows up as a hung test suite, not an error.
+- `use BorrowExt as _` imports look unused in default builds (an autofix
+  deleted one once) but are required under `thread-safe`, where the
+  `Rc`/`RefCell` aliases become `Arc`/`Mutex`. Verify both feature
+  variants before declaring any import dead.
 - Rust test binaries that can block need `timeout N cargo test ...` locally;
   CI enforces `timeout-minutes` (15 Ports / 20 Build).

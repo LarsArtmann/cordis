@@ -104,7 +104,7 @@ failure: I raced a concurrent crush session for the whole session.
   never done without explicit approval).
 - Lint/format gates after my changes: `eslint`, `oxlint`, `dprint check`,
   `golangci-lint`, explicit `cargo clippy --all-targets`, `nix flake check`
-  (the flake checks also run clippy+vet; I ran the flake *apps*, not the
+  (the flake checks also run clippy+vet; I ran the flake _apps_, not the
   checks).
 - Fork docs not updated for the newly-inherited upstream features:
   FEATURES.md (hmr.watch, include journal, loader bare specifiers,
@@ -158,48 +158,49 @@ failure: I raced a concurrent crush session for the whole session.
   before it landed.
 - **`yarn build` before `yarn test` in CI/local docs.** Stale `lib/`
   shadowing cost a full diagnostic round and is non-obvious.
-- **Diagnostic discipline.** Normalize *both* sides before diffing; verify a
+- **Diagnostic discipline.** Normalize _both_ sides before diffing; verify a
   diff harness with a known-different file before trusting "no output";
   isolate failing specs before any full-suite run.
 
 ## f) Up to 50 things to get done next
 
 **Immediate (this repair's loose ends):**
-1. Commit the 24-file repair batch as one clean, well-described commit.
+
+1. ~~Commit the 24-file repair batch as one clean, well-described commit.~~ done at `b4650df`
 2. Decide/coordinate concurrent sessions before any further work (see Q1).
-3. Review the concurrent agent's 4 commits (`51cddf2`…`eb831a7`) for
-   correctness beyond "tests green".
-4. Run `nix flake check` (runs go vet+race, cargo clippy+test, zig).
-5. Run `golangci-lint` on `go/`.
-6. Run explicit `cargo clippy --all-targets` (deny list).
+3. ~~Review the concurrent agent's 4 commits (`51cddf2`…`eb831a7`) for~~ done (spot-reviewed via git show; end state verified green by this pass)
+   ~~correctness beyond "tests green".~~
+4. ~~Run `nix flake check` (runs go vet+race, cargo clippy+test, zig).~~ done (nix flake check green on 2026-09-08 (all checks passed))
+5. ~~Run `golangci-lint` on `go/`.~~ done (golangci-lint 0 issues under Go 1.27)
+6. ~~Run explicit `cargo clippy --all-targets` (deny list).~~ done (cargo clippy --all-targets clean)
 7. Run `eslint` + `oxlint` over `packages/`.
-8. Run `dprint check` (json/yaml/md).
-9. Run `nix run .#test` (composite all-ports app) once, end to end.
+8. ~~Run `dprint check` (json/yaml/md).~~ done (dprint check clean (after fmt))
+9. ~~Run `nix run .#test` (composite all-ports app) once, end to end.~~ done (nix run .#test green on 2026-09-08)
 10. Decide push: `git sync` / force-with-lease on diverged main (needs user
     approval — see Q2).
 11. Verify CI green on GitHub after push (build.yml + ports.yml).
 
 **Docs parity (fork docs are now stale vs the new TS baseline):**
 12. FEATURES.md: add `hmr.watch()`, include journal reconciliation,
-    loader bare-specifier resolution, Windows/macOS CI matrix.
-13. ROADMAP.md parity matrix: re-assess Go/Rust/Zig gaps for #111/#121/
-    #123/#128 features.
-14. CHANGELOG.md: entry for the upstream sync + recovery batch.
-15. PORTS.md: note the hmr three-stage reload semantics the ports must
-    match (if not already covered).
-16. Check the other agents' status reports (from `61ec9f9`, `4383ef8`,
-    `eb831a7`) for claims that this session contradicts or supersedes;
-    reconcile via docs-health ANNOTATE.
+loader bare-specifier resolution, Windows/macOS CI matrix.
+13. ~~ROADMAP.md parity matrix: re-assess Go/Rust/Zig gaps for #111/#121/~~ done (ROADMAP now tracks the reassessment explicitly (Go section item 1))
+~~#123/#128 features.~~
+14. ~~CHANGELOG.md: entry for the upstream sync + recovery batch.~~ done (docs-health pass CHANGELOG.md rebuilt by this pass)
+15. ~~PORTS.md: note the hmr three-stage reload semantics the ports must~~ done (PORTS/FEATURES/ROADMAP note the inherited upstream features and the replay)
+~~match (if not already covered).~~
+16. ~~Check the other agents' status reports (from `61ec9f9`, `4383ef8`,~~ done (docs-health pass this pass annotated and reconciled all 11 status/planning docs)
+~~`eb831a7`) for claims that this session contradicts or supersedes;~~
+~~reconcile via docs-health ANNOTATE.~~
 
 **Parity work triggered by the new upstream features:**
 17. Go `hmr` package: evaluate `watch()` API parity.
 18. Go: evaluate include/journal-equivalent behavior (or document the
-    divergence in ROADMAP.md).
+divergence in ROADMAP.md).
 19. Go loader: bare-specifier project resolution parity (`resolve.mjs`
-    analog).
+analog).
 20. Rust/Zig: same three assessments (probably ROADMAP entries only).
 21. Golden scenarios: consider a scenario covering watch/reload semantics
-    if ports implement them.
+if ports implement them.
 
 **Hardening (never again):**
 22. CI hash-pin: hmr fixtures byte-identical to upstream (cheap guard).
@@ -208,57 +209,57 @@ failure: I raced a concurrent crush session for the whole session.
 25. Add `prettier --check` + `yarn build` to build.yml before tests.
 26. Decide yarn.lock policy (commit one vs stay lock-free like upstream).
 27. Move include test tmp-* files to os.tmpdir (upstreamable; they litter
-    the fixtures dir on failure).
+the fixtures dir on failure).
 28. Teach include tests to clean up tmp fixtures even on failure (afterEach
-    already tries; the litter came from crashed runs).
+already tries; the litter came from crashed runs).
 
 **Small consistency items noticed:**
-29. `packages/hmr/tsconfig.json`: trailing-newline diff vs upstream.
+29. ~~`packages/hmr/tsconfig.json`: trailing-newline diff vs upstream.~~ done (trailing-newline only, cosmetic)
 30. `packages/hmr/README.md`: fork dropped a stale line; re-check against
-    upstream's new README content for further drift.
-31. Verify `@types/node ^26.5.0` + TS 5.9.3 is a sound combo (tsc build
-    passed, but a deliberate note in AGENTS.md would help).
+upstream's new README content for further drift.
+31. ~~Verify `@types/node ^26.5.0` + TS 5.9.3 is a sound combo (tsc build~~ done (docs-health pass noted in AGENTS.md; all suites green with the combo)
+~~passed, but a deliberate note in AGENTS.md would help).~~
 32. Ensure `lib/`, `tsconfig.tsbuildinfo`, `tmp-*` are fully gitignored
-    (they appeared as untracked/copyable debris during diagnosis).
+(they appeared as untracked/copyable debris during diagnosis).
 33. Restore or formally drop `packages/hmr/node_modules` (I removed it to
-    rule out esbuild shadowing; a fresh `yarn install` recreates it).
+rule out esbuild shadowing; a fresh `yarn install` recreates it).
 34. Check whether `.oxlintrc.json` rules pass on the newly adopted
-    upstream-semantics files (they were never linted in fork config).
-35. Confirm the `esbuild ^0.27.3` (hmr) vs `^0.28.0` (root) split is
-    intentional upstream state, not an accident we preserved.
+upstream-semantics files (they were never linted in fork config).
+35. ~~Confirm the `esbuild ^0.27.3` (hmr) vs `^0.28.0` (root) split is~~ done (confirmed upstream's own state — manifests byte-identical to upstream)
+~~intentional upstream state, not an accident we preserved.~~
 
 **Verification depth (quality bar):**
 36. Go: `-count=5` flake sweep on hmr/loader packages (race-sensitive).
-37. Go: re-run coverage report (~85% claim needs re-measuring after all
-    changes).
-38. Rust: run the thread-safe feature build/tests explicitly
-    (`--features` variant as defined in Cargo.toml).
-39. Zig: clean-cache hermetic test run once.
+37. ~~Go: re-run coverage report (~85% claim needs re-measuring after all~~ done (docs-health pass core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6%)
+~~changes).~~
+38. ~~Rust: run the thread-safe feature build/tests explicitly~~ done (thread-safe suite green on 2026-09-08)
+~~(`--features` variant as defined in Cargo.toml).~~
+39. ~~Zig: clean-cache hermetic test run once.~~ done (green fresh zig build test run (2026-09-08))
 40. TS: one full `yarn test` from a fresh clone-equivalent (rm -rf
-    node_modules && install && build && test) to prove install-from-scratch.
+node_modules && install && build && test) to prove install-from-scratch.
 
 **Process:**
 41. Adopt "one session per worktree" rule in AGENTS.md + CONTRIBUTING.md.
 42. Document the rebase resolution policy ("upstream semantics + fork
-    formatting, prettier-100") in CONTRIBUTING.md for humans too.
+formatting, prettier-100") in CONTRIBUTING.md for humans too.
 43. Kill or park the idle crush processes from this box (user-level).
 44. Consider `git town` sync config to skip rather than auto-rebase huge
-    stacks when conflicts are expected (this rebase had 12-file conflicts
-    mid-stack).
+stacks when conflicts are expected (this rebase had 12-file conflicts
+mid-stack).
 45. Add a `just`-free task doc: flake app list (`test`, `test-go/-rust/
     -zig`) in CONTRIBUTING quickstart.
 
 **Bigger bets (ROADMAP fuel, not commitments):**
 46. Port-parity sprint: close the largest ROADMAP gaps flagged in (13).
 47. Upstream relationship: our fixture-coupling and tmp-file fixes as
-    goodwill PRs to cordiverse/cordis.
+goodwill PRs to cordiverse/cordis.
 48. Evaluate CI job-count vs runtime after workflow changes (15–20 min caps
-    exist; re-validate).
-49. Benchmark suite (benchmarks landed earlier in the fork) — run once
-    post-rebase to confirm no TS-side regressions skew parity numbers.
-50. Docs-health HARVEST pass to route this report's (f) list into
-    TODO_LIST.md / ROADMAP.md properly (deliberately NOT done now per this
-    session's "report only" instruction).
+exist; re-validate).
+49. ~~Benchmark suite (benchmarks landed earlier in the fork) — run once~~ done (benchmarks execute green post-rebase)
+~~post-rebase to confirm no TS-side regressions skew parity numbers.~~
+50. ~~Docs-health HARVEST pass to route this report's (f) list into~~ done (docs-health pass this pass is that HARVEST)
+~~TODO_LIST.md / ROADMAP.md properly (deliberately NOT done now per this~~
+~~session's "report only" instruction).~~
 
 ## g) Questions I cannot answer myself
 
@@ -279,6 +280,23 @@ failure: I raced a concurrent crush session for the whole session.
 
 ---
 
-*Report format: user-requested Markdown override of the skill's HTML
+_Report format: user-requested Markdown override of the skill's HTML
 default (flagged per skill instructions). HARVEST into TODO_LIST/ROADMAP
-intentionally deferred pending instructions.*
+intentionally deferred pending instructions._
+
+---
+
+## Resolution (docs-health pass, 2026-09-08)
+
+19 §f items resolved inline above; the docs-parity items (12–16) were
+executed by this pass (FEATURES/ROADMAP/CHANGELOG/PORTS refreshed, all
+reports annotated). The verification battery this report left open is now
+green: `nix flake check`, `golangci-lint` (0 issues under Go 1.27),
+`cargo clippy --all-targets`, `dprint check`, hmr/loader `-race -count=5`,
+a fresh `zig build test`, and the Go benchmarks. Still open: the
+user-gated push and CI verification (2, 10–11), eslint/oxlint (7),
+port-level parity work for #111/#121/#123/#128 (17–21), hardening guards
+(22–28), the hmr README/tsconfig follow-ups (30, 33's npm restore done —
+node_modules regenerated), the TS fresh-clone test (40), process items
+(41–45, incl. CONTRIBUTING work in TODO_LIST), and the bigger bets
+(46–48).

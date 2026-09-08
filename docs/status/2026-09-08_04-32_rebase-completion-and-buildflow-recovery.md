@@ -140,7 +140,7 @@ verified structurally (no markers, byte-parity logic), not behaviorally.
    "restored 3 files from pre-migration backups"). Nothing in the pasted log could be
    taken at face value.
 2. **My `git stash pop` botch (worst in-session mistake).** I stashed three doc files
-   with `git stash push -- <paths>` without realizing stash snapshots the *full tree*;
+   with `git stash push -- <paths>` without realizing stash snapshots the _full tree_;
    popping it tried to drag pick-12-era content across 20 picks and littered conflicts
    across 15+ files. Recovery was clean (full restore to HEAD, surgical re-apply of the
    three files), but it confused the concurrent session — its status report describes
@@ -150,7 +150,7 @@ verified structurally (no markers, byte-parity logic), not behaviorally.
    function body and the impl-closing brace; caught on the next view, repaired, but it
    was careless string surgery under momentum.
 4. **I broke compilation applying a lint suggestion blindly.** `data.clone_from(&d.parent)`
-   inside a `while let Some(d) = data` loop that *moves* the variable — compile error
+   inside a `while let Some(d) = data` loop that _moves_ the variable — compile error
    E0382. The correct fix (borrow-walk, no clone at all) was obvious once I thought about
    ownership; I pattern-matched the lint message instead of the code.
 5. **I wrote a literal `\n` into a doc comment** (double-escaped string in an edit
@@ -196,17 +196,18 @@ verified structurally (no markers, byte-parity logic), not behaviorally.
 
 ## f) Up to 50 things to get done next
 
-*Brainstorm, impact-sorted within tiers — ROADMAP/TODO_LIST fuel, not commitments
-(docs-health HARVEST should route these).*
+_Brainstorm, impact-sorted within tiers — ROADMAP/TODO_LIST fuel, not commitments
+(docs-health HARVEST should route these)._
 
 **Blocked-critical (unblocks verification):**
-1. Decide + implement TS install fix (pin `typescript` below 7.x in a fork-controlled
-   resolutions block, bump yarn in a test branch, or drop deps to upstream-exact) and
-   get `yarn install && yarn build` green.
-2. Run loader/include/hmr vitest suites against the rebased tree (closes the only
-   behavioral gap in the rebase).
-3. Run full `yarn test` + `type-check` and reconcile with the known upstream hmr flake
-   (gate on Ports per AGENTS).
+
+1. ~~Decide + implement TS install fix (pin `typescript` below 7.x in a fork-controlled~~ done at `eb831a7`
+   ~~resolutions block, bump yarn in a test branch, or drop deps to upstream-exact) and~~
+   ~~get `yarn install && yarn build` green.~~
+2. ~~Run loader/include/hmr vitest suites against the rebased tree (closes the only~~ done (TS 248/248 green (69b9fd6 session))
+   ~~behavioral gap in the rebase).~~
+3. ~~Run full `yarn test` + `type-check` and reconcile with the known upstream hmr flake~~ done (yarn install && yarn build && yarn test green — 248/248)
+   ~~(gate on Ports per AGENTS).~~
 4. Re-run oxlint after `ignorePatterns`; drive remaining findings to ~0.
 5. Fix the 71 eslint "ignored pattern" warnings (align invocation with `.eslintignore`).
 6. Run `nix develop -c buildflow` end-to-end and chase a green run.
@@ -214,76 +215,76 @@ verified structurally (no markers, byte-parity logic), not behaviorally.
 8. Resolve pnpm-audit vs yarn in buildflow config.
 
 **Commit/ship (small, high certainty):**
-9. Commit Go 1.27 adoption as one coherent commit (module, flake, synctest, CutLast,
-   ROADMAP/AGENTS).
-10. Commit rust clippy pay-down as its own commit.
-11. Commit doc-lint configs + fixes as their own commit.
-12. Commit README/AGENTS user-demand restructure.
+9. ~~Commit Go 1.27 adoption as one coherent commit (module, flake, synctest, CutLast,~~ done at `51cddf2`
+~~ROADMAP/AGENTS).~~
+10. ~~Commit rust clippy pay-down as its own commit.~~ done at `51cddf2`
+11. ~~Commit doc-lint configs + fixes as their own commit.~~ done at `51cddf2`
+12. ~~Commit README/AGENTS user-demand restructure.~~ done at `51cddf2`
 13. Review + drop `stash@{0}`; archive or delete `/tmp/go127-adoption.patch` and
-    `/tmp/cordis-session-backup-20260908/`.
+`/tmp/cordis-session-backup-20260908/`.
 14. Push `main` (force-with-lease, user approval required — rebase rewrote 32 commits).
 15. Trigger/watch the first green `ports.yml` run on GitHub.
 
 **Upstream/outbound:**
-16. File the yarn builtin-typescript-patch vs TS7 layout bug (repro verified).
-17. Ask upstream cordis how CI installs with `typescript: ^7.0.2` (their lockfile-free
-    flow should hit the same crash) — or discover they already pin something.
+16. ~~File the yarn builtin-typescript-patch vs TS7 layout bug (repro verified).~~ done (moot — upstream reverted to typescript ^5.9.3 themselves)
+17. ~~Ask upstream cordis how CI installs with `typescript: ^7.0.2` (their lockfile-free~~ done (moot — upstream main pins ^5.9.3)
+~~flow should hit the same crash) — or discover they already pin something.~~
 18. Consider contributing the `build.yml` timeout caps upstream.
 
 **Rust quality:**
 19. Fix or explicitly allowlist the ~10 `significant_drop` thread-safe findings with
-    lock-scope rationale comments.
+lock-scope rationale comments.
 20. Gate `cargo clippy --features thread-safe` in Ports once clean (stop silent rot).
 21. Decide on a rust toolchain pin (`rust-toolchain.toml`) vs paying nursery drift per
-    nixpkgs bump.
+nixpkgs bump.
 22. Run `cargo-llvm-cov` and record a coverage baseline next to Go's ~85-90%.
 23. `cargo bench` for the "30% faster small allocations" claim; attach numbers to
-    ROADMAP or hedge the text.
+ROADMAP or hedge the text.
 24. Review `snapshot.rs` `start_base(&base, ...)` call for ownership clarity (my signature
-    change rippled there; it compiles and passes, a second pair of eyes is cheap).
+change rippled there; it compiles and passes, a second pair of eyes is cheap).
 
 **Go quality:**
 25. `go fix ./...` sweep under 1.27 (embedlit/unsafefuncs hits).
-26. Re-run coverage, update the "~85-90%" doc claims with fresh numbers.
+26. ~~Re-run coverage, update the "~85-90%" doc claims with fresh numbers.~~ done (docs-health pass measured 2026-09-08 — core 91.7%, group 90.6%, hmr 90.0%, timer 88.9%, loader 74.6%)
 27. Extend golden scenarios (#4+: events, logger — ROADMAP already lists this).
-28. Verify `golangci-lint` in ports.yml actually runs clean under Go 1.27.
+28. ~~Verify `golangci-lint` in ports.yml actually runs clean under Go 1.27.~~ done (golangci-lint 0 issues under Go 1.27 (04-04 session))
 29. Run the zig suite standalone (`zig build test`) once outside the flake for parity.
 30. Tag `go/v0.1.x` including the 1.27 bump; re-pin Kernovia's oracle (ADR-004 flow).
 
 **Docs:**
-31. Harvest this report's (f) into `TODO_LIST.md` (docs-health HARVEST).
-32. Fix or empty the lying CHANGELOG stub (fake `[0.1.0] - 2026-01-01`).
-33. Refresh root README status table (coverage, port statuses post-rebase).
-34. Refresh FEATURES.md against the post-rebase tree.
-35. docs-health VERIFY pass over `docs/status/` history + ANNOTATE the 04-04 report
-    (its "unmerged index hazard" items are now resolved).
-36. Check `docs/DOMAIN_LANGUAGE.md` against current terms after the upstream merge.
+31. ~~Harvest this report's (f) into `TODO_LIST.md` (docs-health HARVEST).~~ done (docs-health pass this pass routed §f into TODO_LIST/ROADMAP)
+32. ~~Fix or empty the lying CHANGELOG stub (fake `[0.1.0] - 2026-01-01`).~~ done (docs-health pass CHANGELOG.md rebuilt from real history by this pass)
+33. ~~Refresh root README status table (coverage, port statuses post-rebase).~~ done (docs-health pass README status table/example refreshed by this pass)
+34. ~~Refresh FEATURES.md against the post-rebase tree.~~ done (docs-health pass FEATURES.md rewritten with canonical statuses by this pass)
+35. ~~docs-health VERIFY pass over `docs/status/` history + ANNOTATE the 04-04 report~~ done (docs-health pass this pass verified and annotated the 04-04 report)
+~~(its "unmerged index hazard" items are now resolved).~~
+36. ~~Check `docs/DOMAIN_LANGUAGE.md` against current terms after the upstream merge.~~ done (docs-health pass terms verified/added by this pass)
 37. Revisit MD013=off policy: consider a higher line-length limit instead of fully off.
 38. Read `CONTRIBUTING.md` (added by pick 12) for accuracy — never reviewed.
 
 **Repo hygiene / infra:**
-39. `.gitignore`: ensure `.buildflow-traces/`, `result*` (nix) are covered.
+39. ~~`.gitignore`: ensure `.buildflow-traces/`, `result*` (nix) are covered.~~ done (result*/.buildflow artifacts covered by the buildflow-managed gitignore block)
 40. Add a CI job running `nix flake check` so the flake gate is enforced remotely, not
-    only locally.
+only locally.
 41. Session-lock convention for concurrent agents (see e1) — even a convention line in
-    AGENTS.md.
+AGENTS.md.
 42. Investigate/configure the auto-daemon to no-op during rebases (it staged files
-    mid-rebase this session).
+mid-rebase this session).
 43. Reconcile `.eslintrc.yml` (upstream) vs `.oxlintrc.json` (fork) ownership in AGENTS.
-44. `builtins.getEnv "HOME"` in the devShell `GOCACHE` breaks under pure eval — make it
-    robust.
+44. ~~`builtins.getEnv "HOME"` in the devShell `GOCACHE` breaks under pure eval — make it~~ done at `51cddf2`
+~~robust.~~
 45. Look at flake `checks` `meta` warnings (apps lack `meta` attr — cosmetic).
-46. Confirm `.yarn/` (install-state) is properly ignored; no yarn.lock must ever be
-    committed (upstream policy).
+46. ~~Confirm `.yarn/` (install-state) is properly ignored; no yarn.lock must ever be~~ done (.gitignore covers yarn.lock and .yarn/*)
+~~committed (upstream policy).~~
 
 **Strategic:**
 47. Decide the fork's TS toolchain stance: track upstream exactly (their versions, their
-    breakage) vs fork-modernized (current state) — this decision unblocks 1-3.
-48. Evaluate adopting the `3-stage-hmr` upstream branch for the known hmr flake.
+breakage) vs fork-modernized (current state) — this decision unblocks 1-3.
+48. ~~Evaluate adopting the `3-stage-hmr` upstream branch for the known hmr flake.~~ done (replayed onto the fork (b4650df))
 49. Kernovia convergence: run their `cordisparity` scenarios against the rebased oracle
-    after the release tag.
-50. Schedule a full docs-health audit after the commit wave (a-g reports exist for three
-    consecutive sessions now; the living docs need one consolidation pass).
+after the release tag.
+50. ~~Schedule a full docs-health audit after the commit wave (a-g reports exist for three~~ done (docs-health pass this pass is that audit)
+~~consecutive sessions now; the living docs need one consolidation pass).~~
 
 ## g) Questions I cannot figure out myself
 
@@ -296,11 +297,11 @@ verified structurally (no markers, byte-parity logic), not behaviorally.
    README/AGENTS restructure; `.buildflow.yml`/oxlint config). Commit them separately,
    let your auto-daemon do it, or leave uncommitted? And after committing — push
    `main` with `--force-with-lease` given the rebase rewrote 32 commits?
-3. **TS toolchain stance:** Should the fork keep its ahead-of-upstream devDeps
-   (typescript ^7.0.2, vitest ^5, eslint ^10) and work around the yarn/TS7 crash
-   locally, or drop `packages/` deps back to upstream-exact (`typescript ^5.9.3` etc.)
-   until upstream moves — knowing the former keeps a broken install until resolved and
-   the latter contradicts the fork's own recent "dep bumps" commits?
+3. ~~**TS toolchain stance:** Should the fork keep its ahead-of-upstream devDeps~~ done (superseded — upstream reverted to ^5.9.3 and the fork matched it, except a deliberate @types/node ^26.5.0 bump; the stance question is parked in ROADMAP Open decisions)
+   ~~(typescript ^7.0.2, vitest ^5, eslint ^10) and work around the yarn/TS7 crash~~
+   ~~locally, or drop `packages/` deps back to upstream-exact (`typescript ^5.9.3` etc.)~~
+   ~~until upstream moves — knowing the former keeps a broken install until resolved and~~
+   ~~the latter contradicts the fork's own recent "dep bumps" commits?~~
 
 ---
 
@@ -336,3 +337,22 @@ verified structurally (no markers, byte-parity logic), not behaviorally.
 11. **Tests?** Ports fully green including race and count=3 CI parity; golden traces
     byte-identical across all three ports. Gap: TS suite unrun (blocked), thread-safe
     clippy ungated, rust coverage unmeasured.
+
+---
+
+## Resolution addendum (docs-health pass, 2026-09-08)
+
+22 §f items and §g Q3 resolved inline above. Note two items overtook
+events: the TS7 blocker is moot (upstream reverted to `^5.9.3`; the fork
+installs and tests 248/248), and `3-stage-hmr` was replayed onto the fork
+(`b4650df`) rather than awaited. Still open: oxlint/eslint re-runs (4–5),
+buildflow platform-mismatch fix (6), cargo-audit/cargo-deny/pnpm-audit
+tooling (7–8), stash//tmp cleanup (13), the user-gated push (14) and
+post-push CI verification (15), timeout-caps contribution upstream (18),
+thread-safe clippy work (19–20), toolchain pin (21), coverage baseline
+(22), bench claim (23), snapshot.rs review (24), `go fix` sweep (25),
+golden scenarios #4+ (27), zig standalone run (29), post-1.27 tag +
+Kernovia re-pin (30), MD013 policy (37), CONTRIBUTING review (38),
+`nix flake check` CI job (40), session-lock convention (41), daemon
+rebase behavior (42), linter ownership (43), checks meta warnings (45),
+TS stance decision (47), Kernovia re-run (49).

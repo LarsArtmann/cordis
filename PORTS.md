@@ -7,7 +7,7 @@ is the flagship and the reference implementation for the other languages.
 | -------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | Go       | [`go/`](go/)     | Core complete: contexts, fibers, effects, events (all five dispatch modes), services with isolation realms, plugin registry with inject reactivity, logger, timer, group, loader (watch/reload), hmr (swap + rollback), accessor/mixin, callable services + tracker, typed inject helpers | `cd go && go test ./...`   |
 | Rust     | [`rust/`](rust/) | Core complete (single-threaded core plus a `thread-safe` Mutex build): contexts, fibers, effects, events, services, isolation, inject reactivity, validation, intercept, snapshot/restore, status events                                                                                  | `cd rust && cargo test`    |
-| Zig      | [`zig/`](zig/)   | Foundation: contexts, fibers, events, services, isolation, inject reactivity                                                                                                                                                                                                              | `cd zig && zig build test` |
+| Zig      | [`zig/`](zig/)   | Core complete: contexts, fibers, effects with introspection, events (all five dispatch modes), batch, services with isolation realms, registry view, disposers, comptime typed APIs (`TypedPlugin`)                                                                                       | `cd zig && zig build test` |
 
 All three ports share one architecture:
 
@@ -28,8 +28,9 @@ All three ports share one architecture:
   associated `Config` (plus `FnPlugin` closures), a Zig comptime
   constructor (`TypedPlugin`). See `ROADMAP.md` for the documented
   divergences.
-- **One golden scenario, three runners.** `golden/scenario.txt` is executed
-  by the Go, Rust and Zig test suites; each must emit the exact trace in
-  `golden/expected.txt`, pinning the shared semantics across ports.
+- **Three golden scenarios, three runners.** `golden/scenario.txt`,
+  `scenario-events.txt` and `scenario-cascade.txt` are executed by the Go,
+  Rust and Zig test suites; each must emit the exact traces in
+  `golden/expected*.txt`, pinning the shared semantics across ports.
 
 See [ROADMAP.md](ROADMAP.md) for the parity matrix and planned work.

@@ -3,66 +3,88 @@
 Honest inventory of the cordis fork: the TypeScript original in `packages/`
 plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 
-- **DONE** — implemented and tested
-- **PARTIAL** — implemented, known gaps listed
-- **PLANNED** — on the roadmap, not started
-- **CONSIDERING** — idea worth evaluating, no commitment
+- **FULLY_FUNCTIONAL** — code present and working (suite green at time of writing)
+- **PARTIALLY_FUNCTIONAL** — ships, but with known gaps (listed)
+- **BROKEN** — code exists but does not work
+- **PLANNED** — no code yet
 
-## Core semantics (all three ports)
+## Core semantics
 
-| Feature                                                         | Go                 | Rust            | Zig                      |
-| --------------------------------------------------------------- | ------------------ | --------------- | ------------------------ |
-| Context tree (New/Extend/Isolate/WithFilter)                    | DONE               | DONE            | DONE                     |
-| Drain queue (synchronous settling, Batch transactions)          | DONE               | DONE            | partial (no batch)       |
-| Effect tree: nested, labeled, LIFO rollback, introspection      | DONE               | DONE            | PARTIAL (no labels tree) |
-| Events: emit / parallel / serial / bail / waterfall             | DONE               | DONE            | PARTIAL (emit + bail)    |
-| Event filters + global listeners                                | DONE               | DONE            | DONE                     |
-| Fiber states (pending/loading/active/failed/disposed/unloading) | DONE               | DONE            | DONE                     |
-| Dispose / restart / update                                      | DONE               | DONE            | DONE                     |
-| Inject reactivity (pending → unload → reload in place)          | DONE               | DONE            | DONE                     |
-| Registry (size / has / delete, snapshot restore)                | DONE               | DONE            | —                        |
-| Config validation                                               | DONE               | —               | —                        |
-| Fiber Await                                                     | DONE               | —               | —                        |
-| Logger service (levels, exporters, buffer)                      | DONE               | —               | —                        |
-| Root fiber restart semantics                                    | DONE               | DONE            | DONE                     |
-| Deterministic sibling notification order                        | DONE               | DONE            | DONE                     |
-| Concurrent access safety                                        | DONE (race tested) | single-threaded | single-threaded          |
+| Feature                                                         | Go                             | Rust                                                | Zig                       |
+| --------------------------------------------------------------- | ------------------------------ | --------------------------------------------------- | ------------------------- |
+| Context tree (New/Extend/Isolate/Intercept/WithFilter)          | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Drain queue (synchronous settling)                              | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Batch transactions                                              | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Effect tree: nested, labeled, LIFO rollback, introspection      | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Events: emit / parallel / serial / bail / waterfall             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Event filters + global listeners                                | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Fiber states (pending/loading/active/failed/disposed/unloading) | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Dispose / restart / update                                      | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Inject reactivity (pending → unload → reload in place)          | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Interception events (`internal/get\|set\|listener\|dispatch`)   | FULLY_FUNCTIONAL               | PLANNED                                             | PLANNED                   |
+| Status events (`internal/status`)                               | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
+| Registry view (size / has / delete)                             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Registry snapshot / restore                                     | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
+| Config validation                                               | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
+| Fiber Await (Go: plus stdlib-context variant)                   | FULLY_FUNCTIONAL               | n/a (drain settles synchronously)                   | —                         |
+| Logger service (levels, exporters, buffer)                      | FULLY_FUNCTIONAL               | PLANNED                                             | PLANNED                   |
+| Root fiber restart semantics                                    | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Deterministic sibling notification order                        | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
+| Concurrent access safety                                        | FULLY_FUNCTIONAL (race-tested) | FULLY_FUNCTIONAL via the opt-in `thread-safe` build | Single-threaded by design |
 
 ## Native API layer (phase 2)
 
-| Feature                                                | Go                                                | Rust                                                             | Zig                                                         |
-| ------------------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- |
-| Type-keyed services (primary service API)              | DONE (`Provide[T]`/`Get[T]` via `ServiceName[T]`) | DONE (`provide`/`get::<T>()` via `type_name`)                    | DONE (`provide`/`getTyped` via `@typeName`)                 |
-| Typed events (primary event API)                       | DONE (`On[E]`/`Once[E]`/`Emit[E]`)                | DONE (`on::<E>`/`once::<E>`/`emit::<E>`)                         | DONE (`onTyped`/`emitTyped`)                                |
-| Named services/events (dynamic names, realm contracts) | DONE (`ProvideNamed`-style method form)           | DONE (`*_named`)                                                 | DONE (`*Named`)                                             |
-| Plugin definition forms                                | DONE (`NewPlugin[C]` generics)                    | DONE (`Plugin` trait + associated `Config`; `FnPlugin` closures) | DONE (`TypedPlugin` comptime constructor; runtime `Plugin`) |
-| RAII disposal                                          | — (idiomatic Go: explicit Disposers)              | DONE (`Guard` with `detach()`)                                   | — (planned)                                                 |
-| Stdlib context per fiber                               | DONE (`Fiber.StdContext()`, `Fiber.Done()`)       | —                                                                | —                                                           |
-| slog integration                                       | DONE (`NewSlogHandler`, `Logger.Slog`)            | —                                                                | —                                                           |
-| Collision-free isolate labels                          | DONE (`map[any]isolateKey`)                       | PARTIAL (string labels, `isolate_shared`)                        | PARTIAL (string labels, `isolateShared`)                    |
-| Domain errors split from allocation errors             | n/a                                               | n/a                                                              | DONE                                                        |
+| Feature                                                | Go                                             | Rust                                                 | Zig                                                         |
+| ------------------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------- |
+| Type-keyed services (primary service API)              | FULLY_FUNCTIONAL (`Provide[T]`/`Get[T]`)       | FULLY_FUNCTIONAL (`provide`/`get::<T>()`)            | FULLY_FUNCTIONAL (`provide`/`getTyped`)                     |
+| Typed events (primary event API)                       | FULLY_FUNCTIONAL (`On[E]`/`Once[E]`/`Emit[E]`) | FULLY_FUNCTIONAL (`on::<E>`/`once::<E>`/`emit::<E>`) | FULLY_FUNCTIONAL (`onTyped`/`onceTyped`/`emitTyped`)        |
+| Named services/events (dynamic names, realm contracts) | FULLY_FUNCTIONAL (`*Named`, `Context.*`)       | FULLY_FUNCTIONAL (`*_named`)                         | FULLY_FUNCTIONAL (`*Named`)                                 |
+| Plugin definition forms                                | FULLY_FUNCTIONAL (`NewPlugin[C]` generics)     | FULLY_FUNCTIONAL (`Plugin` trait; `FnPlugin`)        | FULLY_FUNCTIONAL (`TypedPlugin` comptime; runtime `Plugin`) |
+| RAII disposal                                          | — (idiomatic Go: explicit Disposers)           | FULLY_FUNCTIONAL (`Guard` with `detach()`)           | PLANNED                                                     |
+| Stdlib context per fiber                               | FULLY_FUNCTIONAL (`StdContext`/`Done`)         | —                                                    | —                                                           |
+| slog integration                                       | FULLY_FUNCTIONAL (`NewSlogHandler`)            | —                                                    | —                                                           |
+| Collision-free isolate labels                          | FULLY_FUNCTIONAL (`map[any]isolateKey`)        | FULLY_FUNCTIONAL (`(name, label)` hash map)          | FULLY_FUNCTIONAL (content-hashed pair keys)                 |
+| Domain errors split from allocation errors             | n/a                                            | n/a                                                  | FULLY_FUNCTIONAL (OOM panics, std style)                    |
+
+## Go ecosystem packages
+
+| Feature                                                              | Status           | Evidence                      |
+| -------------------------------------------------------------------- | ---------------- | ----------------------------- |
+| `timer`: AfterFunc/Await/Interval/IntervalFunc/Throttle/Debounce     | FULLY_FUNCTIONAL | `go/timer/` (synctest-tested) |
+| `group`: id-keyed child fibers, diffed Update, rollback              | FULLY_FUNCTIONAL | `go/group/`                   |
+| `loader`: resolver, entries, groups, tree, JSON config, watch/reload | FULLY_FUNCTIONAL | `go/loader/`                  |
+| `hmr`: module generations, declare graph, swap, rollback             | FULLY_FUNCTIONAL | `go/hmr/`                     |
+| Accessor / mixin derived services with write-back                    | FULLY_FUNCTIONAL | `go/accessor.go`              |
+| Callable services + tracker (`ProvideService`, `Callable`)           | FULLY_FUNCTIONAL | `go/callable.go`              |
+| API polish: `Fiber.Err`, `AwaitContext`, `Inject1/2/3`               | FULLY_FUNCTIONAL | `go/fiber.go`, `go/inject.go` |
+| Benchmarks (start/dispose, provide+get, emit, waterfall)             | FULLY_FUNCTIONAL | `go/bench_test.go`            |
 
 ## Cross-language assurance
 
-| Feature                                                   | Status                                                         |
-| --------------------------------------------------------- | -------------------------------------------------------------- |
-| Golden scenario (`golden/`, one spec, three runners)      | DONE                                                           |
-| CI jobs for Go, Rust, Zig (`.github/workflows/ports.yml`) | DONE (workflow verified locally; first green run pending push) |
-| `nix flake check` derivations running all three suites    | DONE                                                           |
+| Feature                                                      | Status                                                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (3: lifecycle, events, cascade — `golden/`)                                                |
+| DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                            |
+| Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                 |
+| `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                            |
+| TypeScript suite (`packages/`)                               | FULLY_FUNCTIONAL locally: 248/248 after the 2026-09-08 rebase repair; CI verification pending the next push |
 
 ## TypeScript original (`packages/`)
 
-Unmodified upstream monorepo: core, loader, hmr, timer, group, logger
-packages with their own CI (`.github/workflows/build.yml`).
+Tracks `upstream/main` (`caab04e`, rebased 2026-09-08). Inherited upstream
+features: three-stage reload (#111), include journal reconciliation (#121),
+bare-specifier resolution (#123), `hmr.watch()` (#128), plus the
+`3-stage-hmr` line replayed on top (`b4650df`: commit-based loader entry
+changes, atomic include writes).
 
 ## Planned
 
-- Go: interception events for loader/hmr ports, service accessor/mixin
-  system, callable services, port of `packages/loader`, `packages/hmr`,
-  `packages/timer`, `packages/group`
-- Rust: thread-safe variant behind a feature flag, true parallel dispatch,
-  config validation, batch API
-- Zig: registry view, serial/waterfall/parallel dispatch, early disposal
-  handles, batch transactions, effect label introspection
+No code yet; bounded work is tracked in `TODO_LIST.md`, direction in
+`ROADMAP.md`:
 
-See `ROADMAP.md` for the full prioritized list and the parity matrix.
+- Zig: registry snapshot/restore, status events, accessor/mixin, logger
+- Rust: interception events (`internal/*`), logger service
+- Golden scenario #4 (dispatch-mode parity)
+
+See `ROADMAP.md` for the full parity matrix and the documented native-max
+divergences.

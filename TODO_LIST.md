@@ -1,126 +1,96 @@
 # TODO List
 
-Short- and mid-term actionable tasks. Long-term direction lives in
-`ROADMAP.md`. Full 27-task breakdown:
-`docs/planning/2026-09-04_15-42_ship-parity-ecosystem-pareto-plan.md`.
+Short- and mid-term actionable tasks. Long-term direction and open decisions
+live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 
-**Prime directive for this phase: native-max APIs, not TS 1:1 ports.**
+**Prime directive: native-max APIs, not TS 1:1 ports.**
 
 ## Go (flagship)
 
-- [x] Type-keyed primary service API (`Provide[T]`/`Get[T]`/`TryGet[T]`/
-      `MustGet[T]`), typed events (`On[E]`/`Once[E]`/`Emit[E]`), stdlib
-      `context.Context` per fiber, `slog` adapter, `Inject` returning
-      `(*Fiber, error)`, collision-free isolate labels, root-fiber tests
-- [x] `internal/get|set|listener|dispatch` interception events
-      (loader/hmr prerequisite); `Context.Cleanup` exported for plugins
-- [x] `go/timer` package: `AfterFunc`/`Await`/`Interval`/`IntervalFunc`/
-      `Throttle`/`Debounce`, effect-scoped, race-tested
-- [x] `go/group` package: id-keyed child fibers with diffed `Update`,
-      rollback with the owning fiber
-- [x] Coverage ≥ 90% (90.4%): dispatch modes, waterfall guards, logger
-      edges, interception events, StdContext lifecycle, error types
-- [x] Service accessor/mixin system (Property.Accessor upstream):
-      `Accessor[S,V]` derived services following the source lifecycle,
-      `Mixin` member sugar with write-back `Member.Set`
-- [x] Callable services and tracker: `ProvideService` fills an embedded
-      `ServiceMeta` (ctx + name); `Callable` binds a func service to its
-      context with panic recovery
-- [x] Port `packages/loader` (`go/loader`: resolver, entries, groups, tree,
-      JSON config, watch/reload) and `packages/hmr` (`go/hmr`: module
-      generations, declare graph, swap with dispose+relink, rollback)
+- [ ] Golden scenario #4: bail/serial/waterfall dispatch parity, byte-identical
+      across all three runners (source:
+      docs/status/2026-09-04_19-09_pareto-execution-pass.md §f10;
+      `golden/` still ships only the lifecycle, events and cascade scenarios)
+- [ ] hmr: include `Fiber.Err()` detail in rollback errors (now possible
+      post-M26) (source: docs/status/2026-09-05_03-03 §f20)
+- [ ] loader: `Resolver.ReplaceType[C]` sugar, parity with `RegisterType[C]`
+      (source: docs/status/2026-09-04_22-48 §f30)
+- [ ] hmr: concurrency storm test — parallel `Swap` racing
+      `Tree.Create`/`Remove` (source: docs/status/2026-09-04_22-48 §f31)
+- [ ] Raise `go/loader` statement coverage (74.6% measured 2026-09-08)
+      toward the ~90% bar the other packages hold (source: measured via
+      `go test -cover` under Go 1.27)
+- [ ] `go fix ./...` modernizer sweep under Go 1.27 (embedlit, unsafefuncs,
+      atomictypes) (source: docs/status/2026-09-08_04-04 §f21)
+- [ ] `IntervalFunc`: a slow callback can outlive disposal — fix the
+      pump-goroutine lifetime or document the constraint
+      (source: docs/status/2026-09-05_03-03 §f13)
+- [ ] Timer property test: debounce/throttle fire counts under randomized
+      call sequences (source: docs/status/2026-09-05_03-03 §f45)
+- [ ] Regression tests asserting the wrapped error messages in
+      `accessor.go`/`loader/tree.go` (source:
+      docs/status/2026-09-08_05-27 §f31)
+- [ ] `Tree.Await`: decide whether the discarded fiber error should surface
+      through the loader's error sink, or document the discard as final
+      (source: docs/status/2026-09-08_05-27 §f33)
+- [ ] Golden scenario candidate: loader watch/reload trace
+      (source: docs/status/2026-09-08_15-43 §f21)
 
 ## Rust
 
-- [x] TypeId-keyed typed services/events, RAII `Guard` disposer,
-      `Plugin` trait with associated `Config`, collision-free
-      `isolate_shared` labels (`(name, label)` hash map)
-- [x] `thread-safe` feature: `Arc<Mutex>` core, `Send + Sync` bounds via
-      `sync::Shared`/`MaybeSendSync`, lock-order invariant (Core before
-      FiberData), multi-thread stress tests, CI job
-- [x] `Context::intercept`/`intercepted` config overrides,
-      `FnPlugin::validate` config validation gating start,
-      `Fiber::update_config` typed update
-- [x] `parallel` dispatch concurrent under `thread-safe` (scoped threads)
-- [x] `internal/status` fiber-state event emission (Go parity):
-      `EVENT_STATUS` + `StatusChange` with the plugin name captured on the
-      fiber, emitted from a `settle_state` choke point
-- [x] Registry snapshot restore: `Context::snapshot`/`restore`, runtime
-      bodies stashed on explicit removal, delta disposed, missing restarts
-- [x] Clippy pay-down, round 1: 210 → 95 warnings (autofix pass + test-file
-      allowances). Remaining: doc `# Errors` sections, guarded-arithmetic
-      notes, match-on-unit in state machine arms. (History: the deny-level
-      target was softened to warn in the 5dfa504 follow-up to unbreak the
-      flake.)
+- [ ] `internal/plugin` + `internal/update` interception events (M13 parity;
+      Go has them, Rust does not) (source:
+      docs/status/2026-09-04_22-48 §f32)
+- [ ] Verify root-fiber status emission: `FiberData::new_root` writes state
+      without going through `settle_state` — cover or document
+      (source: docs/status/2026-09-04_22-48 §f33; `rust/src/fiber.rs:82`)
+- [ ] Fix or allowlist the `significant_drop` nursery findings under
+      `--features thread-safe`, then gate
+      `cargo clippy --features thread-safe` in Ports (source:
+      docs/status/2026-09-08_04-32 §f19–20)
+- [ ] `cargo-llvm-cov` coverage baseline next to the Go numbers (source:
+      docs/status/2026-09-08_04-32 §f22)
+- [ ] `cargo bench` to substantiate or hedge the "up to 30% faster small
+      allocations" claim recorded in ROADMAP (source:
+      docs/status/2026-09-08_04-32 §f23)
 
 ## Zig
 
-- [x] Collision-free `isolateShared` labels (content-hashed pair keys)
-- [x] `Context.effect` named effect scopes + `effects()` introspection
-      (`EffectMeta` trees), idempotent `Effect.dispose`
-- [x] `Disposer` early-disposal handles for `on`/`provide` (shared done
-      flag with scope rollback), `Registry` view (size/has/delete),
-      `onceTyped`, `onGlobal`
-- [x] `serial`/`waterfall` (runtime-name `Next` chain)/`parallel`/`batch`
-      dispatch modes
-- [ ] Registry `has`/`delete` by plugin identity for the golden runner
-      (currently address-keyed dynamic plugins)
-- [x] CI health (2026-09-05): Ports green 49-52s after two root-cause
-      fixes — thread-safe Rust deadlock (`Fiber::name` double lock) and
-      missing golangci-lint install; `timeout-minutes` now caps every job.
-      Green runs: 33931940029, 33932269590. Build stays red on the 11
-      upstream hmr flakes (upstream fix branch `3-stage-hmr`); gate on
-      Ports until upstream merges.
+- [ ] Registry `has`/`delete` keyed by `TypedPlugin` identity (the golden
+      runner still goes through address-keyed dynamic plugins)
 - [ ] `zig build -femit-docs` pass; fix broken doc comments
-
-## Golden tests
-
-- [x] Scenario #1 lifecycle (byte-identical across Go/Rust/Zig)
-- [x] Scenario #2 events, filters and global listeners
-      (`golden/scenario-events.txt`)
-- [x] Scenario #3 nested plugins + registry delete cascade
-      (`golden/scenario-cascade.txt`)
-- [x] DSL parser unit tests in all three runners (malformed tokens)
-- [ ] Scenario #4: bail/serial/waterfall dispatch parity
+- [ ] Record Zig 0.16 std gotchas in AGENTS.md (`std.Io.Dir.cwd`,
+      `ArrayListUnmanaged .empty`, anonymous non-zig imports → WriteFiles +
+      `@embedFile`)
 
 ## Repo
 
-- [x] CI action versions verified; green `ports.yml` runs recorded (see
-      below); golangci-lint job, `-count=3` flake canary, golden
-      double-run canary
-- [x] `nix flake check` derivations green (re-verified after the Rust
-      sync refactor; clippy scope moved to the crate lint table)
-- [x] `FEATURES.md` and `docs/DOMAIN_LANGUAGE.md`
-- [x] Push + first green runs:
-      <https://github.com/LarsArtmann/cordis/actions/runs/33877878539> and
-      <https://github.com/LarsArtmann/cordis/actions/runs/33879875106>
-- [x] Re-record a green run for the 2026-09-04 evening batch (timer,
-      group, interception events, golden #2/#3, Rust thread-safe):
-      <https://github.com/LarsArtmann/cordis/actions/runs/33932269590> and
-      the full evening set recorded in
-      docs/status/2026-09-04_22-48_pass-3-m15-m16-m22-deadlock-root-cause.md
-- [x] PORTS.md: cross-port API comparison table (typed service/event/
-      plugin forms side by side) — port status table refreshed 2026-09-05;
-      the deeper side-by-side table lives in the ROADMAP parity matrix
-- [x] AGENTS.md: Rust lock-order invariant (Core before FiberData) + the
-      Mutex non-reentrancy deadlock rule recorded (2026-09-05)
-- [ ] AGENTS.md: Zig 0.16 std gotchas (`std.Io.Dir.cwd`,
-      `ArrayListUnmanaged .empty`, anonymous non-zig imports → WriteFiles
-      + `@embedFile`)
-- [x] Root README: CI badges (Ports CI + Go version + license already
-      present); port pitch with golden-test mention lives in “Shared
-      architecture”
-
-## Quality extras
-
-- [ ] Benchmark skeletons: drain-queue throughput (Go first) with results
-      table
-- [x] Property test: LIFO rollback order under randomized registration
-      (Go): `TestDisposalLifoPropertyRandomized`, 25 seeds, nested trees
-- [x] Parity-matrix generator: `scripts/parity-matrix.sh` (name-based,
-      approximate by design — navigation aid, not a guarantee)
-- [x] Releases: tagged `go/v0.1.0` and `rust/v0.2.0` (pushed); Rust crate
-      version bumped to 0.2.0; Zig tags with the repo at foundation
-      completion
-- [ ] Weekly "run all three suites + flake check" cadence note in
-      AGENTS.md
+- [ ] CI job running `nix flake check` so the flake gate is enforced
+      remotely, not only locally (source:
+      docs/status/2026-09-08_04-32 §f40; `ports.yml` has no nix step)
+- [ ] CI: add `.prettierrc` (printWidth 100) plus a `prettier --check` and
+      `yarn build` step before tests in build.yml (source:
+      docs/status/2026-09-08_15-43 §f24–25)
+- [ ] CI guards: `packages/**` stays byte-identical to upstream, and
+      `dprint.json` excludes keep covering `packages/**` (source:
+      docs/status/2026-09-08_05-27 §f13–14)
+- [ ] After the next push (user-gated, force-with-lease): verify build.yml
+      and ports.yml green on GitHub, including the replayed `3-stage-hmr`
+      line (source: docs/status/2026-09-08_15-43 §c; replayed in `b4650df`)
+- [ ] Gitignore `tmp-*` test debris (`lib/`, `node_modules/`,
+      `tsconfig.tsbuildinfo` are already covered) (source:
+      docs/status/2026-09-08_15-43 §f32)
+- [ ] TS: one full install-from-scratch verification
+      (`rm -rf node_modules && yarn install && yarn build && yarn test`)
+      (source: docs/status/2026-09-08_15-43 §f40)
+- [ ] Review CONTRIBUTING.md for accuracy (never reviewed since pick 12);
+      add the flake app list to the quickstart; document the
+      "upstream semantics + fork formatting (prettier-100)" rebase policy
+      (source: docs/status/2026-09-08_04-32 §f38,
+      docs/status/2026-09-08_15-43 §f42, §f45)
+- [ ] Loader: fuzz the JSON config layer (EncodeConfig/DecodeConfig
+      roundtrip with random shapes) (source:
+      docs/status/2026-09-05_03-03 §f46)
+- [ ] Align the local gate with CI race canary: flake checks run
+      `-race -count=1`, ports.yml runs `-count=3` (source:
+      docs/status/2026-09-08_05-27 §f35)

@@ -156,40 +156,40 @@ execute M16, M22, unblock CI, then M24–M27.
 
 ## f) NEXT 50 (ordered, roughly Pareto)
 
-1. Confirm the fresh Ports run completed green; record URL in TODO_LIST.md.
-2. Watch upstream `3-stage-hmr` merge; when merged, sync TS tree to it (Build greens).
+1. ~~Confirm the fresh Ports run completed green; record URL in TODO_LIST.md.~~ done (green runs recorded (6654270))
+2. ~~Watch upstream `3-stage-hmr` merge; when merged, sync TS tree to it (Build greens).~~ done (fork replayed the 3-stage-hmr branch (b4650df); upstream merge still pending)
 3. Decide yarn.lock policy (upstream commits none; CI uses `--no-immutable` →
    floating deps). Recommended: commit a generated lockfile to the fork for
    reproducible CI, documented as divergence.
-4. M24: accessor/mixin system (Go).
-5. M25: callable services + tracker (Go).
+4. ~~M24: accessor/mixin system (Go).~~ done at `2fd2f2f`
+5. ~~M25: callable services + tracker (Go).~~ done at `053a72a`
 6. M26: `Fiber.Err()` (Go) — then use it in hmr rollback error detail.
-7. M26: `Await(ctx)` cancellation-aware await (Go).
-8. M26: `errors.AsType` sweep across go/.
-9. M26: typed-inject sugar (`Inject` with typed config).
-10. M26: PORTS.md parity table refresh (loader, hmr, timer, group, snapshot/status).
-11. M26: README badges (CI, GoDoc, crates.io, coverage).
-12. M26: AGENTS.md gotchas — add Mutex non-reentrancy + `--no-immutable` + upstream
-    hmr-flake notes.
-13. M27: Go benchmarks (start/dispose, event emit, drain queue, hmr swap).
-14. M27: LIFO disposal property test (Go, randomized).
-15. M27: tag `go/v0.1.0` (annotated; module is `github.com/LarsArtmann/cordis/go`).
-16. M27: release Rust `v0.2.0` (snapshot/status added).
-17. M27: parity-matrix generator script (PORTS.md from test inventory).
-18. M27: zig package docs (doc comments on public decls).
+7. ~~M26: `Await(ctx)` cancellation-aware await (Go).~~ done at `8efd0f6`
+8. ~~M26: `errors.AsType` sweep across go/.~~ done at `8efd0f6`
+9. ~~M26: typed-inject sugar (`Inject` with typed config).~~ done at `8efd0f6`
+10. ~~M26: PORTS.md parity table refresh (loader, hmr, timer, group, snapshot/status).~~ done at `8efd0f6`
+11. ~~M26: README badges (CI, GoDoc, crates.io, coverage).~~ done (badges present on the root README)
+12. ~~M26: AGENTS.md gotchas — add Mutex non-reentrancy + `--no-immutable` + upstream~~ done (all three recorded in AGENTS.md)
+    ~~hmr-flake notes.~~
+13. ~~M27: Go benchmarks (start/dispose, event emit, drain queue, hmr swap).~~ done at `df35fc4`
+14. ~~M27: LIFO disposal property test (Go, randomized).~~ done at `df35fc4`
+15. ~~M27: tag `go/v0.1.0` (annotated; module is `github.com/LarsArtmann/cordis/go`).~~ done (pushed)
+16. ~~M27: release Rust `v0.2.0` (snapshot/status added).~~ done (pushed)
+17. ~~M27: parity-matrix generator script (PORTS.md from test inventory).~~ done at `df35fc4`
+18. ~~M27: zig package docs (doc comments on public decls).~~ done (doc comments present on public decls; the -femit-docs validation pass remains open)
 19. M27: release-cadence note in ROADMAP.md.
-20. Rust lint pay-down (~210 findings; `cargo clippy --fix` applies ~132).
+20. ~~Rust lint pay-down (~210 findings; `cargo clippy --fix` applies ~132).~~ done at `6ba0d7d`
 21. ROADMAP.md: hmr native divergence entry (file-watch → factory swap; watcher layer
     owned by embedder).
-22. ROADMAP.md: loader entries (Resolver registry, veto semantics) if not yet there.
-23. Final 3-language verification: go `-race -count=3`, cargo both modes, zig
-    `nix run nixpkgs#zig -- build test --summary all`.
-24. `nix flake check -L`.
-25. actionlint on both workflows (done for current state; re-run after edits).
-26. TODO_LIST.md harvest: mark M14–M16, M22 done; move §g questions forward.
-27. Cancel/ignore stale runs; confirm no other hung runs remain.
-28. Go: hmr — consider `Swap` option to preserve fiber identity vs new fiber (currently
-    new fiber, same entry — document explicitly in package doc).
+22. ~~ROADMAP.md: loader entries (Resolver registry, veto semantics) if not yet there.~~ done (loader/hmr matrix rows exist in ROADMAP)
+23. ~~Final 3-language verification: go `-race -count=3`, cargo both modes, zig~~ done (repeated green runs across all three suites)
+    ~~`nix run nixpkgs#zig -- build test --summary all`.~~
+24. ~~`nix flake check -L`.~~ done (green across sessions)
+25. ~~actionlint on both workflows (done for current state; re-run after edits).~~ done (clean; actions verified)
+26. ~~TODO_LIST.md harvest: mark M14–M16, M22 done; move §g questions forward.~~ done at `6654270`
+27. ~~Cancel/ignore stale runs; confirm no other hung runs remain.~~ done (stale runs cancelled; greens recorded)
+28. ~~Go: hmr — consider `Swap` option to preserve fiber identity vs new fiber (currently~~ done (package doc states old fiber disposed, fresh fiber starts (go/hmr/hmr.go))
+    ~~new fiber, same entry — document explicitly in package doc).~~
 29. Go: hmr — add `hmr/reload` report to include per-entry failure detail once
     `Fiber.Err()` exists.
 30. Go: loader — `Resolver.ReplaceType[C]` sugar (parity with `RegisterType`).
@@ -198,45 +198,59 @@ execute M16, M22, unblock CI, then M24–M27.
     Rust does not).
 33. Rust: status event emission for the root fiber covered? (root writes state in
     `new_root` without emission — check upstream parity).
-34. Rust: snapshot — prune stale stash entries (currently replaced per id; growth
-    bounded by distinct deleted plugins — acceptable, document).
-35. Rust: `Registry::delete` doc now mentions stash/restore (done in delete_id doc —
-    verify rendered docs).
+34. ~~Rust: snapshot — prune stale stash entries (currently replaced per id; growth~~ done (stash growth bounded and documented (9b27371))
+    ~~bounded by distinct deleted plugins — acceptable, document).~~
+35. ~~Rust: `Registry::delete` doc now mentions stash/restore (done in delete_id doc —~~ done (delete_id doc mentions stash/restore)
+    ~~verify rendered docs).~~
 36. Rust: doctests for `EVENT_STATUS`/`StatusChange` usage.
-37. Zig: confirm 0.16 build green after all changes (final verify).
+37. ~~Zig: confirm 0.16 build green after all changes (final verify).~~ done (29/29 every session)
 38. Zig: consider porting hmr equivalents only if roadmap demands (currently not
     planned — note in matrix as N/A with rationale).
 39. CI: consider `--locked`/`--frozen` for cargo (Cargo.lock IS committed — verify).
 40. CI: build.yml — Node version pin decision (see §g Q2).
-41. Docs: README (root) — add loader/hmr/snapshot to feature list.
-42. Docs: packages/core/README.md divergence note (fork rewrote it — ensure it
-    explains why it differs from upstream).
-43. Verify `.gitignore` covers `node_modules/`, `packages/*/lib`, `target/`
-    (local TS build created `lib/` dirs — check git status cleanliness).
-44. AGENTS.md: record the `yarn.lock`-not-tracked upstream fact + local TS repro
-    recipe (`nix shell nixpkgs#nodejs_24 nixpkgs#corepack`).
-45. AGENTS.md: record thread-safe audit rule (no nested core locks).
-46. Coverage: `go test -cover` for go/loader and go/hmr; record in TODO_LIST.
+41. ~~Docs: README (root) — add loader/hmr/snapshot to feature list.~~ done (docs-health pass README refreshed by the 2026-09-08 docs-health pass)
+42. ~~Docs: packages/core/README.md divergence note (fork rewrote it — ensure it~~ done (superseded — packages/core/README.md restored byte-identical to upstream (51cddf2))
+    ~~explains why it differs from upstream).~~
+43. ~~Verify `.gitignore` covers `node_modules/`, `packages/*/lib`, `target/`~~ done (lib/, node_modules/, tsbuildinfo all covered; tree clean)
+    ~~(local TS build created `lib/` dirs — check git status cleanliness).~~
+44. ~~AGENTS.md: record the `yarn.lock`-not-tracked upstream fact + local TS repro~~ done (both recorded in AGENTS.md)
+    ~~recipe (`nix shell nixpkgs#nodejs_24 nixpkgs#corepack`).~~
+45. ~~AGENTS.md: record thread-safe audit rule (no nested core locks).~~ done (non-reentrancy rule recorded in AGENTS.md)
+46. ~~Coverage: `go test -cover` for go/loader and go/hmr; record in TODO_LIST.~~ done (docs-health pass measured 2026-09-08 — core 91.7%, loader 74.6%, hmr 90.0%)
 47. Consider `golangci-lint` config pinning (CI uses repo config — verify parity with
     local).
-48. Sweep: any leftover debug prints/todos in go/hmr, rust/src/snapshot.rs (none
-    found by lint; final grep in final-verify step).
-49. Plan doc: mark M15/M16/M22 + CI tasks complete in the Pareto plan checkboxes.
-50. Next session: M24 → M25 → M26 → M27 in dependency order, then harvest.
+48. ~~Sweep: any leftover debug prints/todos in go/hmr, rust/src/snapshot.rs (none~~ done (lint clean; no debug prints found in final verifies)
+    ~~found by lint; final grep in final-verify step).~~
+49. ~~Plan doc: mark M15/M16/M22 + CI tasks complete in the Pareto plan checkboxes.~~ done (docs-health pass plan doc annotated by this pass (all 27 M-rows resolved))
+50. ~~Next session: M24 → M25 → M26 → M27 in dependency order, then harvest.~~ done at `2fd2f2f`, `053a72a`, `8efd0f6`, `df35fc4`
 
 ## g) QUESTIONS I CANNOT ANSWER MYSELF
 
-1. **Upstream hmr suite policy**: Build's remaining failure is 11 upstream hmr tests
-   timing out — reproduced locally on clean Node 24.19 + fresh deps; upstream has a
-   green fix branch (`3-stage-hmr`) unmerged. Options: (a) leave Build red until
-   upstream merges, gating on Ports only; (b) cherry-pick upstream's fix branch into
-   our TS tree now; (c) pin Node versions in build.yml hoping it dodges the flake
-   (my local repro says it won't). My recommendation is (a). Which do you want?
+1. ~~**Upstream hmr suite policy**: Build's remaining failure is 11 upstream hmr tests~~ done (answered by action — gated on Ports; the fork later replayed 3-stage-hmr (b4650df))
+   ~~timing out — reproduced locally on clean Node 24.19 + fresh deps; upstream has a~~
+   ~~green fix branch (`3-stage-hmr`) unmerged. Options: (a) leave Build red until~~
+   ~~upstream merges, gating on Ports only; (b) cherry-pick upstream's fix branch into~~
+   ~~our TS tree now; (c) pin Node versions in build.yml hoping it dodges the flake~~
+   ~~(my local repro says it won't). My recommendation is (a). Which do you want?~~
 2. **yarn.lock policy**: upstream commits no lockfile and installs with
    `--no-immutable`, so CI resolves floating ranges on every run. I can commit a
    generated lockfile (pins CI, small divergence from upstream) or track upstream
    exactly (unpinned). Preference?
-3. **Rust restore scope**: `restore()` currently restarts removed runtimes on the
-   _caller's_ context (documented). The alternative is stashing full context chains
-   (isolate/intercept) per runtime — more fidelity, more memory, more machinery.
-   Is caller-context restore acceptable as the documented native semantic?
+3. ~~**Rust restore scope**: `restore()` currently restarts removed runtimes on the~~ done (caller-context restore shipped and documented (9b27371))
+   ~~_caller's_ context (documented). The alternative is stashing full context chains~~
+   ~~(isolate/intercept) per runtime — more fidelity, more memory, more machinery.~~
+   ~~Is caller-context restore acceptable as the documented native semantic?~~
+
+---
+
+## Resolution (annotated 2026-09-08, docs-health pass)
+
+36 of 50 §f items and 2 of 3 §g questions are resolved inline above.
+Item 6 is half-shipped: `Fiber.Err()` landed in `8efd0f6`; surfacing it in
+hmr rollback errors is still open (TODO_LIST). Remaining open: the
+yarn.lock decision (§g 2 → ROADMAP Open decisions), the ROADMAP hmr
+divergence entry (21), hmr error-detail/storm test/`ReplaceType` (29–31),
+Rust `internal/plugin`+`internal/update` events and root status emission
+(32–33), status-event doctests (36), the Zig hmr N/A matrix note (38),
+cargo `--locked` policy (39), Node pin decision (40), golangci-lint config
+pinning (47), and the release-cadence note (19).
