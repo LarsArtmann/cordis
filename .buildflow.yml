@@ -1,0 +1,17 @@
+# BuildFlow configuration for the cordis polyglot fork.
+# Go lives in go/, Rust in rust/, Zig in zig/ — run buildflow from inside
+# the flake devShell (`nix develop -c buildflow`) so go 1.27 / zig / cargo
+# resolve; the system Go is older than the module requires.
+
+build_mode: full
+
+exclude:
+  - vendor
+  - .git
+  - node_modules
+  - "**/lib"
+  - "**/dist"
+  - rust/target
+  - .zig-cache
+  - .turbo
+  - .yarn

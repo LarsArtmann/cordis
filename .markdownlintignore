@@ -1,0 +1,8 @@
+# Historical point-in-time snapshots: kept verbatim, never re-linted.
+docs/status/
+docs/planning/
+
+# Upstream-owned frozen files (must stay byte-identical to upstream) and
+# vendored installs.
+packages/core/README.md
+node_modules/

@@ -393,5 +393,7 @@ func NewConsoleExporter(w io.Writer) *ConsoleExporter {
 // Export implements Exporter.
 func (e *ConsoleExporter) Export(m Message) {
 	line := fmt.Sprintf("[%s] %s: %s\n", m.Type, m.Name, FormatMessage(m))
-	_, _ = io.WriteString(e.W, line)
+	// Best-effort export: a logger cannot report its own write failure
+	// through logging, so the error is deliberately discarded.
+	_, _ = io.WriteString(e.W, line) //nolint:erraudit // deliberate discard, see above
 }

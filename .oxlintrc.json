@@ -23,5 +23,10 @@
   "env": {
     "builtin": true,
     "node": true
-  }
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/lib/**",
+    "**/dist/**"
+  ]
 }

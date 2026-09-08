@@ -151,7 +151,7 @@ func (t *Tree) ResolveGroup(id string) (*EntryGroup, error) {
 func (t *Tree) Create(opts EntryOptions, parentID string, pos int) (string, error) {
 	g, err := t.ResolveGroup(parentID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("loader: create under %q: %w", parentID, err)
 	}
 	t.mu.Lock()
 	id := t.ensureIDLocked(&opts)
@@ -162,7 +162,7 @@ func (t *Tree) Create(opts EntryOptions, parentID string, pos int) (string, erro
 	}
 	t.mu.Unlock()
 	if err := g.createEntry(opts, id); err != nil {
-		return id, err
+		return id, fmt.Errorf("loader: create %q under %q: %w", id, parentID, err)
 	}
 	t.Write()
 	return id, nil
@@ -235,11 +235,11 @@ func (t *Tree) SetConfig(id string, config any) error {
 func (t *Tree) Move(id, parentID string, pos int) error {
 	e, err := t.Resolve(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("loader: move %q: %w", id, err)
 	}
 	target, err := t.ResolveGroup(parentID)
 	if err != nil {
-		return err
+		return fmt.Errorf("loader: move %q to %q: %w", id, parentID, err)
 	}
 	source := e.parent
 	if source == target {
@@ -269,7 +269,9 @@ func (t *Tree) Await() {
 		for _, e := range t.Entries() {
 			if f := e.Fiber(); f != nil && f.State() != cordis.StatePending {
 				seen[f] = true
-				_ = f.Await()
+				// Await only synchronizes on settle here; the fiber's own
+				// failure was already routed to the loader's error reporting.
+				_ = f.Await() //nolint:erraudit // deliberate discard, see above
 			}
 		}
 		grew := false

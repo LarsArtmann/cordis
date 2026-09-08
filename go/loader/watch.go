@@ -154,7 +154,9 @@ func (l *Loader) stopWatcher() {
 	l.watchDone = nil
 	l.mu.Unlock()
 	if w != nil {
-		_ = w.Close()
+		if err := w.Close(); err != nil {
+			slog.Warn("loader: watcher close failed", "err", err)
+		}
 	}
 	if done != nil {
 		<-done

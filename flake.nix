@@ -39,50 +39,81 @@
           pkgs = nixpkgs.legacyPackages.${system};
         in
         {
-          go = pkgs.runCommand "cordis-go-tests" {
-            nativeBuildInputs = [
-              pkgs.go
-              pkgs.gcc
-            ];
-          } ''
-            export GOCACHE="$TMPDIR/go-build"
-            export HOME="$TMPDIR"
-            cp -r ${source}/go cordis-go
-            cp -r ${source}/golden golden
-            chmod -R u+w cordis-go
-            cd cordis-go
-            go vet ./...
-            go test -race -count=1 ./...
-            touch $out
-          '';
+          go =
+            pkgs.runCommand "cordis-go-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.go_1_27
+                  pkgs.gcc
+                ];
+              }
+              ''
+                export GOCACHE="$TMPDIR/go-build"
+                export HOME="$TMPDIR"
+                cp -r ${source}/go cordis-go
+                cp -r ${source}/golden golden
+                chmod -R u+w cordis-go
+                cd cordis-go
+                go vet ./...
+                go test -race -count=1 ./...
+                touch $out
+              '';
 
-          rust = pkgs.runCommand "cordis-rust-tests" {
-            nativeBuildInputs = with pkgs; [
-              rustc
-              cargo
-              clippy
-              gcc
-            ];
-          } ''
-            export CARGO_HOME="$TMPDIR/cargo"
-            export CARGO_TARGET_DIR="$TMPDIR/target"
-            cp -r ${source}/rust cordis-rust
-            cp -r ${source}/golden golden
-            chmod -R u+w cordis-rust
-            cd cordis-rust
-            cargo clippy --offline --all-targets
-            cargo test --offline
-            touch $out
-          '';
+          rust =
+            pkgs.runCommand "cordis-rust-tests"
+              {
+                nativeBuildInputs = with pkgs; [
+                  rustc
+                  cargo
+                  clippy
+                  gcc
+                ];
+              }
+              ''
+                export CARGO_HOME="$TMPDIR/cargo"
+                export CARGO_TARGET_DIR="$TMPDIR/target"
+                cp -r ${source}/rust cordis-rust
+                cp -r ${source}/golden golden
+                chmod -R u+w cordis-rust
+                cd cordis-rust
+                cargo clippy --offline --all-targets
+                cargo test --offline
+                touch $out
+              '';
 
-          zig = pkgs.runCommand "cordis-zig-tests" {
-            nativeBuildInputs = [ pkgs.zig ];
-          } ''
-            cp -r ${source} cordis
-            chmod -R u+w cordis
-            cd cordis/zig
-            zig build test --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
-            touch $out
+          zig =
+            pkgs.runCommand "cordis-zig-tests"
+              {
+                nativeBuildInputs = [ pkgs.zig ];
+              }
+              ''
+                cp -r ${source} cordis
+                chmod -R u+w cordis
+                cd cordis/zig
+                zig build test --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
+                touch $out
+              '';
+        }
+      );
+
+      # `nix fmt` invokes the formatter with a directory argument, which the
+      # bare nixfmt binary cannot parse; expand directories to files first.
+      formatter = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        pkgs.writeShellApplication {
+          name = "nixfmt";
+          runtimeInputs = [ pkgs.nixfmt ];
+          text = ''
+            for target in "$@"; do
+              if [ -d "$target" ]; then
+                find "$target" -type f -name '*.nix' -not -path '*/node_modules/*' -exec nixfmt {} +
+              else
+                nixfmt "$target"
+              fi
+            done
           '';
         }
       );
@@ -95,9 +126,10 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              go
+              go_1_27
               gopls
               golangci-lint
+              gcc
               rustc
               cargo
               clippy
@@ -106,8 +138,11 @@
               yarn-berry
             ];
             # Some machines ship broken cache locations via the environment;
-            # point Go at a writable one inside the shell.
-            GOCACHE = "${builtins.getEnv "HOME"}/.cache/cordis/go-build";
+            # resolve a writable one at shell startup (getEnv at eval time
+            # returns "" under pure evaluation).
+            shellHook = ''
+              export GOCACHE="$HOME/.cache/cordis/go-build"
+            '';
           };
         }
       );
@@ -122,7 +157,7 @@
               app = pkgs.writeShellApplication {
                 inherit name;
                 runtimeInputs = with pkgs; [
-                  go
+                  go_1_27
                   rustc
                   cargo
                   zig

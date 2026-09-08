@@ -13,12 +13,12 @@ import (
 // (golden/scenario.txt) and emits the canonical trace compared against
 // golden/expected.txt. Rust and Zig ship structurally identical runners.
 type goldenRunner struct {
-	t       *testing.T
-	ctx     *Context
-	trace   []string
-	fibers  map[string]*Fiber
-	plugins map[string]*Plugin[int]
-	childen map[string][]childSpec
+	t        *testing.T
+	ctx      *Context
+	trace    []string
+	fibers   map[string]*Fiber
+	plugins  map[string]*Plugin[int]
+	children map[string][]childSpec
 }
 
 type childSpec struct {
@@ -50,7 +50,7 @@ func (r *goldenRunner) plugin(name string, deps []string, lifo bool) *Plugin[int
 		} else {
 			r.attach(ctx, name)
 		}
-		for _, spec := range r.childen[name] {
+		for _, spec := range r.children[name] {
 			fiber, err := Start(ctx, r.plugin(spec.name, spec.deps, false), spec.config)
 			if err != nil {
 				return err
@@ -195,7 +195,7 @@ func (r *goldenRunner) run(line string) {
 		spec.deps, spec.config = deps, config
 		for _, tok := range args {
 			if strings.HasPrefix(tok, "parent=") {
-				r.childen[strings.TrimPrefix(tok, "parent=")] = append(r.childen[strings.TrimPrefix(tok, "parent=")], spec)
+				r.children[strings.TrimPrefix(tok, "parent=")] = append(r.children[strings.TrimPrefix(tok, "parent=")], spec)
 			}
 		}
 	case "delete":
@@ -353,11 +353,11 @@ func TestGoldenScenario(t *testing.T) {
 func runScenario(t *testing.T, scenarioFile, expectedFile string, exec func(r *goldenRunner, line string)) {
 	scenario := readGoldenLines(t, scenarioFile)
 	r := &goldenRunner{
-		t:       t,
-		ctx:     New(),
-		fibers:  map[string]*Fiber{},
-		plugins: map[string]*Plugin[int]{},
-		childen: map[string][]childSpec{},
+		t:        t,
+		ctx:      New(),
+		fibers:   map[string]*Fiber{},
+		plugins:  map[string]*Plugin[int]{},
+		children: map[string][]childSpec{},
 	}
 	for _, line := range scenario {
 		exec(r, line)

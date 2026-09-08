@@ -11,7 +11,9 @@ use cordis::sync::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use cordis::sync::{BorrowExt as _, Rc};
+#[cfg(feature = "thread-safe")]
+use cordis::sync::BorrowExt as _;
+use cordis::sync::Rc;
 
 use cordis::{plugin, start_fn, value, Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Value};
 
@@ -35,7 +37,7 @@ struct Runner {
     children: HashMap<String, Vec<Spawn>>,
 }
 
-fn state_name(state: FiberState) -> &'static str {
+const fn state_name(state: FiberState) -> &'static str {
     match state {
         FiberState::Pending => "PENDING",
         FiberState::Loading => "LOADING",
@@ -131,7 +133,7 @@ fn make_plugin(
                 trace.borrow_mut().push(format!("cleanup {label}"));
             })?;
         }
-        for spawn in spawns.iter() {
+        for spawn in &spawns {
             let child = make_plugin(&spawn.name, false, Vec::new(), &trace, &fibers);
             let deps: Vec<&str> = spawn.deps.iter().map(String::as_str).collect();
             let child = if deps.is_empty() { child } else { child.inject(&deps) };
@@ -143,8 +145,8 @@ fn make_plugin(
 }
 
 impl Runner {
-    fn new() -> Runner {
-        Runner {
+    fn new() -> Self {
+        Self {
             ctx: Context::new(),
             trace: Rc::new(RefCell::new(Vec::new())),
             fibers: Rc::new(RefCell::new(HashMap::new())),
@@ -172,7 +174,7 @@ impl Runner {
 
     fn run(&mut self, line: &str) {
         let mut tokens = line.split_whitespace().map(String::from);
-        let op = tokens.next().expect("op").clone();
+        let op = tokens.next().expect("op");
         let args: Vec<String> = tokens.collect();
         let params = parse_params(&args[1.min(args.len())..]);
 
@@ -183,7 +185,7 @@ impl Runner {
                 } else {
                     self.ctx.clone()
                 };
-                let provider = self.provider_for(&args[0]);
+                let provider = Self::provider_for(&args[0]);
                 let fiber = start_fn(&scope, &provider, 0).expect("start provider");
                 self.fibers.borrow_mut().insert(format!("provider:{}", args[0]), fiber);
                 self.trace.borrow_mut().push(format!("provided {}", args[0]));
@@ -252,7 +254,7 @@ impl Runner {
         }
     }
 
-    fn provider_for(&self, service: &str) -> FnPlugin<i32> {
+    fn provider_for(service: &str) -> FnPlugin<i32> {
         let service = service.to_string();
         plugin(&format!("provider:{service}"), move |ctx: &Context, _: &i32| {
             ctx.provide_named(&service, value(1i32))?;

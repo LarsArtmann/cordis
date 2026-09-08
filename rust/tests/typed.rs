@@ -6,7 +6,9 @@
 //! guards and the Plugin trait.
 
 use cordis::sync::RefCell;
-use cordis::sync::{BorrowExt as _, Rc};
+#[cfg(feature = "thread-safe")]
+use cordis::sync::BorrowExt as _;
+use cordis::sync::Rc;
 
 use cordis::{
     event_name, plugin, plugin_type_id, service_name, start, start_fn, Context, EventOptions,
@@ -64,7 +66,7 @@ fn typed_service_inject_reactivity() {
     let activations = Rc::new(RefCell::new(0));
     let consumer = plugin("consumer", {
         let activations = Rc::clone(&activations);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             *activations.borrow_mut() += 1;
             ctx.get::<Database>()?;
             Ok(())
@@ -153,7 +155,7 @@ fn typed_event_rolls_back_with_fiber() {
     let calls = Rc::new(RefCell::new(0));
     let p = plugin("listener", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on(
                 {
                     let calls = Rc::clone(&calls);
@@ -188,7 +190,7 @@ struct WorkerConfig {
 impl Plugin for Worker {
     type Config = WorkerConfig;
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "worker"
     }
 
@@ -198,7 +200,9 @@ impl Plugin for Worker {
 
     fn apply(&self, ctx: &Context, config: &WorkerConfig) -> cordis::Result<()> {
         let db = ctx.get::<Database>()?;
-        assert_eq!(db.dsn, "live");
+        if db.dsn != "live" {
+            return Err(cordis::Error::Validation(format!("expected live dsn, got {}", db.dsn)));
+        }
         let name = config.name.clone();
         ctx.attach(move || {
             let _ = name;
@@ -240,7 +244,7 @@ struct RecorderConfig {
 impl Plugin for Recorder {
     type Config = RecorderConfig;
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "recorder"
     }
 

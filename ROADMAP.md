@@ -139,10 +139,33 @@ Scenario v1 (27 ops incl. realms skipped-with-attribution) and
 scenario-cascade (nested plugins, delete, registry-size) are green there;
 scenario-events is blocked on Kernovia's realm + dispatch work.
 
-Bidirectional feedback started: #1 (lock-free-callback regression test) and
-#2 (RequireNoResidue helper) were filed from Kernovia's port experience.
+Bidirectional feedback started: #1 (lock-free-callback regression test)
+and #2 (RequireNoResidue helper) were filed from Kernovia's port experience.
 Ongoing interest: Kernovia's loader/hmr are production-proven candidates for
 this repo's "Loader / hmr equivalents" gap — the adoption decision (Go/No-Go
 with gates) is recorded in Kernovia's ADR-004 appendix. When evaluating the
 module-layout decision, factor in a consumer that exercises the calculus
 daily.
+
+### Go 1.27 adoption (2026-09-07)
+
+Adopted: `go 1.27` module directive with flake `go_1_27` and CI
+`go-version: stable`; timer tests run in a `testing/synctest` bubble on the
+virtual clock (`synctest.Sleep` is new in 1.27), turning 0.46 s of real
+sleeps into ~2 ms and making debounce/throttle boundaries immune to CI load;
+`strings.CutLast` in plugin name derivation; `stdversion` vet (automatic
+under `go test`).
+
+Deliberately NOT adopted: generic methods (new in 1.27) for the typed API.
+`Provide[T]/Get[T]/On[E]` stay package-level functions because `Context`
+already owns the method names `Provide/Get/On/Once/Emit` for the named
+(dynamic-name) API, Go has no overloading, and splitting typed lookups
+across methods and functions would fragment the surface. Interfaces also
+cannot declare or be implemented by generic methods in 1.27, so typed
+methods could not participate in the framework's interfaces. Revisit only
+if the named forms ever move off `Context`.
+
+Considered, no current use: explicit `encoding/json/v2` API migration (v1
+is already v2-backed; migrating risks upstream parity for zero need),
+`goroutineleak` profile as a test gate, stdlib `uuid` (realm keys are
+uint64), `simd` experiments.

@@ -20,6 +20,12 @@ impl Context {
     /// is bound to the context's fiber: it is withdrawn automatically when
     /// the fiber unloads, and every fiber injecting `name` is re-evaluated
     /// on both publication and withdrawal.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::DuplicateService`] when `name` is already
+    /// provided in this realm, and [`crate::Error::InactiveEffect`] when
+    /// this context has no active fiber or effect bag to bind to.
     pub fn provide_named(&self, name: &str, v: Value) -> crate::Result<Disposer> {
         core::enter(&self.core);
         let result = self.provide_inner(name, v);
@@ -31,6 +37,12 @@ impl Context {
     /// context's realm. The service is bound to the context's fiber exactly
     /// like a named service and rolls back with it. Providing the same type
     /// twice in one realm fails with [`crate::Error::DuplicateService`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::DuplicateService`] under the same conditions
+    /// as [`Context::provide_named`], plus [`crate::Error::InactiveEffect`]
+    /// when there is no active fiber to bind the service to.
     ///
     /// # Examples
     ///
@@ -66,17 +78,17 @@ impl Context {
                     provider: provider_name,
                 });
             }
-            core.props.insert(name.to_string(), ());
+            core.props.insert(name.to_string());
             core.store.insert(
                 key,
                 Impl {
                     fiber: fiber_id,
-                    value: Rc::clone(&v),
+                    value: v,
                 },
             );
         }
 
-        let bag = if let Some(bag) = self.bag() { bag } else {
+        let Some(bag) = self.bag() else {
             self.core.borrow_mut().store.remove(&key);
             return Err(crate::Error::InactiveEffect);
         };
@@ -119,10 +131,8 @@ impl Context {
     pub fn get_named(&self, name: &str) -> Option<Value> {
         let key = {
             let mut core = self.core.borrow_mut();
-            match self.find_isolate_override(name) {
-                Some(key) => key,
-                None => core.root_key(name),
-            }
+            self.find_isolate_override(name)
+                .unwrap_or_else(|| core.root_key(name))
         };
         let core = self.core.borrow();
         let imp = core.store.get(&key)?;
@@ -136,15 +146,19 @@ impl Context {
     /// The service of type `T` published in this context's realm. Fails when
     /// the service is missing, its provider is inactive or the value has an
     /// unexpected type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::MissingService`] when no active provider
+    /// exists for `T`, and [`crate::Error::TypeMismatch`] when the stored
+    /// value has another type.
     pub fn get<T: crate::sync::Shared>(&self) -> crate::Result<Rc<T>> {
-        match self.get_named(crate::events::service_name::<T>()) {
-            Some(v) => v.downcast::<T>().map_err(|_| crate::Error::TypeMismatch {
-                name: crate::events::service_name::<T>().to_string(),
-            }),
-            None => Err(crate::Error::MissingService(
-                crate::events::service_name::<T>().to_string(),
-            )),
-        }
+        let value = self
+            .get_named(crate::events::service_name::<T>())
+            .ok_or_else(|| crate::Error::MissingService(crate::events::service_name::<T>().to_string()))?;
+        value.downcast::<T>().map_err(|_| crate::Error::TypeMismatch {
+            name: crate::events::service_name::<T>().to_string(),
+        })
     }
 
     /// The service of type `T` when it is currently available, mirroring the
@@ -157,7 +171,7 @@ impl Context {
     /// Whether `name` is declared as a service in this context tree.
     #[must_use]
     pub fn has(&self, name: &str) -> bool {
-        self.core.borrow().props.contains_key(name)
+        self.core.borrow().props.contains(name)
     }
 }
 

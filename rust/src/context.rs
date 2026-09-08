@@ -106,6 +106,7 @@ impl Context {
     /// A child scope overriding the configuration of the named service,
     /// mirroring ctx.intercept upstream. Read the override back with
     /// [`Context::intercepted`].
+    #[must_use]
     pub fn intercept(&self, name: &str, config: Value) -> Self {
         let mut map = HashMap::new();
         map.insert(name.to_string(), config);
@@ -126,18 +127,20 @@ impl Context {
     /// mirroring ctx.intercepted upstream.
     #[must_use]
     pub fn intercepted(&self, name: &str) -> Option<Value> {
-        let mut data = Some(Rc::clone(&self.data));
+        let mut data = Some(&self.data);
         while let Some(d) = data {
             if let Some(map) = &d.intercept
-                && let Some(value) = map.borrow().get(name) {
-                    return Some(Rc::clone(value));
-                }
-            data = d.parent.clone();
+                && let Some(value) = map.borrow().get(name)
+            {
+                return Some(Rc::clone(value));
+            }
+            data = d.parent.as_ref();
         }
         None
     }
 
     /// A child scope with an event emission filter.
+    #[must_use]
     pub fn with_filter(&self, filter: Filter) -> Self {
         Self {
             core: Rc::clone(&self.core),
@@ -171,7 +174,7 @@ impl Context {
 
     /// Walk the scope chain for a realm override without touching the core.
     pub(crate) fn find_isolate_override(&self, name: &str) -> Option<IsolateKey> {
-        let mut data = Some(Rc::clone(&self.data));
+        let mut data = Some(&self.data);
         while let Some(d) = data {
             if let Some(isolate) = &d.isolate {
                 for (n, key) in isolate {
@@ -180,7 +183,7 @@ impl Context {
                     }
                 }
             }
-            data = d.parent.clone();
+            data = d.parent.as_ref();
         }
         None
     }

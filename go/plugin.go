@@ -67,11 +67,11 @@ func funcName(fn any) string {
 	pc := reflect.ValueOf(fn).Pointer()
 	if f := runtime.FuncForPC(pc); f != nil {
 		name := f.Name()
-		if i := strings.LastIndex(name, "/"); i >= 0 {
-			name = name[i+1:]
+		if _, after, ok := strings.CutLast(name, "/"); ok {
+			name = after
 		}
-		if i := strings.LastIndex(name, "."); i >= 0 {
-			name = name[i+1:]
+		if _, after, ok := strings.CutLast(name, "."); ok {
+			name = after
 		}
 		return strings.TrimSuffix(name, "-fm")
 	}

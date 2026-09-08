@@ -32,4 +32,4 @@ All three ports share one architecture:
   by the Go, Rust and Zig test suites; each must emit the exact trace in
   `golden/expected.txt`, pinning the shared semantics across ports.
 
-See [ROADMAP.md](../ROADMAP.md) for the parity matrix and planned work.
+See [ROADMAP.md](ROADMAP.md) for the parity matrix and planned work.

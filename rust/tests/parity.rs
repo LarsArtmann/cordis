@@ -6,7 +6,9 @@
 //! core test suite.
 
 use cordis::sync::RefCell;
-use cordis::sync::{BorrowExt as _, Rc};
+#[cfg(feature = "thread-safe")]
+use cordis::sync::BorrowExt as _;
+use cordis::sync::Rc;
 
 use cordis::{plugin, start_fn, value, Context, Error, EventOptions, FiberState, Next, Value};
 
@@ -109,7 +111,7 @@ fn waterfall_composes_and_short_circuits() {
     ctx.on_named("test", Rc::clone(&add_next), opts()).unwrap();
     ctx.on_named("test", add_next, opts()).unwrap();
     let terminal: Next = Rc::new(|_| Some(value(2)));
-    let result = ctx.waterfall("test", vec![value(1)], terminal).unwrap();
+    let result = ctx.waterfall("test", vec![value(1)], &terminal).unwrap();
     assert_eq!(*result.downcast::<i32>().unwrap(), 4);
 }
 
@@ -200,7 +202,7 @@ fn effect_on_inactive_context_fails() {
     let captured: Rc<RefCell<Option<Context>>> = Rc::new(RefCell::new(None));
     let p = plugin("p", {
         let captured = Rc::clone(&captured);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             captured.borrow_mut().replace(ctx.clone());
             Ok(())
         }
@@ -252,14 +254,14 @@ fn nested_plugins_and_registry() {
 
     let inner = plugin("inner", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Ok(())
         }
     });
     let mid = plugin("mid", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             start_fn(ctx, &inner, ())?;
             Ok(())
@@ -267,7 +269,7 @@ fn nested_plugins_and_registry() {
     });
     let outer = plugin("outer", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             start_fn(ctx, &mid, ())?;
             Ok(())
@@ -291,7 +293,7 @@ fn registry_delete_restores_snapshot() {
     let calls = Rc::new(RefCell::new(0));
     let p = plugin("p", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Ok(())
         }
@@ -316,14 +318,14 @@ fn plugin_error_rolls_back_partial_effects() {
     let calls = Rc::new(RefCell::new(0));
     let faulty = plugin("faulty", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Err(Error::Validation("boom".to_string()))
         }
     });
     let healthy = plugin("healthy", {
         let calls = Rc::clone(&calls);
-        move |ctx: &Context, _: &()| {
+        move |ctx: &Context, (): &()| {
             ctx.on_named("custom-event", counting_listener(&calls), opts())?;
             Ok(())
         }
@@ -516,7 +518,7 @@ fn status_events_emission_order() {
         .unwrap();
     }
 
-    let p = plugin("svc", |_ctx: &Context, _: &()| Ok(()));
+    let p = plugin("svc", |_ctx: &Context, (): &()| Ok(()));
     let fiber = start_fn(&ctx, &p, ()).unwrap();
     let started = vec![
         "svc:Pending-> Loading".to_string(),
@@ -578,7 +580,7 @@ fn snapshot_restore_roundtrip() {
 
     // Restoring an older snapshot disposes runtimes that appeared since.
     let after = ctx.snapshot();
-    let extra = plugin("extra", |_ctx: &Context, _: &()| Ok(()));
+    let extra = plugin("extra", |_ctx: &Context, (): &()| Ok(()));
     start_fn(&ctx, &extra, ()).unwrap();
     assert_eq!(ctx.snapshot().runtimes.len(), 2);
     ctx.restore(&after);

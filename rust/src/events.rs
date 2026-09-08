@@ -21,7 +21,9 @@ pub fn value<T: crate::sync::Shared>(v: T) -> Value {
     Rc::new(v)
 }
 
-/// The canonical name of the typed service `T`: its `type_name`. The typed
+/// The canonical name of the typed service `T`.
+///
+/// It is the `type_name`. The typed
 /// service API stores services under this name, so lookups resolve by type
 /// identity instead of hand written strings. Pass it to `FnPlugin::inject`
 /// and `Context::isolate` to depend on, or isolate, a typed service.
@@ -72,6 +74,11 @@ impl Context {
     /// internal namespace and dynamic event names. The subscription is bound
     /// to this context's fiber and rolls back with it; the returned Disposer
     /// removes it early.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] if this context's fiber is
+    /// not active or has no effect bag to attach the subscription to.
     pub fn on_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
         core::enter(&self.core);
         let result = self.on_inner(name, listener, options);
@@ -96,7 +103,7 @@ impl Context {
             }
         }
 
-        let bag = if let Some(bag) = self.bag() { bag } else {
+        let Some(bag) = self.bag() else {
             // Roll back the hook insertion.
             let mut core = self.core.borrow_mut();
             remove_hook(&mut core, name, &hook);
@@ -123,6 +130,11 @@ impl Context {
 
     /// Subscribe to the string event `name`, removing the listener after the
     /// first delivery.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
+    /// [`Context::on_named`].
     pub fn once_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
         let holder: Rc<RefCell<Option<Disposer>>> = Rc::new(RefCell::new(None));
         let fired = Rc::new(std::sync::atomic::AtomicBool::new(false));
@@ -177,6 +189,11 @@ impl Context {
     /// mirroring ctx.parallel upstream. The current implementation runs
     /// listeners sequentially because the crate is single-threaded; error
     /// aggregation semantics are identical.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::Validation`] joining every listener failure:
+    /// a returned error payload or a listener panic.
     pub fn parallel(&self, name: &str, args: &[Value]) -> crate::Result<()> {
         let mut errors = Vec::new();
         for hook in self.resolve_hooks(name) {
@@ -238,12 +255,22 @@ impl Context {
     /// );
     /// ctx.emit(Ping(42));
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
+    /// [`Context::on_named`].
     pub fn on<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.on_named(event_name::<E>(), typed_listener(listener), options)
     }
 
     /// Subscribe to the event type `E`, removing the listener after the
     /// first delivery.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
+    /// [`Context::on`].
     pub fn once<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
         self.once_named(event_name::<E>(), typed_listener(listener), options)
     }
@@ -258,12 +285,12 @@ impl Context {
     /// Compose listeners around a terminal function, mirroring
     /// ctx.waterfall upstream. Each listener receives the arguments followed
     /// by a `next` continuation; not calling `next` short-circuits the chain.
-    pub fn waterfall(&self, name: &str, args: Vec<Value>, terminal: Next) -> Option<Value> {
+    pub fn waterfall(&self, name: &str, args: Vec<Value>, terminal: &Next) -> Option<Value> {
         fn call(hooks: &[Rc<Hook>], args: Vec<Value>, terminal: &Next) -> Option<Value> {
-            let Some(hook) = hooks.first() else {
+            let Some((hook, tail)) = hooks.split_first() else {
                 return terminal(&args);
             };
-            let tail: Vec<Rc<Hook>> = hooks[1..].to_vec();
+            let tail: Vec<Rc<Hook>> = tail.to_vec();
             let terminal = Rc::clone(terminal);
             let next: Next = Rc::new(move |next_args| call(&tail, next_args.to_vec(), &terminal));
             let mut rest = args;
@@ -271,7 +298,7 @@ impl Context {
             (hook.listener)(&rest)
         }
         let hooks = self.resolve_hooks(name);
-        call(&hooks, args, &terminal)
+        call(&hooks, args, terminal)
     }
 
     /// The current cleanup collection target: the enclosing effect bag while
@@ -299,6 +326,9 @@ fn remove_hook(core: &mut Core, name: &str, hook: &Rc<Hook>) {
 }
 
 /// Wrap a typed listener into the type erased Listener shape.
+// A typed/untyped mix on one event name is a programmer error; the
+// framework's own dispatch always passes exactly one payload of `E`.
+#[allow(clippy::panic)]
 fn typed_listener<E: crate::sync::Shared>(listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static) -> Listener {
     Rc::new(move |args: &[Value]| {
         let first = args

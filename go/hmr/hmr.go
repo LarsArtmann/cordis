@@ -153,14 +153,19 @@ func SwapType[C any](m *Manager, name string, apply func(ctx *cordis.Context, co
 // swap already touched back onto it, mirroring the upstream rollback of
 // failed re-imports. The generation does not count the failed swap.
 func (m *Manager) rollback(name string, previous loader.Registration, found bool, reloaded []string, cause error) error {
+	var restoreErr error
 	m.mu.Lock()
 	if found {
-		_, _, _ = m.resolver.Replace(name, previous)
+		_, _, restoreErr = m.resolver.Replace(name, previous)
 	}
 	m.gens[name]--
 	m.mu.Unlock()
 
 	errs := []error{fmt.Errorf("hmr: swap of %s failed: %w", name, cause)}
+	if restoreErr != nil {
+		errs = append(errs, fmt.Errorf("hmr: rollback of %s: %w", name, restoreErr))
+		slog.Warn("hmr: rollback could not restore registration", "name", name, "err", restoreErr)
+	}
 	for _, id := range reloaded {
 		if err := m.tree.Refresh(id); err != nil {
 			errs = append(errs, fmt.Errorf("hmr: rollback of entry %s: %w", id, err))

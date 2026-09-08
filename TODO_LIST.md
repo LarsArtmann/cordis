@@ -92,11 +92,11 @@ Short- and mid-term actionable tasks. Long-term direction lives in
       sync refactor; clippy scope moved to the crate lint table)
 - [x] `FEATURES.md` and `docs/DOMAIN_LANGUAGE.md`
 - [x] Push + first green runs:
-      https://github.com/LarsArtmann/cordis/actions/runs/33877878539 and
-      https://github.com/LarsArtmann/cordis/actions/runs/33879875106
+      <https://github.com/LarsArtmann/cordis/actions/runs/33877878539> and
+      <https://github.com/LarsArtmann/cordis/actions/runs/33879875106>
 - [x] Re-record a green run for the 2026-09-04 evening batch (timer,
       group, interception events, golden #2/#3, Rust thread-safe):
-      https://github.com/LarsArtmann/cordis/actions/runs/33932269590 and
+      <https://github.com/LarsArtmann/cordis/actions/runs/33932269590> and
       the full evening set recorded in
       docs/status/2026-09-04_22-48_pass-3-m15-m16-m22-deadlock-root-cause.md
 - [x] PORTS.md: cross-port API comparison table (typed service/event/

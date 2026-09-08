@@ -179,7 +179,7 @@ impl crate::context::Context {
                 .collect()
         };
         for (base, config) in restart_bodies {
-            let _ = crate::plugin::start_base(self, base, config);
+            let _ = crate::plugin::start_base(self, &base, config);
         }
         // Fibers of surviving runtimes that died since the snapshot come
         // back through a restart request; the state machine re-runs the

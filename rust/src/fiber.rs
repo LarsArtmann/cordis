@@ -55,6 +55,9 @@ pub struct EffectMeta {
     pub children: Vec<Self>,
 }
 
+// The lifecycle flags are independent state-machine bits, not variants of
+// one set: clippy::struct_excessive_bools is deliberately allowed here.
+#[allow(clippy::struct_excessive_bools)]
 pub struct FiberData {
     pub id: FiberId,
     pub uid: i64,
@@ -168,10 +171,7 @@ impl Fiber {
     pub fn effects(&self) -> Vec<EffectMeta> {
         let data = self.data();
         let f = data.borrow();
-        match &f.bag {
-            Some(bag) => Bag::meta(bag),
-            None => Vec::new(),
-        }
+        f.bag.as_ref().map_or_else(Vec::new, Bag::meta)
     }
 
     pub(crate) fn assert_active(&self) -> crate::Result<()> {
@@ -202,7 +202,10 @@ impl Fiber {
             let runtime_id = {
                 let data = fiber.data();
                 let f = data.borrow();
-                f.runtime.unwrap()
+                match f.runtime {
+                    Some(runtime_id) => runtime_id,
+                    None => return,
+                }
             };
             {
                 let mut core = fiber.core.borrow_mut();
@@ -237,6 +240,10 @@ impl Fiber {
     }
 
     /// Unload and reload the fiber with its current config.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed.
     pub fn restart(&self) -> crate::Result<()> {
         self.assert_active()?;
         core_enter_leave(self, |fiber| {
@@ -254,10 +261,22 @@ impl Fiber {
     /// the drain queue, so cascading dependency updates never observe torn
     /// states.
     /// Typed variant of [`Fiber::update`]: replaces the config with `C`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
+    /// [`Fiber::update`].
     pub fn update_config<C: crate::sync::Shared>(&self, config: C) -> crate::Result<()> {
         self.update(crate::events::value(config))
     }
 
+    /// Replace the fiber's config and restart it. The restart settles through
+    /// the drain queue, so cascading dependency updates never observe torn
+    /// states.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed.
     pub fn update(&self, config: crate::events::Value) -> crate::Result<()> {
         self.assert_active()?;
         core_enter_leave(self, |fiber| {
@@ -283,6 +302,11 @@ impl Context {
     /// Attach a cleanup to the current effect scope: the enclosing effect
     /// body while one runs, otherwise the fiber itself. Cleanups run on
     /// rollback, last in, first out.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed or
+    /// there is no effect bag to attach to.
     pub fn attach(&self, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = (|| {
@@ -302,6 +326,13 @@ impl Context {
     /// context passed to `f` become children of this effect and roll back
     /// together, last in, first out. On error or panic everything `f`
     /// registered rolls back immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed or
+    /// there is no enclosing effect bag, and the error returned by `f` (or
+    /// [`crate::Error::PluginFailed`] if `f` panicked) after rolling the
+    /// effect back.
     pub fn effect(&self, label: &str, f: impl FnOnce(&Self) -> crate::Result<()>) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = self.effect_inner(label, f);
@@ -311,9 +342,8 @@ impl Context {
 
     fn effect_inner(&self, label: &str, f: impl FnOnce(&Self) -> crate::Result<()>) -> crate::Result<Disposer> {
         self.fiber().assert_active()?;
-        let parent = match self.bag() {
-            Some(bag) => bag,
-            None => return Err(crate::Error::InactiveEffect),
+        let Some(parent) = self.bag() else {
+            return Err(crate::Error::InactiveEffect);
         };
         let child = Bag::new();
         let entry = Bag::push_node(&parent, label.to_string(), Rc::clone(&child));

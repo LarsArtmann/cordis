@@ -67,7 +67,7 @@ func Accessor[S any, V any](ctx *Context, name string, get func(*Context, S) (V,
 		return err
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cordis: accessor of %s: %w", sourceName, err)
 	}
 	member := &Member[V]{accessor: fiber}
 	if len(set) > 0 {

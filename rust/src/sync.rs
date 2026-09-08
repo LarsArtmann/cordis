@@ -1,4 +1,6 @@
-//! The sharing strategy of one crate build. By default the tree is
+//! The sharing strategy of one crate build.
+//!
+//! By default the tree is
 //! single-threaded (`Rc`/`RefCell`, zero synchronization cost). With the
 //! `thread-safe` feature the same tree becomes shareable across threads:
 //! shared cells are `Arc<Mutex<T>>` and callbacks are `Send + Sync`.
@@ -22,7 +24,9 @@ pub type RefCell<T> = std::cell::RefCell<T>;
 #[cfg(feature = "thread-safe")]
 pub type RefCell<T> = std::sync::Mutex<T>;
 
-/// Uniform access to the shared cell: `borrow` for reading, `borrow_mut`
+/// Uniform access to the shared cell.
+///
+/// `borrow` for reading, `borrow_mut`
 /// for writing. On `RefCell` these are the native methods; on `Mutex` they
 /// lock and panic on poisoning, which only happens if a panic escapes the
 /// framework's guarded plugin bodies.
@@ -74,7 +78,9 @@ impl<T> BorrowExt<T> for RefCell<T> {
     }
 }
 
-/// The auto-trait requirement for values that cross the tree: nothing in
+/// The auto-trait requirement for values that cross the tree.
+///
+/// Nothing in
 /// the single-threaded build, `Send + Sync` under the `thread-safe`
 /// feature. Plugin configs, service values and event payloads must
 /// implement it.

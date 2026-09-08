@@ -10,6 +10,7 @@ use crate::sync::BorrowExt as _;
 use crate::context::Context;
 use crate::events::{Hook, Value};
 use crate::fiber::{FiberData, FiberId};
+use std::collections::HashSet;
 
 /// Realm keys are the Rust counterpart of the per-realm symbols upstream.
 pub type IsolateKey = u64;
@@ -137,11 +138,11 @@ impl Bag {
 
     /// Drain the bag: detach all items and execute them in reverse order.
     pub fn drain(core: &Rc<RefCell<Core>>, bag: &Rc<RefCell<Self>>) {
-        let mut items: Vec<Rc<RefCell<Entry>>> = {
+        let items: Vec<Rc<RefCell<Entry>>> = {
             let mut b = bag.borrow_mut();
             std::mem::take(&mut b.items)
         };
-        for entry in items.drain(..).rev() {
+        for entry in items.into_iter().rev() {
             Self::execute(core, &entry);
         }
     }
@@ -169,7 +170,7 @@ impl Bag {
 pub struct Core {
     pub hooks: HashMap<String, Vec<Rc<Hook>>>,
     pub store: HashMap<IsolateKey, Impl>,
-    pub props: HashMap<String, ()>,
+    pub props: HashSet<String>,
     pub keys: HashMap<String, IsolateKey>,
     /// Shared-isolate label table keyed by the (name, label) pair, so no
     /// string formatting can ever make two distinct labels collide.
@@ -181,7 +182,7 @@ pub struct Core {
     /// can restart them with their last config. Restarts run on the
     /// context calling restore.
     pub stash: HashMap<u64, (Rc<PluginBase>, crate::events::Value)>,
-    pub counter: usize,
+    pub counter: i64,
 
     /// Re-entrant API depth: transitions drain when the outermost public
     /// call returns.
@@ -199,7 +200,7 @@ impl Core {
         Rc::new(RefCell::new(Self {
             hooks: HashMap::new(),
             store: HashMap::new(),
-            props: HashMap::new(),
+            props: HashSet::new(),
             keys: HashMap::new(),
             labels: HashMap::new(),
             last_key: 0,
@@ -215,22 +216,22 @@ impl Core {
     }
 
     pub const fn next_uid(&mut self) -> i64 {
-        self.counter += 1;
-        self.counter as i64
+        self.counter = self.counter.wrapping_add(1);
+        self.counter
     }
 
     pub fn root_key(&mut self, name: &str) -> IsolateKey {
         if let Some(key) = self.keys.get(name) {
             return *key;
         }
-        self.last_key += 1;
+        self.last_key = self.last_key.wrapping_add(1);
         self.keys.insert(name.to_string(), self.last_key);
         self.last_key
     }
 
     /// Allocate a fresh realm key that can never collide with a named realm.
     pub const fn fresh_key(&mut self) -> IsolateKey {
-        self.last_key += 1;
+        self.last_key = self.last_key.wrapping_add(1);
         self.last_key
     }
 
@@ -241,18 +242,21 @@ impl Core {
             .labels
             .entry((name.to_string(), label.to_string()))
             .or_insert_with(|| {
-                self.last_key += 1;
+                self.last_key = self.last_key.wrapping_add(1);
                 self.last_key
             })
     }
 
-    pub fn alloc_fiber(&mut self, data: FiberData) -> FiberId {
+    pub fn alloc_fiber(&mut self, mut data: FiberData) -> FiberId {
         let id = FiberId(self.fibers.len());
+        data.id = id;
         self.fibers.push(Some(Rc::new(RefCell::new(data))));
-        self.fibers[id.0].as_ref().unwrap().borrow_mut().id = id;
         id
     }
 
+    /// Panics only if `id` was never allocated; slots are never emptied
+    /// once pushed, so a live `FiberId` always resolves.
+    #[allow(clippy::indexing_slicing, clippy::expect_used)]
     pub fn fiber(&self, id: FiberId) -> Rc<RefCell<FiberData>> {
         Rc::clone(self.fibers[id.0].as_ref().expect("fiber arena entry"))
     }
@@ -310,7 +314,8 @@ impl Core {
 
 /// Enter a public API boundary.
 pub fn enter(core: &Rc<RefCell<Core>>) {
-    core.borrow_mut().depth += 1;
+    let mut c = core.borrow_mut();
+    c.depth = c.depth.wrapping_add(1);
 }
 
 /// Leave a public API boundary, draining pending fiber transitions when the
@@ -318,7 +323,7 @@ pub fn enter(core: &Rc<RefCell<Core>>) {
 pub fn leave(core: &Rc<RefCell<Core>>) {
     let should_drain = {
         let mut c = core.borrow_mut();
-        c.depth -= 1;
+        c.depth = c.depth.saturating_sub(1);
         if c.depth == 0 && !c.draining {
             c.draining = true;
             true
