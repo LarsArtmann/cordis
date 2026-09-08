@@ -30,7 +30,16 @@ or run directly:
   ./...`, e.g. buildflow's go-generate/test-race steps) resolves; do not
   delete it and do not put port code in it — the port lives in the nested
   `go/` module.
-- Rust: `cd rust && cargo test` (clippy clean, `cargo clippy --all-targets`)
+- Rust: `cd rust && cargo test` (clippy clean on both feature variants:
+  `cargo clippy --all-targets [--features thread-safe]`, gated in the flake
+  check/apps and ports.yml). Coverage baseline: 86.4% lines / 86.1% regions
+  (cargo-llvm-cov 0.8.5, 2026-09-08; code files 83–90%, `sync.rs` is cfg
+  plumbing and `lib.rs` doc-only) next to Go's ≈90% statement coverage —
+  reproduce with `nix shell nixpkgs#cargo-llvm-cov nixpkgs#llvm -c sh -c
+  'export LLVM_COV=$(command -v llvm-cov) LLVM_PROFDATA=$(command -v
+  llvm-profdata); cd rust && cargo llvm-cov --summary-only'`. Benchmarks:
+  `cargo bench` (`benches/core.rs`, mirrors the six `go/bench_test.go`
+  hot paths, dependency-free harness, best-of-five).
 - Zig: `cd zig && zig build test` (leak-checked via testing.allocator);
   `cd zig && zig build docs` must also pass — the doc-emission gate is wired
   into the flake's zig check next to `zig fmt --check`.
@@ -272,9 +281,12 @@ on 2026-09-08).
 - Rust: `pedantic`+`nursery` are `deny` (Cargo.toml). All findings were
   cleared under nixpkgs rustc 1.97 on 2026-09-08; expect new nursery lints
   after toolchain bumps (fix code, don't weaken the config). The
-  `thread-safe` feature still carries pre-existing `significant_drop`
-  nursery findings — clippy is only gated on default features; both
-  feature variants' test suites are green.
+  `thread-safe` feature's `significant_drop` findings were cleared the same
+  day: lock scopes were tightened where semantics-preserving (`queue`,
+  `once`, `get_named`, `restore`, the state-machine merges) and three
+  snapshot-consistency holds plus the `deps_ready` snapshot keep explicit
+  allowlists with rationale — `cargo clippy --all-targets --features
+  thread-safe` is green and gated in the flake and Ports CI.
 - The `thread-safe` Rust build swaps `RefCell` for `std::sync::Mutex`
   (non-reentrant). **Never hold a core borrow across another core borrow** —
   nested same-thread locking deadlocks instead of panicking

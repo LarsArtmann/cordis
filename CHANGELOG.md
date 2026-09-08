@@ -52,9 +52,34 @@ in `packages/` track upstream and are not released from this fork.
   `errors.Is`-preserved cause).
 - Go 1.27 adoption: `testing/synctest` virtual-clock timer tests,
   `strings.CutLast` in plugin name derivation.
+- Rust: `internal/plugin` + `internal/update` interception events
+  (`EVENT_PLUGIN`/`EVENT_UPDATE`) with the Go listener contract — the
+  plugin event fires before the fiber's first transition and again before
+  disposal rolls its effects back; the update event runs as a waterfall
+  (`fiber, config, no_save, next`) whose terminal stores the settled
+  config and queues the restart. Root-fiber guards arrive with it:
+  updating the root now returns `Error::RootUpdate` and restarting it
+  rolls the root scope back in place with its identity intact (both
+  previously drained the root's effects and corrupted its uid), and
+  `Fiber::name()` keeps the captured plugin name for dying fibers
+  instead of falling back to `"root"`.
+- Rust: `benches/core.rs` mirroring the six `go/bench_test.go` hot paths
+  (`cargo bench`, dependency-free harness) and a cargo-llvm-cov coverage
+  baseline of 86.4% lines / 86.1% regions (2026-09-08) next to Go's
+  ≈90% statement coverage. The Go 1.27 "up to 30% faster small
+  allocations" release-note claim was verified against go.dev and
+  reproduced locally (20–37% on quiet A/B runs, 1.26.7 vs 1.27), with
+  numbers recorded in ROADMAP.
 
 ### Changed
 
+- Rust thread-safe build: lock scopes tightened where semantics-preserving
+  (`queue`, `notify_dependents`, `once`, `get_named`, `restore`, the state
+  machine's guard merges); the snapshot-consistency reads and the
+  `deps_ready` dependency check keep explicit allowlisted holds with
+  rationale. `cargo clippy --all-targets --features thread-safe` is green
+  and now gated in the flake check, the flake apps and Ports CI, so
+  neither feature variant can regress silently.
 - Rebased onto upstream `caab04e` (2026-09-08): inherited the three-stage
   reload (#111), include journal reconciliation (#121), bare-specifier
   resolution (#123) and `hmr.watch()` (#128), plus the upstream

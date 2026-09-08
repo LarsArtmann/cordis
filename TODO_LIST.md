@@ -5,14 +5,6 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 
 **Prime directive: native-max APIs, not TS 1:1 ports.**
 
-## Rust
-
-- [ ] `cargo-llvm-cov` coverage baseline next to the Go numbers (source:
-      docs/status/2026-09-08_04-32 §f22)
-- [ ] `cargo bench` to substantiate or hedge the "up to 30% faster small
-      allocations" claim recorded in ROADMAP (source:
-      docs/status/2026-09-08_04-32 §f23)
-
 ## Repo
 
 - [ ] Verify green CI on GitHub for the line carrying the new `flake` and

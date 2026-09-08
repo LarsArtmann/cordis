@@ -10,27 +10,27 @@ plus the Go (flagship), Rust and Zig ports. Status vocabulary:
 
 ## Core semantics
 
-| Feature                                                         | Go                             | Rust                                                | Zig                       |
-| --------------------------------------------------------------- | ------------------------------ | --------------------------------------------------- | ------------------------- |
-| Context tree (New/Extend/Isolate/Intercept/WithFilter)          | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Drain queue (synchronous settling)                              | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Batch transactions                                              | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Effect tree: nested, labeled, LIFO rollback, introspection      | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Events: emit / parallel / serial / bail / waterfall             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Event filters + global listeners                                | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Fiber states (pending/loading/active/failed/disposed/unloading) | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Dispose / restart / update                                      | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Inject reactivity (pending → unload → reload in place)          | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Interception events (`internal/get\|set\|listener\|dispatch\|plugin\|update`) | FULLY_FUNCTIONAL | PARTIALLY_FUNCTIONAL (`plugin`, `update`; `get\|set\|listener\|dispatch` planned) | PLANNED                   |
-| Status events (`internal/status`)                               | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
-| Registry view (size / has / delete)                             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Registry snapshot / restore                                     | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
-| Config validation                                               | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | PLANNED                   |
-| Fiber Await (Go: plus stdlib-context variant)                   | FULLY_FUNCTIONAL               | n/a (drain settles synchronously)                   | —                         |
-| Logger service (levels, exporters, buffer)                      | FULLY_FUNCTIONAL               | PLANNED                                             | PLANNED                   |
-| Root fiber restart semantics                                    | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Deterministic sibling notification order                        | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                    | FULLY_FUNCTIONAL          |
-| Concurrent access safety                                        | FULLY_FUNCTIONAL (race-tested) | FULLY_FUNCTIONAL via the opt-in `thread-safe` build | Single-threaded by design |
+| Feature                                                                       | Go                             | Rust                                                                              | Zig                       |
+| ----------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------- | ------------------------- |
+| Context tree (New/Extend/Isolate/Intercept/WithFilter)                        | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Drain queue (synchronous settling)                                            | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Batch transactions                                                            | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Effect tree: nested, labeled, LIFO rollback, introspection                    | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Events: emit / parallel / serial / bail / waterfall                           | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Event filters + global listeners                                              | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Fiber states (pending/loading/active/failed/disposed/unloading)               | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Dispose / restart / update                                                    | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Inject reactivity (pending → unload → reload in place)                        | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Interception events (`internal/get\|set\|listener\|dispatch\|plugin\|update`) | FULLY_FUNCTIONAL               | PARTIALLY_FUNCTIONAL (`plugin`, `update`; `get\|set\|listener\|dispatch` planned) | PLANNED                   |
+| Status events (`internal/status`)                                             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | PLANNED                   |
+| Registry view (size / has / delete)                                           | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Registry snapshot / restore                                                   | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | PLANNED                   |
+| Config validation                                                             | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | PLANNED                   |
+| Fiber Await (Go: plus stdlib-context variant)                                 | FULLY_FUNCTIONAL               | n/a (drain settles synchronously)                                                 | —                         |
+| Logger service (levels, exporters, buffer)                                    | FULLY_FUNCTIONAL               | PLANNED                                                                           | PLANNED                   |
+| Root fiber restart semantics                                                  | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Deterministic sibling notification order                                      | FULLY_FUNCTIONAL               | FULLY_FUNCTIONAL                                                                  | FULLY_FUNCTIONAL          |
+| Concurrent access safety                                                      | FULLY_FUNCTIONAL (race-tested) | FULLY_FUNCTIONAL via the opt-in `thread-safe` build                               | Single-threaded by design |
 
 ## Native API layer (phase 2)
 
