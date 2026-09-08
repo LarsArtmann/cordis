@@ -158,3 +158,16 @@
 ---
 
 _Format note: user explicitly requested `.md` at `docs/status/`; the status-report skill's canonical format is styled HTML — override honored per user instruction, flagged per skill spec. No commit: user did not request one, and the unmerged index makes committing impossible/hazardous. The brutal-self-review skill's separate HTML report at docs/reviews/ was folded into this file for the same reason._
+
+---
+
+## RESOLUTION APPENDIX (annotated 2026-09-08 ~06:00 CEST)
+
+Section (g) answers arrived; the hazard is closed. Current HEAD: `61ec9f9`, working tree clean.
+
+1. **Q1 (UU conflicts) → resolved by this session.** `git add` recorded my verified worktree versions for `go/go.mod`, `ROADMAP.md`, `go/timer/timer_test.go`; the concurrent recovery session then absorbed them into `51cddf2` ("Recover rebase fallout..."), and its own report landed as `61ec9f9`.
+2. **Q2 (toolchain direction) → pin `go_1_27`, kept.** Ruling: `go.mod 1.27` + nixpkgs default at 1.26.7 means a relaxed pin breaks `nix build .#checks.*.go` today. HEAD's flake.nix carries `go_1_27` in all three sites (reformatted by nixfmt); revisit relaxing when nixpkgs default reaches 1.27.
+3. **Integrity diff (backups vs HEAD):** `go/go.mod`, `go/timer/timer_test.go`, `go/plugin.go` byte-identical. `flake.nix` / `ROADMAP.md` / `AGENTS.md` carry additive-or-format-only deltas from the recovery session (nixfmt reflow, devShell `gcc` + shellHook GOCACHE fix, root Go module stub note, upstream rebase facts, "appliable"→"applicable"). Nothing of this session's work was lost or altered semantically.
+4. **Verification re-run post-resolution (this session, not trusted from the other):** `go vet` + full suite green across all 6 packages (core, group, hmr, loader, timer ×2), golden canary green. `nix flake check` green is claimed by `61ec9f9`'s session.
+5. **Cross-reference:** the same hours produced the other session's report (buildflow recovery, upstream rebase to `caab04e`, root Go module stub) — read `61ec9f9`'s status report alongside this one; the two document complementary halves of one tangled night.
+6. **New info affecting section (f):** item 16 (aarch64 checks) is the known buildflow platform-mismatch blocker, upstream-side per the other report — re-route that item accordingly. The root `go.mod` stub answers part of item 37's module-layout question (repo root is a stub module; the port stays in `go/`).
