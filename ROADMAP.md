@@ -121,13 +121,15 @@ Bounded repo tasks (CI guards, lint gates, post-push verification) live in
 `TODO_LIST.md`; `nix flake check` remains the local port gate until a CI
 job enforces it remotely.
 
-### Upstream sync (2026-09-08)
+### Upstream sync (2026-09-08, pin bumped 2026-09-09)
 
 `main` was rebased onto upstream `caab04e`; the fork's TS tree now carries
 the three-stage reload (#111), include journal (#121), bare-specifier
 resolution (#123), `hmr.watch()` (#128) and the upstream `3-stage-hmr`
 fix branch replayed on top (`b4650df`: commit-based loader entry changes,
-atomic include writes). Local TS suite: 248/248. The parity gaps this
+atomic include writes). Local TS suite: 248/248. On 2026-09-09 the pin
+moved to `f8ea3cd` (rc.10 version set) — a manifest-only upstream delta,
+adopted byte-for-byte. The parity gaps this
 opens for the ports are tracked in the Go section above.
 
 ### Open decisions (user-gated)
@@ -136,8 +138,12 @@ opens for the ports are tracked in the Go section above.
   stay lock-free tracking upstream; a missing lockfile broke installs
   twice in fork history.
 - **TS toolchain stance:** track upstream exactly (their pins, their
-  breakage) vs fork-pinned dependencies; currently the fork matches
-  upstream except a deliberate `@types/node ^26.5.0` bump.
+  breakage) vs fork-pinned dependencies. Resolved in practice 2026-09-09:
+  the fork matches upstream exactly except a deliberate
+  `@types/node ^26.5.0` bump, now machine-enforced by the
+  `upstream-parity` manifest guard. TypeScript 7 is empirically fatal for
+  the dts build (TS2665, three red CI runs on 2026-09-08) — re-evaluate
+  only after upstream adopts a TS 7 that builds their own workspace.
 - **hmr fixture style:** ~~keep fixtures byte-identical to upstream (their
   specs string-replace into them) vs fork-styling fixtures and rewriting
   the specs' replace patterns.~~ Resolved 2026-09-08: fixtures (all of

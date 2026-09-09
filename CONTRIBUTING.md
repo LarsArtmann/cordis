@@ -45,11 +45,15 @@ against a pinned upstream commit:
   to the pin.
 - TS/JS may differ from the pin only by prettier-normalizable formatting;
   both trees are normalized with the pinned prettier version and compared.
-- `**/package.json` is excluded (upstream bumps versions continuously;
-  manifest state is reviewed per sync).
+- `**/package.json` is excluded from the byte and semantic guards by design
+  (manifests are the fork's deliberate divergence surface); the manifest
+  guard (`scripts/manifest-parity.mjs`, same CI job) fails CI on any
+  manifest difference against the pin outside its allowlist (currently
+  only root `@types/node`).
 
-When you sync `packages/**` to a newer upstream state, bump `UPSTREAM_PIN`
-in `.github/workflows/ports.yml` in the same commit.
+When you sync `packages/**` to a newer upstream state, bump
+`.github/UPSTREAM_PIN` (one-line tracked file) and adopt the pin's
+workspace manifests in the same commit.
 
 ## Reporting Issues
 

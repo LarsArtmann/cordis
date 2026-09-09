@@ -84,17 +84,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # cordiverse/cordis main at the fork's last packages/** sync. Bump this
-      # SHA in the same commit as every packages/** sync.
-      UPSTREAM_PIN: caab04ecf5c5718b974a4b556a8e29d830defd1b
       PRETTIER_VERSION: 3.9.6
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Read upstream pin
+        # The pin lives in .github/UPSTREAM_PIN (one line, the full SHA) so
+        # pin bumps review as one-line diffs. Bump it in the same commit as
+        # every packages/** sync.
+        run: echo "UPSTREAM_PIN=$(cat .github/UPSTREAM_PIN)" >> "$GITHUB_ENV"
       - name: Fetch upstream pin
         run: |
           git remote add upstream https://github.com/cordiverse/cordis.git
           git fetch --depth 1 upstream "$UPSTREAM_PIN"
+      - name: Manifest guard - package.json may diverge only on allowlisted keys
+        # The byte and semantic guards below exclude package.json on purpose
+        # (manifests are the fork's deliberate divergence surface); this step
+        # is the machine gate for that surface. Accidental dependency bumps
+        # fail here instead of breaking yarn install for everyone.
+        run: node scripts/manifest-parity.mjs
+      - name: hmr fixture canary - spec replace literals must exist in fixtures
+        # Specs mutate fixture sources via literal .replace() calls; if a
+        # fixture reformat drops a literal, every reload test times out in
+        # waitFor (~190 s) instead of failing here in milliseconds.
+        run: node scripts/hmr-fixture-canary.mjs
       - name: Byte guard - non-TS files must match the pin exactly
         run: |
           git diff --exit-code "$UPSTREAM_PIN" -- packages/ \

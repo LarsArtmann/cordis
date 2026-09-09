@@ -7,14 +7,12 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 
 ## Upstream tracking
 
-- [ ] Validate the deliberate manifest divergence through CI: the working
-      tree now runs yarn 4.18.0 + TS ^7.0.2 + vitest ^5 (248/248 locally,
-      2026-09-08) while upstream pins yarn 4.14.1 + TS ^5.9.3 + vitest ^4.
-      The `upstream-parity` job has not seen the reformat + fixture restore
-      yet — push, confirm it is green, and only then decide whether to
-      sync `packages/**` to upstream `f8ea3cd` (rc.10 version set) and bump
-      `UPSTREAM_PIN` (`.github/workflows/ports.yml:89`) in the same commit
-      (source: docs/status/2026-09-08_21-18 §b2/§c1/§f2).
+Nothing pending — the pin is `f8ea3cd` (bumped 2026-09-09 with its rc.10
+workspace manifests adopted byte-for-byte), the manifest divergence is back
+to the single deliberate `@types/node ^26.5.0` delta, and CI is green on the
+set (the 2026-09-08 bump-and-restyle divergence turned out to break the dts
+build under TypeScript 7 and was reverted; see AGENTS.md → TS workspace
+gotchas).
 
 ## Parity
 
@@ -32,26 +30,16 @@ crate docs narrate the internal events and the root guard (all landed
 
 ## Repo guards and small fixes
 
-CONTESTED (2026-09-08, see commit `2ac1be1`): the three `packages/**` /
-`ports.yml` items below are entangled with a separate session's
-bump-and-restyle commit on `main` that contradicts the repo's documented
-pins. Resolve that first, then pick these back up.
+Nothing pending (2026-09-09): the hmr fixture/spec replace-literal canary
+(`scripts/hmr-fixture-canary.mjs`) and the manifest divergence guard
+(`scripts/manifest-parity.mjs`) are wired into the `upstream-parity` CI job,
+`UPSTREAM_PIN` lives in the tracked one-line `.github/UPSTREAM_PIN` file the
+workflow reads, and the `package.json` exclusion is a documented, guarded
+decision (allowlist: root `@types/node` only).
 
-- [ ] Fixture/spec replace-literal canary in `packages/hmr`: a tiny test
-      asserting every spec `.replace()` literal exists in its fixture —
-      catches the fixture-coupling hazard in milliseconds instead of ~190 s
-      of waitFor timeouts (source: docs/status/2026-09-08_21-18 §f5).
-- [ ] Move `UPSTREAM_PIN` from `ports.yml` YAML into a tracked one-line file
-      the workflow reads, so pin bumps review as one-line diffs
-      (source: docs/status/2026-09-08_21-18 §f6).
-- [ ] Decide and document the `package.json` exclusion in `upstream-parity`
-      — the one unguarded drift surface left (source:
-      docs/status/2026-09-08_21-18 §f8).
-
-Done 2026-09-08: the markdownlint config is now a real gate (flake
-`markdown` check + `test-markdown` app; trailing commas fixed,
-`packages/` excluded), and GitHub Release pages exist for `go/v0.1.0` and
-`rust/v0.2.0`.
+Earlier: the markdownlint gate (flake `markdown` check + `test-markdown`
+app) and GitHub Release pages for `go/v0.1.0` and `rust/v0.2.0` landed
+2026-09-08.
 
 ## User-gated
 

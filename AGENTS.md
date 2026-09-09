@@ -62,39 +62,62 @@ system-profile copy is built with Go 1.26 and warns about x/tools skew.
 
 ## TS workspace gotchas (learned in the 2026-09-07 upstream rebase)
 
-- **Toolchain pins are load-bearing.** VERIFIED WORKING SET (2026-09-08
-  evening, full 248/248 suite): `packageManager yarn@4.18.0` — 4.14.1
-  cannot install TypeScript 7 (its builtin compat patch lstats the missing
-  `lib/_tsc.js`; fixed in yarn 4.17.1, yarn#7190/#7216); `typescript
-  ^7.0.2` (builds via yakumo); `vitest ^5.0.0`; **`vite ^7.3.2` — vite 8
-  breaks the suite** (module-runner `SyntaxError` on decorator.spec.ts and
-  hmr waitFor timeouts; both vanish on vite 7); `eslint ^10.10.0` (no gate
-  exercises it); `esbuild ^0.28.2`; js-yaml must stay `^4.1.0` (upstream
-  pin — js-yaml 5 breaks `new yaml.Type(...)` at build time, hit twice
-  now). There is NO yarn.lock by design (upstream does the same), so every
-  install re-resolves: a bad bump breaks `yarn install` for everyone,
-  immediately. These pins are a deliberate fork divergence from upstream
-  (upstream runs yarn 4.14.1 + TS ^5.9.3 + vitest ^4.1.5); re-verify the
-  set after every packages sync.
+- **Toolchain pins are load-bearing.** VERIFIED WORKING SET (2026-09-09,
+  from-scratch install + CI-sequence build + 248/248 suite): the
+  manifests are the upstream pin's bytes and the fork's ONLY delta is root
+  `@types/node ^26.5.0` — yarn 4.14.1, TypeScript ^5.9.3, vitest ^4.1.5,
+  vite ^7.3.2, esbuild ^0.28.0, eslint ^8.57.1 (all upstream values).
+  The `upstream-parity` CI job enforces this via
+  `scripts/manifest-parity.mjs` (manifest guard with an in-script
+  allowlist). **TypeScript 7 is fatal, confirmed twice** (2026-09-08):
+  7.0.2 compiles tests (vitest does not typecheck) but the dts build dies
+  with `TS2665: Module 'cordis' resolves to an untyped module at
+  lib/index.js` — the workspace's cross-package `declare module 'cordis'`
+  augmentation does not resolve under TS 7's rewritten resolver; three CI
+  runs were red on it. yarn 4.18.0 was only ever needed to make the TS 7
+  tarball installable at all — with TS 5.9.3 stay on upstream's yarn
+  4.14.1. js-yaml 5 remains fatal for the include build (`yaml.Type` gone;
+  hit twice). There is NO yarn.lock by design (upstream does the same), so
+  every install re-resolves: a bad bump breaks `yarn install` for everyone,
+  immediately. TS dep bumps are upstream decisions — the manifest guard
+  fails CI on divergence outside the allowlist.
+- **Single-step `yarn build` from a clean tree fails; the CI two-step
+  sequence is green.** From a fully clean state (no `lib/`, no
+  `tsconfig.tsbuildinfo`), one `yarn build` deterministically reports ~35
+  dts errors (`@Inject('loader')` loses the loader augmentation) in
+  hmr/include — a yakumo-tsc project-reference quirk, reproduced on node 24
+  and 26 with identical dependency sets. CI's sequence (`yarn build core`
+  then `yarn build`) is green, as is any `yarn build` after a prior
+  successful build. Do not debug "impossible" clean-build failures before
+  trying the two-step sequence; trash `packages/*/lib` +
+  `packages/*/tsconfig.tsbuildinfo` before verifying any toolchain change.
 - **Test fixtures are string-coupled to the specs.** hmr specs mutate fixture
   sources via literal `content.replace("value = 'initial'", ...)`. Fork-style
   reformatting of `packages/hmr/tests/*` fixtures (yml + plugin `.ts` files)
   silently no-ops those replaces and every reload test times out. ALL test
   fixtures (hmr + include, yml and plugin `.ts`) are byte-identical to
-  upstream and CI-guarded by the `upstream-parity` byte check; the 2026-09-08
-  pass restored `include/tests/fixtures/*.ts` + `base.yml` to pin bytes after
-  a formatter pass churned them.
+  upstream and CI-guarded by the `upstream-parity` byte check, plus the
+  `scripts/hmr-fixture-canary.mjs` fast-fail guard (every spec replace
+  literal must exist in a fixture; wired into the same CI job) — it catches
+  a mass fixture reformat in milliseconds instead of ~190 s of waitFor
+  timeouts. Its matching is any-fixture: it cannot pin a literal to one
+  exact fixture when several fixtures share it.
 - **packages/** style == upstream's, enforced by CI.** The `upstream-parity`
-  job in `ports.yml` pins the last-synced upstream commit (`UPSTREAM_PIN`):
-  non-TS files must be byte-identical to the pin; TS/JS may differ only by
-  prettier-normalizable formatting (both trees normalized with the pinned
-  prettier, then diffed). Bump `UPSTREAM_PIN` in the same commit as every
-  `packages/**` sync. Prettier is NOT a style gate for packages (upstream
-  style is not prettier-stable: 64 files fail `--check` under every
-  plausible config) — the fork's old `prettier --print-width 100`
-  double-quote/semicolon formatting of packages was reverted to upstream
-  style in `0542b6d`. CI pins prettier 3.9.6 (`npx prettier@3.9.6`), the
-  same version nixpkgs shipped on 2026-09-08 — keep the two in lockstep.
+  job in `ports.yml` pins the last-synced upstream commit (`UPSTREAM_PIN`, a
+  one-line tracked file at `.github/UPSTREAM_PIN` so pin bumps review as
+  one-line diffs): non-TS files must be byte-identical to the pin; TS/JS
+  may differ only by prettier-normalizable formatting (both trees
+  normalized with the pinned prettier, then diffed); `package.json` files
+  are excluded from both guards BY DESIGN (manifests are the deliberate
+  divergence surface) and gated instead by the manifest guard
+  (`scripts/manifest-parity.mjs`). Bump `.github/UPSTREAM_PIN` and sync the
+  manifests in the same commit as every `packages/**` sync. Prettier is
+  NOT a style gate for packages (upstream style is not prettier-stable: 64
+  files fail `--check` under every plausible config) — the fork's old
+  `prettier --print-width 100` double-quote/semicolon formatting of
+  packages was reverted to upstream style in `0542b6d`. CI pins prettier
+  3.9.6 (`npx prettier@3.9.6`), the same version nixpkgs shipped on
+  2026-09-08 — keep the two in lockstep.
 - **Stale `lib/` builds shadow src/.** Cross-package imports resolve through
   each package's `lib/index.js`. After changing TS sources run
   `nix develop -c yarn build` before debugging "impossible" test failures —
@@ -102,11 +125,13 @@ system-profile copy is built with Go 1.26 and warns about x/tools skew.
 - TS dep bumps are upstream decisions, but three bump-everything incidents
   (2026-09-08) hardened the protocol: (1) check the npm registry before
   calling a version fake — chokidar 5, vitest 5, eslint 10 and js-yaml 5
-  all exist; (2) verify each major empirically against the harness — vite
-  8 breaks the suite, eslint 10 breaks `yarn lint` (.eslintrc removal),
-  js-yaml 5 breaks the include build (`yaml.Type` gone); (3) fixture bytes
-  are string-coupled to specs — reformat them and every reload test times
-  out.
+  all exist; (2) verify each major empirically against the harness with a
+  from-scratch install AND the CI two-step build — vite 8 breaks the suite,
+  eslint 10 breaks `yarn lint` (.eslintrc removal), js-yaml 5 breaks the
+  include build (`yaml.Type` gone), TS 7 breaks the dts build (TS2665,
+  above); (3) fixture bytes are string-coupled to specs — reformat them
+  and every reload test times out. Since 2026-09-09 the manifest guard
+  makes (2) a CI gate instead of a protocol.
 
 ## Zig 0.16 std gotchas (all verified against 0.16.0 on 2026-09-08)
 
@@ -257,24 +282,23 @@ on 2026-09-08).
   conflict points was format-only, so fork TS content is authoritative for
   semantics and future conflicts should re-apply fork deltas onto upstream
   blobs. Upstream `hmr.watch()` (#128) was already in the fork base.
-- RESOLVED (2026-09-08, twice): `yarn install` hard-crashed with
-  `typescript: ^7.0.2` (every TS 7 tarball ships only `bin/tsc`, no
-  `lib/_tsc.js`, and yarn 4.14.1's builtin `compat/typescript` patch
-  lstats that file). First resolution matched upstream's revert to
-  `^5.9.3`; the same evening a fresh bump-everything pass re-shipped TS 7
-  and the REAL fix landed instead: **upgrade yarn to 4.18.0** (>=4.17.1
-  gates the legacy patch off for TS 7) — see the verified working set in
-  the toolchain bullet above. Manifest deltas vs upstream are now
-  deliberate (yarn 4.18.0, TS 7, vitest 5, chokidar 5, @babel 8, esbuild
-  0.28.2, plus the older `@types/node ^26.5.0`); js-yaml stays at
-  upstream's `^4.1.0` (js-yaml 5 breaks the build) and eslint stays at
-  upstream's `^8.57.1` (eslint 10 removed `.eslintrc` support and Build
-  CI runs `yarn lint` over the legacy config — verified failing under 10,
-  green under 8). yarn 4.18 writes `npmMinimalAgeGate: 0` into
-  `.yarnrc.yml` on install (freshly published majors are younger than its
-  default age gate) — keep it committed or every install re-writes it.
-  Re-check `git diff <upstream> -- '**/package.json'` after every sync and
-  re-run the full suite before trusting the set.
+  2026-09-09: pin bumped to `f8ea3cd` (rc.10) — its entire delta vs
+  `caab04e` is the eight workspace manifests, which the fork adopted
+  byte-for-byte; the guarded tree was already identical.
+- RESOLVED (2026-09-09, final): the TS 7 saga had two independent
+  breakages. (1) `yarn install` hard-crashed with `typescript: ^7.0.2`
+  under yarn 4.14.1 (every TS 7 tarball ships only `bin/tsc`, no
+  `lib/_tsc.js`, and yarn's builtin `compat/typescript` patch lstats that
+  file) — the 2026-09-08 "fix" was upgrading yarn to 4.18.0, which made
+  TS 7 installable. (2) But TS 7 then broke the DTS BUILD (TS2665, see
+  the toolchain bullet) — three CI runs red, invisible locally because
+  vitest never typechecks and a single-step clean `yarn build` was masked
+  by the two-step quirk above. Final resolution: manifests back to
+  upstream's exact set (yarn 4.14.1, TS ^5.9.3, vitest ^4.1.5), only
+  `@types/node ^26.5.0` diverges, now machine-guarded by
+  `scripts/manifest-parity.mjs`. `.yarnrc.yml` is upstream's two lines
+  again (the yarn-4.18-era `npmMinimalAgeGate: 0` line is gone). Do not
+  re-ship TS 7 without a from-scratch install plus the CI two-step build.
 
 ## Repo hygiene facts
 

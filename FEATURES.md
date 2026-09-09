@@ -75,13 +75,15 @@ is verified against `packages/core/src/`. Status vocabulary:
 
 ## TypeScript original (`packages/`)
 
-Tracks `upstream/main` (`caab04e`, rebased 2026-09-08). Inherited upstream
+Tracks `upstream/main` (pin `f8ea3cd`, 2026-09-09; rebased onto `caab04e`
+2026-09-08). Inherited upstream
 features: three-stage reload (#111), include journal reconciliation (#121),
 bare-specifier resolution (#123), `hmr.watch()` (#128), plus the
 `3-stage-hmr` line replayed on top (`b4650df`: commit-based loader entry
 changes, atomic include writes). CI (`build.yml`) runs the TS suite on a
 pinned Node 24/26 matrix; the upstream-parity job guards the tree against
-the `caab04e` pin.
+the `f8ea3cd` pin (byte, prettier-normalized TS and manifest-allowlist
+guards).
 
 ## Planned
 

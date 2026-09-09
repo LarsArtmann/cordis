@@ -10,6 +10,39 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Added
 
+- CI `upstream-parity` hardening: a manifest divergence guard
+  (`scripts/manifest-parity.mjs`) that fails on any `package.json`
+  difference against the pinned upstream commit outside an explicit
+  allowlist (currently only root `@types/node`), and an hmr
+  fixture-coupling canary (`scripts/hmr-fixture-canary.mjs`) that fails in
+  milliseconds when a spec `.replace()` literal no longer exists in any
+  fixture (previously a silent no-op followed by ~190 s of waitFor
+  timeouts).
+- The upstream pin now lives in the tracked one-line `.github/UPSTREAM_PIN`
+  file that `ports.yml` reads, so pin bumps review as one-line diffs.
+
+### Changed
+
+- Upstream pin bumped `caab04e` → `f8ea3cd` (rc.10); its entire delta is
+  the eight workspace manifests, adopted byte-for-byte.
+
+### Fixed
+
+- Build CI red since 2026-09-08 (`2ac1be1`): the TypeScript 7 toolchain
+  bump broke the dts build (`TS2665: Module 'cordis' resolves to an
+  untyped module`) on three consecutive pushes while tests stayed green
+  (vitest never typechecks). Reverted the whole bump-and-restyle set to
+  the upstream pins (yarn 4.14.1, TypeScript ^5.9.3, vitest ^4.1.5,
+  esbuild ^0.28.0); the only manifest delta is again the deliberate
+  `@types/node ^26.5.0`.
+- `upstream-parity` semantic guard failure: restored
+  `packages/core/src/context.ts` (stray blank line) and
+  `packages/core/src/registry.ts` (re-braced single-statement `if`) to
+  upstream bytes — both survive prettier normalization and had drifted in
+  the reformat pass.
+
+### Added (prior entries)
+
 - Multi-language ports of the cordis core — Go (flagship), Rust and Zig —
   with semantics parity (fiber lifecycle, drain queue, isolation realms,
   LIFO rollback) and native, type-keyed APIs per language (from
@@ -71,7 +104,7 @@ in `packages/` track upstream and are not released from this fork.
   reproduced locally (20–37% on quiet A/B runs, 1.26.7 vs 1.27), with
   numbers recorded in ROADMAP.
 
-### Changed
+### Changed (prior entries)
 
 - Rust thread-safe build: lock scopes tightened where semantics-preserving
   (`queue`, `notify_dependents`, `once`, `get_named`, `restore`, the state
@@ -112,7 +145,7 @@ in `packages/` track upstream and are not released from this fork.
 - hmr rollback errors carry the failed fiber's own `Fiber.Err()` detail
   (`hmr: entry <id> failed under the new implementation: <cause>`).
 
-### Fixed
+### Fixed (prior entries)
 
 - Zig `Registry.delete` iterated the live runtime list while disposing
   fibers mutated (and, with the last fiber, freed) that same list; the stale
