@@ -176,7 +176,7 @@ pub struct Core {
     /// string formatting can ever make two distinct labels collide.
     pub labels: HashMap<(String, String), IsolateKey>,
     pub last_key: IsolateKey,
-    pub fibers: Vec<Option<Rc<RefCell<FiberData>>>>,
+    pub fibers: Vec<Rc<RefCell<FiberData>>>,
     pub runtimes: HashMap<u64, RuntimeData>,
     /// Bodies of runtimes that were removed, kept so a registry restore
     /// can restart them with their last config. Restarts run on the
@@ -250,15 +250,15 @@ impl Core {
     pub fn alloc_fiber(&mut self, mut data: FiberData) -> FiberId {
         let id = FiberId(self.fibers.len());
         data.id = id;
-        self.fibers.push(Some(Rc::new(RefCell::new(data))));
+        self.fibers.push(Rc::new(RefCell::new(data)));
         id
     }
 
-    /// Panics only if `id` was never allocated; slots are never emptied
-    /// once pushed, so a live `FiberId` always resolves.
-    #[allow(clippy::indexing_slicing, clippy::expect_used)]
+    /// Panics only if `id` is out of bounds: ids are arena-allocated and the
+    /// arena never shrinks, so a live `FiberId` always resolves.
+    #[allow(clippy::indexing_slicing)]
     pub fn fiber(&self, id: FiberId) -> Rc<RefCell<FiberData>> {
-        Rc::clone(self.fibers[id.0].as_ref().expect("fiber arena entry"))
+        Rc::clone(&self.fibers[id.0])
     }
 
     /// Queue a fiber for state transition evaluation.
@@ -279,8 +279,7 @@ impl Core {
     /// mirroring ReflectService.notify upstream.
     pub fn notify_dependents(&mut self, from: &Context, names: &[String]) {
         let mut checks = Vec::new();
-        for (index, slot) in self.fibers.iter().enumerate() {
-            let Some(fiber) = slot else { continue };
+        for (index, fiber) in self.fibers.iter().enumerate() {
             let target = {
                 let f = fiber.borrow();
                 if f.runtime.is_none() {

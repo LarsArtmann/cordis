@@ -182,7 +182,9 @@ func TestResolverResolveAndDecode(t *testing.T) {
 
 	// A registration without a decoder passes the raw value through.
 	if err := resolver.Register("raw", Registration{
-		New: func() cordis.PluginHandle { return cordis.NewPlugin("raw", func(*cordis.Context, any) error { return nil }) },
+		New: func() cordis.PluginHandle {
+			return cordis.NewPlugin("raw", func(*cordis.Context, any) error { return nil })
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

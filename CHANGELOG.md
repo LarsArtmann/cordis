@@ -10,6 +10,18 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Added
 
+- Panic-allowlist CI gate (`scripts/panic-allowlist.sh`): production panic
+  sites in the Go, Rust and Zig ports are pinned to the reviewed,
+  channel-less set with per-file counts and rationales. A new panic fails
+  the gate until the allowlist grows with a rationale; a removed one fails
+  until the entry shrinks. Wired as the flake `panic-allowlist` check, the
+  `test-panic-allowlist` app, a step of `test`, and a dedicated Ports CI
+  job.
+- Regression tests pinning the panic-free sweep behavior: Go
+  `TestIsolateUncomparableLabelConfigErrors` (uncomparable label decoded
+  from entry config surfaces as an error, not a crash) and Rust
+  `inject_after_clone_returns_plugin_shared` (cloned `FnPlugin` reports
+  `PluginShared`; the unshared original still injects).
 - CI `upstream-parity` hardening: a manifest divergence guard
   (`scripts/manifest-parity.mjs`) that fails on any `package.json`
   difference against the pinned upstream commit outside an explicit
@@ -23,11 +35,35 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Changed
 
+- **Breaking, all ports: panic-free typed-errors sweep.** Recoverable
+  panic sites became typed errors; misuse became compile-time
+  impossibilities. Go: `Waterfall` takes the terminal function as a typed
+  parameter (arg-misuse no longer compiles); `Isolate` returns
+  `(*Context, error)` with uncomparable labels reported as errors instead
+  of panics; `randomID` returns `(string, error)`, propagated through the
+  loader with entry/group context. Rust: the fiber arena stores `Rc`
+  directly (the never-taken `.expect` is structurally gone);
+  `FnPlugin.inject` returns `Result<Self>` via the new
+  `Error::PluginShared` (injecting after clone is an error, not a panic).
+  Zig: `Error.OutOfMemory` is threaded through every fallible
+  registration and the scope constructors (`extend`, `isolate`,
+  `isolateShared`, `withFilter`) plus `realmFilter` (now `Error!Filter`).
+  Golden scenarios remain byte-identical across all three ports.
+- Zig reachability audit: `isolateShared`, `provideNamed`, `restart`,
+  `update` and `startPlugin` can no longer reach an `@panic` through
+  `sharedKey`, `rootKey`, `queue` or `bindCleanup`; the error log drops
+  its line under allocation failure instead of aborting the drain;
+  `isolateKey` keeps its infallible `u64` form for query paths with an
+  internal fallible variant for error-channel callers. Zig dispatch-path
+  aborts: 27 → 15, each pinned by the allowlist gate.
 - Upstream pin bumped `caab04e` → `f8ea3cd` (rc.10); its entire delta is
   the eight workspace manifests, adopted byte-for-byte.
 
 ### Fixed
 
+- Go loader: an uncomparable `Isolate` label decoded from entry config
+  (YAML/JSON user input) used to panic the process; it is now a returned
+  error wrapped with the entry name.
 - Build CI red since 2026-09-08 (`2ac1be1`): the TypeScript 7 toolchain
   bump broke the dts build (`TS2665: Module 'cordis' resolves to an
   untyped module`) on three consecutive pushes while tests stayed green

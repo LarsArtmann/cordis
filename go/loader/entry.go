@@ -244,7 +244,10 @@ func (e *Entry) init() error {
 
 func (e *Entry) start(handle cordis.PluginHandle, cfg any) error {
 	t := e.parent.tree
-	ectx := e.buildContext()
+	ectx, err := e.buildContext()
+	if err != nil {
+		return fmt.Errorf("loader: entry %q: %w", e.opts.Name, err)
+	}
 	if len(e.opts.Inject) > 0 {
 		cordis.InjectSpec(handle, e.opts.Inject)
 	}
@@ -273,7 +276,7 @@ func (e *Entry) start(handle cordis.PluginHandle, cfg any) error {
 
 // buildContext derives the entry scope: a child of the group's host context
 // with the entry's intercept and isolate options applied.
-func (e *Entry) buildContext() *cordis.Context {
+func (e *Entry) buildContext() (*cordis.Context, error) {
 	ectx := e.parent.host.Extend()
 	for _, name := range slices.Sorted(maps.Keys(e.opts.Intercept)) {
 		ectx = ectx.Intercept(name, e.opts.Intercept[name])
@@ -281,12 +284,20 @@ func (e *Entry) buildContext() *cordis.Context {
 	for _, name := range slices.Sorted(maps.Keys(e.opts.Isolate)) {
 		switch label := e.opts.Isolate[name].(type) {
 		case nil, bool:
-			ectx = ectx.Isolate(name)
+			child, err := ectx.Isolate(name)
+			if err != nil {
+				return nil, err
+			}
+			ectx = child
 		default:
-			ectx = ectx.Isolate(name, label)
+			child, err := ectx.Isolate(name, label)
+			if err != nil {
+				return nil, err
+			}
+			ectx = child
 		}
 	}
-	return ectx
+	return ectx, nil
 }
 
 // dispose tears the entry down: its nested group and its fiber. The fiber
@@ -386,13 +397,14 @@ func optionsEqual(a, b EntryOptions) bool {
 }
 
 // randomID returns a collision-resistant short hex id, mirroring the random
-// anonymous ids upstream.
-func randomID() string {
+// anonymous ids upstream. It fails only when the system entropy source is
+// unreadable.
+func randomID() (string, error) {
 	b := make([]byte, 4)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		panic(fmt.Sprintf("loader: cannot generate id: %v", err))
+		return "", fmt.Errorf("loader: cannot generate id: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 // EntryError reports one entry's validation or start failure.

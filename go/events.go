@@ -95,16 +95,16 @@ func (c *Context) interceptGet(name string) (any, bool) {
 	if n == 0 {
 		return nil, false
 	}
-	result := c.Waterfall(EventGet, name, &GetError{
-		Name:    name,
-		Message: fmt.Sprintf("cannot get property %q without inject", name),
-	}, func(a ...any) any {
+	result := c.Waterfall(EventGet, func(a ...any) any {
 		if len(a) > 0 {
 			if r, ok := a[0].(*GetResult); ok {
 				return r
 			}
 		}
 		return &GetResult{}
+	}, name, &GetError{
+		Name:    name,
+		Message: fmt.Sprintf("cannot get property %q without inject", name),
 	})
 	if res, ok := result.(*GetResult); ok {
 		return res.Value, res.OK
@@ -300,25 +300,18 @@ func (c *Context) Bail(name string, args ...any) any {
 }
 
 // Waterfall composes listeners around a terminal function, mirroring
-// ctx.waterfall upstream. The last argument must be the terminal function of
-// type func(...any) any; each listener receives the remaining arguments
+// ctx.waterfall upstream. The terminal is a typed parameter rather than
+// upstream's last-argument convention, so a missing or mistyped terminal is
+// a compile error instead of a runtime panic. Each listener receives args
 // followed by a next function invoking the rest of the chain. A listener
 // that does not call next short-circuits the composition.
-func (c *Context) Waterfall(name string, args ...any) any {
-	if len(args) == 0 {
-		panic("cordis: Waterfall requires a terminal function as last argument")
-	}
-	inner, ok := args[len(args)-1].(func(...any) any)
-	if !ok {
-		panic("cordis: Waterfall last argument must be func(...any) any")
-	}
-	c.notifyDispatch("waterfall", name, args[:len(args)-1])
+func (c *Context) Waterfall(name string, terminal func(...any) any, args ...any) any {
+	c.notifyDispatch("waterfall", name, args)
 	hooks := c.resolveHooks(name)
-	callArgs := args[:len(args)-1]
 	var next func(...any) any
 	next = func(nextArgs ...any) any {
 		if len(hooks) == 0 {
-			return inner(nextArgs...)
+			return terminal(nextArgs...)
 		}
 		h := hooks[0]
 		hooks = hooks[1:]
@@ -329,7 +322,7 @@ func (c *Context) Waterfall(name string, args ...any) any {
 		full = append(full, next)
 		return h.fn(full...)
 	}
-	return next(callArgs...)
+	return next(args...)
 }
 
 // isBailed mirrors the upstream helper: nil, false and missing results do

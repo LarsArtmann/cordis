@@ -72,7 +72,8 @@ fn typed_service_inject_reactivity() {
             Ok(())
         }
     })
-    .inject(&[service_name::<Database>()]);
+    .inject(&[service_name::<Database>()])
+    .unwrap();
 
     let fiber = start_fn(&ctx, &consumer, ()).unwrap();
     assert_eq!(fiber.state(), FiberState::Pending);

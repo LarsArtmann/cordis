@@ -152,7 +152,6 @@ impl crate::context::Context {
                     .fibers
                     .last()
                     .and_then(|fid| core.fibers.get(fid.0))
-                    .and_then(|slot| slot.as_ref())
                     .and_then(|data| {
                         let f = data.borrow();
                         if f.state == FiberState::Disposed {

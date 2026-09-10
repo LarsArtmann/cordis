@@ -83,7 +83,7 @@ func (r *goldenRunner) providerFor(name string) *Plugin[int] {
 }
 
 func (r *goldenRunner) realmScope(name, label string) *Context {
-	return r.ctx.Isolate(name, label)
+	return mustScope(r.t, r.ctx, name, label)
 }
 
 func splitKV(tokens []string) (deps []string, realm string, config int, lifo bool) {
@@ -163,7 +163,7 @@ func (r *goldenRunner) run(line string) {
 		deps, realm, config, _ := splitKV(args)
 		scope := r.ctx
 		for _, dep := range deps {
-			scope = scope.Isolate(dep, realm)
+			scope = r.realmScope(dep, realm)
 		}
 		r.start(scope, args[0], deps, config, false)
 	case "update":
@@ -292,7 +292,7 @@ func (r *eventRunner) run(line string) {
 		scope := r.ctx
 		who := "root"
 		if realm != "" {
-			scope = r.ctx.Isolate(event, realm)
+			scope = mustScope(r.t, r.ctx, event, realm)
 			who = "realm=" + realm
 		}
 		if _, err := scope.On(event, r.listener(event, who)); err != nil {
@@ -305,7 +305,7 @@ func (r *eventRunner) run(line string) {
 	case "emit":
 		r.ctx.Emit(event, payload)
 	case "emit-filtered":
-		scope := r.ctx.Isolate(event, realm)
+		scope := mustScope(r.t, r.ctx, event, realm)
 		emitter := scope.WithFilter(scope.RealmFilter(event))
 		emitter.Emit(event, payload)
 	default:
@@ -529,7 +529,7 @@ func (r *dispatchRunner) run(line string) {
 			r.logf("wf-terminal %s payload=%d", event, p)
 			return p + 1000
 		}
-		result := r.ctx.Waterfall(event, payload, terminal)
+		result := r.ctx.Waterfall(event, terminal, payload)
 		if result == nil {
 			r.logf("waterfall %s result=none", event)
 		} else {

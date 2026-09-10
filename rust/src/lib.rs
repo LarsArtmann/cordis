@@ -79,6 +79,9 @@ pub enum Error {
     /// The root fiber owns no plugin runtime, so its config cannot be
     /// updated.
     RootUpdate,
+    /// A builder method ran after the plugin value was already cloned or
+    /// started, so the shared plugin base is no longer exclusively owned.
+    PluginShared { name: String },
 }
 
 impl fmt::Display for Error {
@@ -99,6 +102,10 @@ impl fmt::Display for Error {
             }
             Self::TypeMismatch { name } => write!(f, "service {name:?} has an unexpected type"),
             Self::RootUpdate => write!(f, "cannot update the root fiber"),
+            Self::PluginShared { name } => write!(
+                f,
+                "plugin {name:?} was already started or shared; call inject before cloning or starting it"
+            ),
         }
     }
 }

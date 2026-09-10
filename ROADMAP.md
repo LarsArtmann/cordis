@@ -55,7 +55,9 @@ Landed native APIs:
 - **Zig**: comptime plugin construction (`TypedPlugin(name, Config, apply,
   inject)` — the type is the registry identity), typed services/events
   keyed by `@typeName`, plain cleanup attachment (`Context.attach`),
-  domain errors split from allocation failures (OOM panics, std style).
+  `OutOfMemory` threaded through every fallible registration and scope
+  constructor (2026-09-10; dispatch callbacks keep the abort path, see
+  the panic-free surface note below).
 
 Divergences from TS behavior, by design:
 
@@ -68,6 +70,37 @@ Divergences from TS behavior, by design:
   _construction_ — both match "one plugin definition, one runtime".
 - Zig's `TypedPlugin` registry identity is the address of the comptime
   view embedded in the returned type.
+- Panic-free surface (2026-09-10, user directive "typed errors over
+  panics"): every framework panic carrying a runtime misuse or
+  environmental failure became a typed error or a compile error.
+  (1) Go `Waterfall` takes the terminal function as a typed parameter
+  instead of upstream's last-`any`-argument convention, so a missing or
+  mistyped terminal is a compile error; dispatch-observer args are
+  unchanged. (2) Go `Isolate` returns `(*Context, error)` because the
+  loader feeds config-defined labels straight in: an uncomparable label
+  is user input, not a programmer mistake. (3) Go `loader` id generation
+  returns the crypto/rand error instead of panicking. (4) Rust
+  `FnPlugin.inject` returns `Result` with the new `Error::PluginShared`
+  variant (typestate would break the cheap-clone registry identity
+  model); the fiber arena stores `Rc` values directly, dropping the
+  never-taken `expect`. (5) Zig `extend`/`isolate`/`isolateShared`/
+  `withFilter` return `Error!*Context`, all fallible registrations return
+  `error.OutOfMemory`, and a reachability audit (2026-09-10) closed every
+  path from a fallible public API to an `@panic`: `sharedKey`, `rootKey`,
+  `queue` and `bindCleanup` became fallible, `realmFilter` returns
+  `Error!Filter`, and the error log drops its line under allocation
+  failure instead of aborting the drain that reports a plugin failure.
+  What deliberately remains: the typed event
+  arity/type guards (Go/Rust) fire inside listener wrappers at dispatch,
+  where the shared `func(E)`/`Fn(&E)` callback contract has no error
+  channel in any port; they guard the typed/string boundary and are
+  pinned by tests. The remaining Zig aborts (15 after the audit:
+  emit/bail/serial/waterfall dispatch, `effects()`, `Registry.delete`,
+  `isolateKey`, `Fiber.dispose`) keep the distinct message
+  `cordis: out of memory in dispatch` and are pinned by
+  `scripts/panic-allowlist.sh`. Go `Must*`
+  helpers are opt-in sugar over error-returning APIs, the idiomatic Go
+  escape hatch.
 - Rust rejects root-fiber updates with a typed `Error::RootUpdate` where
   Go returns a plain error string; both roll the root scope back in place
   with its identity intact.
@@ -157,6 +190,19 @@ opens for the ports are tracked in the Go section above.
   Rust 86.4%) enforced gates with a floor, and keep per-port bench
   baselines separate until one shared harness methodology exists, or
   record-only?
+- **Panic-free sweep release policy (2026-09-10):** the breaking surface
+  (Go `Waterfall`/`Isolate`, Rust `FnPlugin.inject`, Zig fallible scope
+  constructors + `realmFilter`) — major version bump + port tags now, or
+  ride to the next planned release? The CHANGELOG `[Unreleased]` section
+  already records the surface.
+- **Zig dispatch end-state (2026-09-10):** is the channel-less dispatch
+  abort (15 reviewed `@panic` sites, allowlist-gated) a permanent end
+  state, or should the shared dispatch callback contract change across
+  all three ports (envelope values / error-carrying listeners) for
+  literal zero panics outside `Must*` sugar?
+- **Go `Must*` fate (2026-09-10):** delete `MustGet`/`MustGetNamed`/
+  `MustRegister` (breaking wiring code) or keep them as the documented,
+  explicitly opt-in panic sugar?
 
 ### Release cadence
 

@@ -111,6 +111,24 @@
                 markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
                 touch $out
               '';
+
+          panic-allowlist =
+            pkgs.runCommand "cordis-panic-allowlist"
+              {
+                nativeBuildInputs = with pkgs; [
+                  bash
+                  coreutils
+                  diffutils
+                  gawk
+                  gnugrep
+                ];
+              }
+              ''
+                cp -r ${source} cordis
+                cd cordis
+                bash scripts/panic-allowlist.sh
+                touch $out
+              '';
         }
       );
 
@@ -180,6 +198,10 @@
                   cargo
                   zig
                   markdownlint-cli
+                  bash
+                  diffutils
+                  gawk
+                  gnugrep
                 ];
                 text = script;
               };
@@ -205,6 +227,9 @@
           test-markdown = mkTest "test-markdown" ''
             markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
           '';
+          test-panic-allowlist = mkTest "test-panic-allowlist" ''
+            bash scripts/panic-allowlist.sh
+          '';
           test = mkTest "test" ''
             export GOCACHE="''${GOCACHE_OVERRIDE:-$(mktemp -d)/go-build}"
             export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
@@ -218,6 +243,8 @@
             (cd zig && zig build test --summary all)
             echo "== Markdown =="
             markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
+            echo "== Panic allowlist =="
+            bash scripts/panic-allowlist.sh
           '';
         }
       );

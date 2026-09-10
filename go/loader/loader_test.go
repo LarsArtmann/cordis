@@ -337,6 +337,29 @@ func TestIsolateAndInterceptOptions(t *testing.T) {
 	}
 }
 
+// TestIsolateUncomparableLabelConfigErrors pins the config-driven path:
+// isolate labels come straight from entry config, so an uncomparable label
+// (a slice, as YAML/JSON could decode one) must surface as an error from
+// Update rather than crash the process.
+func TestIsolateUncomparableLabelConfigErrors(t *testing.T) {
+	resolver := NewResolver()
+	RegisterType(resolver, "provider", func(ctx *cordis.Context, _ struct{}) error {
+		return nil
+	})
+	tree := NewTree(cordis.New(), resolver)
+	defer tree.Close()
+
+	err := tree.Root().Update([]EntryOptions{
+		{ID: "p", Name: "provider", Isolate: map[string]any{"svc": []int{1, 2}}},
+	})
+	if err == nil {
+		t.Fatal("expected an error for an uncomparable isolate label in config")
+	}
+	if !strings.Contains(err.Error(), "not comparable") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestAwaitSurfacesRuntimeFailure pins the Await + Errors contract: a
 // fiber that fails after a successful start (here, a poisoned config
 // restart) is routed into the entry's error sink, not silently dropped.

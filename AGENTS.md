@@ -201,6 +201,18 @@ ROADMAP.md.
 - Cleanups are synchronous `func()`. Async cleanup is the user's goroutine
   concern.
 - `Emit` panics propagate (Go); `Parallel` joins errors (Go errors.Join).
+- Panic-free surface (2026-09-10): Waterfall misuse is a compile error
+  (the terminal is a typed parameter), `Isolate` reports uncomparable
+  config labels as an error, Rust `FnPlugin.inject` returns
+  `Error::PluginShared`, and Zig threads `error.OutOfMemory` through all
+  fallible registrations. A reachability audit closed every path from a
+  fallible public API to a Zig `@panic` (`sharedKey`/`rootKey`/`queue`/
+  `bindCleanup` fallible, `realmFilter` → `Error!Filter`, the error log
+  drops its line instead of aborting). Remaining panics are contract-
+  bound and pinned by `scripts/panic-allowlist.sh`: typed event guards
+  run inside listener wrappers (no error channel in any port's callback
+  contract), 15 Zig dispatch/void-query aborts keep
+  `cordis: out of memory in dispatch`. Details in ROADMAP.md.
 - Plugin apply errors move the fiber to `StateFailed`, roll back partial
   effects and are routed to the logger, never thrown across the framework
   boundary.
@@ -230,8 +242,12 @@ for dynamic names and the `internal/` event namespace:
   returned TYPE is the registry identity); runtime `Plugin` values for
   dynamic cases (with optional `data: ?*const anyopaque` context);
   `Context.attach(data, f)` registers plain cleanups. Zig domain errors
-  (`Error{InactiveEffect, DuplicateService, PluginFailed}`) exclude OOM:
-  allocation failure panics (std style).
+  are `Error{InactiveEffect, DuplicateService, PluginFailed, OutOfMemory}`:
+  fallible registrations, the scope constructors (`extend`, `isolate`,
+  `isolateShared`, `withFilter`), `realmFilter` (`Error!Filter`) and the
+  key/queue/bindCleanup internals return OOM; only channel-less paths
+  (dispatch callbacks, void queries, drain/rollback) abort, pinned by the
+  `scripts/panic-allowlist.sh` gate.
 
 Golden scenarios (four: lifecycle `scenario.txt`, events
 `scenario-events.txt`, cascade `scenario-cascade.txt`, dispatch

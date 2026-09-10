@@ -154,7 +154,11 @@ func (t *Tree) Create(opts EntryOptions, parentID string, pos int) (string, erro
 		return "", fmt.Errorf("loader: create under %q: %w", parentID, err)
 	}
 	t.mu.Lock()
-	id := t.ensureIDLocked(&opts)
+	id, err := t.ensureIDLocked(&opts)
+	if err != nil {
+		t.mu.Unlock()
+		return "", fmt.Errorf("loader: create under %q: %w", parentID, err)
+	}
 	if pos < 0 || pos >= len(g.data) {
 		g.data = append(g.data, cloneOptions(opts))
 	} else {
@@ -439,15 +443,18 @@ func (t *Tree) resolveFor(e *Entry, name string) (cordis.PluginHandle, Registrat
 	return nil, Registration{}, fmt.Errorf("loader: unknown plugin %q", name)
 }
 
-func (t *Tree) ensureIDLocked(opts *EntryOptions) string {
+func (t *Tree) ensureIDLocked(opts *EntryOptions) (string, error) {
 	if opts.ID != "" {
-		return opts.ID
+		return opts.ID, nil
 	}
 	for {
-		id := randomID()
+		id, err := randomID()
+		if err != nil {
+			return "", err
+		}
 		if _, taken := t.store[id]; !taken {
 			opts.ID = id
-			return id
+			return id, nil
 		}
 	}
 }

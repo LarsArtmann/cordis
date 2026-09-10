@@ -69,6 +69,15 @@ jobs:
         working-directory: zig
         run: zig build test --summary all
 
+  panic-allowlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Panic allowlist gate
+        run: bash scripts/panic-allowlist.sh
+
   flake:
     runs-on: ubuntu-latest
     timeout-minutes: 40

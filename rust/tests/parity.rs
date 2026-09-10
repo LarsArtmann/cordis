@@ -390,6 +390,27 @@ fn inject_reactivity() {
 }
 
 #[test]
+fn inject_after_clone_returns_plugin_shared() {
+    let ctx = Context::new();
+    let p = plugin("pinned", |_: &Context, (): &()| Ok(()));
+    let clone = p.clone();
+    let Err(err) = clone.inject(&["dep"]) else {
+        panic!("inject after clone must fail")
+    };
+    assert_eq!(
+        err,
+        Error::PluginShared {
+            name: "pinned".to_string()
+        }
+    );
+    let p = p.inject(&["dep"]).expect("inject before any clone");
+    let fiber = start_fn(&ctx, &p, ()).unwrap();
+    assert_eq!(fiber.state(), FiberState::Pending);
+    ctx.provide_named("dep", value(1)).unwrap();
+    assert_eq!(fiber.state(), FiberState::Active);
+}
+
+#[test]
 fn provide_get_and_duplicate_detection() {
     let ctx = Context::new();
     assert!(ctx.get_named("foo").is_none());

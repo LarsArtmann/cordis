@@ -667,7 +667,7 @@ func (f *Fiber) Update(config any) error {
 		c.queue(f)
 		return nil
 	}
-	f.ctx.Waterfall(EventUpdate, f, config, false, next)
+	f.ctx.Waterfall(EventUpdate, next, f, config, false)
 	return nil
 }
 

@@ -124,7 +124,7 @@ func TestWaterfall(t *testing.T) {
 		next := args[1].(func(...any) any)
 		return v + next(v).(int)
 	})
-	result := ctx.Waterfall("test", 1, func(args ...any) any { return 2 })
+	result := ctx.Waterfall("test", func(args ...any) any { return 2 }, 1)
 	if result != 4 {
 		t.Fatalf("expected 4, got %v", result)
 	}
@@ -148,7 +148,7 @@ func TestWaterfallShortCircuit(t *testing.T) {
 		t.Error("listener after short-circuit must not run")
 		return nil
 	})
-	result := ctx.Waterfall("test", 1, func(args ...any) any { return 2 })
+	result := ctx.Waterfall("test", func(args ...any) any { return 2 }, 1)
 	if result != 3 {
 		t.Fatalf("expected 3, got %v", result)
 	}

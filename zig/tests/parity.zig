@@ -232,8 +232,8 @@ test "isolation realms" {
     const ctx = try Context.init(std.testing.allocator);
     defer ctx.deinit();
 
-    const iso1 = ctx.isolate("foo");
-    const iso2 = ctx.isolate("foo");
+    const iso1 = try ctx.isolate("foo");
+    const iso2 = try ctx.isolate("foo");
 
     const S = struct {
         calls: i32 = 0,
@@ -271,8 +271,8 @@ test "shared isolation label shares the realm" {
     const ctx = try Context.init(std.testing.allocator);
     defer ctx.deinit();
 
-    const iso1 = ctx.isolateShared("foo", "shared");
-    const iso2 = ctx.isolateShared("foo", "shared");
+    const iso1 = try ctx.isolateShared("foo", "shared");
+    const iso2 = try ctx.isolateShared("foo", "shared");
 
     const v: i32 = 200;
     _ = try iso1.provideNamed("foo", cordis.value(&v));
@@ -286,14 +286,14 @@ test "shared isolation labels are collision free" {
 
     // With the previous "{name}\x00{label}" synthetic key these two distinct
     // pairs collapsed into one realm.
-    const a = ctx.isolateShared("foo\x00bar", "baz");
-    const b = ctx.isolateShared("foo", "bar\x00baz");
+    const a = try ctx.isolateShared("foo\x00bar", "baz");
+    const b = try ctx.isolateShared("foo", "bar\x00baz");
 
     const v: i32 = 1;
     _ = try a.provideNamed("foo", cordis.value(&v));
     try std.testing.expect(b.getNamed("foo") == null);
 
-    const a2 = ctx.isolateShared("foo\x00bar", "baz");
+    const a2 = try ctx.isolateShared("foo\x00bar", "baz");
     try std.testing.expectEqual(1, a2.getTypedNamed(i32, "foo").?.*);
 }
 
@@ -301,13 +301,13 @@ test "realm filtered events" {
     const ctx = try Context.init(std.testing.allocator);
     defer ctx.deinit();
 
-    const isolated = ctx.isolate("foo");
+    const isolated = try ctx.isolate("foo");
     var root_calls = Counter{};
     var iso_calls = Counter{};
     try onCount(ctx, "custom-event", &root_calls);
     try onCount(isolated, "custom-event", &iso_calls);
 
-    const emitter = isolated.withFilter(isolated.realmFilter(isolated, "foo"));
+    const emitter = try isolated.withFilter(try isolated.realmFilter(isolated, "foo"));
     emitter.emitNamed("custom-event", &.{});
     try std.testing.expectEqual(0, root_calls.n);
     try std.testing.expectEqual(1, iso_calls.n);

@@ -57,7 +57,11 @@ func (g *EntryGroup) Entries() []*Entry {
 func (g *EntryGroup) Create(opts EntryOptions) (string, error) {
 	t := g.tree
 	t.mu.Lock()
-	id := t.ensureIDLocked(&opts)
+	id, err := t.ensureIDLocked(&opts)
+	if err != nil {
+		t.mu.Unlock()
+		return "", err
+	}
 	g.data = append(g.data, cloneOptions(opts))
 	t.mu.Unlock()
 	return id, g.createEntry(opts, id)
@@ -150,8 +154,12 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 		// The data slice already contains the new config; createEntry only
 		// registers and starts the entry.
 		t.mu.Lock()
-		id = t.ensureIDLocked(&opts)
+		id, idErr := t.ensureIDLocked(&opts)
 		t.mu.Unlock()
+		if idErr != nil {
+			errs = append(errs, idErr)
+			continue
+		}
 		if err := g.createEntry(opts, id); err != nil {
 			errs = append(errs, err)
 		}

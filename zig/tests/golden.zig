@@ -186,7 +186,7 @@ fn runLifecycleScenario(r: *Runner, ctx: *Context, alloc: std.mem.Allocator, sce
         if (std.mem.eql(u8, op, "provide") or std.mem.eql(u8, op, "provide-in-realm")) {
             const params = parseParams(alloc, args.items);
             var scope: *Context = ctx;
-            if (params.realm.len > 0) scope = ctx.isolateShared(args.items[0], params.realm);
+            if (params.realm.len > 0) scope = try ctx.isolateShared(args.items[0], params.realm);
             try startProvider(r, scope, args.items[0]);
             r.log("provided {s}", .{args.items[0]});
         } else if (std.mem.eql(u8, op, "withdraw") or std.mem.eql(u8, op, "withdraw-in-realm")) {
@@ -198,7 +198,7 @@ fn runLifecycleScenario(r: *Runner, ctx: *Context, alloc: std.mem.Allocator, sce
             const params = parseParams(alloc, args.items);
             var scope: *Context = ctx;
             if (std.mem.eql(u8, op, "start-isolated")) {
-                for (params.deps) |dep| scope = scope.isolateShared(dep, params.realm);
+                for (params.deps) |dep| scope = try scope.isolateShared(dep, params.realm);
             }
             try startLogical(r, scope, args.items[0], params);
         } else if (std.mem.eql(u8, op, "update")) {
@@ -316,7 +316,7 @@ test "golden scenario events" {
             var scope: *Context = ctx;
             var prefix: []const u8 = undefined;
             if (realm.len > 0) {
-                scope = ctx.isolateShared(event, realm);
+                scope = try ctx.isolateShared(event, realm);
                 prefix = std.fmt.allocPrint(alloc, "fired {s} realm={s} payload=", .{ event, realm }) catch @panic("cordis: out of memory");
             } else {
                 prefix = std.fmt.allocPrint(alloc, "fired {s} root payload=", .{event}) catch @panic("cordis: out of memory");
@@ -334,8 +334,8 @@ test "golden scenario events" {
             stored.* = payload;
             ctx.emitNamed(event, &.{cordis.value(stored)});
         } else if (std.mem.eql(u8, op, "emit-filtered")) {
-            const scope = ctx.isolateShared(event, realm);
-            const emitter = scope.withFilter(scope.realmFilter(scope, event));
+            const scope = try ctx.isolateShared(event, realm);
+            const emitter = try scope.withFilter(try scope.realmFilter(scope, event));
             const stored = try ctx.core.a().create(i32);
             stored.* = payload;
             emitter.emitNamed(event, &.{cordis.value(stored)});

@@ -71,11 +71,17 @@ func (c *Context) Extend() *Context {
 // Passing the same label to multiple Isolate calls lets them share one
 // realm, mirroring ctx.isolate(name, label) upstream: the label itself is
 // the realm identity, exactly like the realm symbols upstream. Labels must
-// be comparable; when omitted, a fresh realm is created.
-func (c *Context) Isolate(name string, label ...any) *Context {
+// be comparable; the loader passes config-defined labels, so an
+// uncomparable label is reported as an error rather than assumed to be a
+// programming mistake. When omitted, a fresh realm is created.
+func (c *Context) Isolate(name string, label ...any) (*Context, error) {
 	child := c.Extend()
-	child.isolate = map[string]isolateKey{name: c.realmKey(name, label)}
-	return child
+	key, err := c.realmKey(name, label)
+	if err != nil {
+		return nil, err
+	}
+	child.isolate = map[string]isolateKey{name: key}
+	return child, nil
 }
 
 // realmKey derives the child's key for name. Without a label a brand new key
@@ -83,28 +89,28 @@ func (c *Context) Isolate(name string, label ...any) *Context {
 // contexts created with equal labels share it, mirroring the label symbols
 // upstream. Labels are stored in their own table keyed by value, so no
 // string formatting can ever make two distinct labels collide.
-func (c *Context) realmKey(name string, label []any) isolateKey {
+func (c *Context) realmKey(name string, label []any) (isolateKey, error) {
 	if len(label) > 0 && label[0] != nil {
 		if key, ok := label[0].(isolateKey); ok {
-			return key
+			return key, nil
 		}
 		lbl := label[0]
 		if !reflect.TypeOf(lbl).Comparable() {
-			panic(fmt.Sprintf("cordis: isolate label of type %T is not comparable", lbl))
+			return 0, fmt.Errorf("cordis: isolate label of type %T is not comparable", lbl)
 		}
 		c.core.mu.Lock()
 		defer c.core.mu.Unlock()
 		if key, ok := c.core.labels[lbl]; ok {
-			return key
+			return key, nil
 		}
 		c.core.lastKey++
 		c.core.labels[lbl] = c.core.lastKey
-		return c.core.lastKey
+		return c.core.lastKey, nil
 	}
 	c.core.mu.Lock()
 	defer c.core.mu.Unlock()
 	c.core.lastKey++
-	return c.core.lastKey
+	return c.core.lastKey, nil
 }
 
 // Cleanup attaches a labeled cleanup function to the current effect scope:

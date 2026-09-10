@@ -61,7 +61,7 @@ func TestDispatchModes(t *testing.T) {
 	}
 }
 
-// Waterfall composition: pass-through, short-circuit and argument guards.
+// Waterfall composition: pass-through and short-circuit.
 func TestWaterfallComposition(t *testing.T) {
 	ctx := New()
 
@@ -71,9 +71,9 @@ func TestWaterfallComposition(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	got := ctx.Waterfall("wf", 21, func(v ...any) any {
+	got := ctx.Waterfall("wf", func(v ...any) any {
 		return v[0].(int) + 1
-	})
+	}, 21)
 	if got != 43 {
 		t.Fatal("waterfall composition broken, got", got)
 	}
@@ -86,26 +86,9 @@ func TestWaterfallComposition(t *testing.T) {
 	}
 
 	// No hooks: the terminal runs unchanged.
-	if got := ctx.Waterfall("wf-none", 1, func(v ...any) any { return v }); got == nil {
+	if got := ctx.Waterfall("wf-none", func(v ...any) any { return v }, 1); got == nil {
 		t.Fatal("terminal must run when no listener is registered")
 	}
-
-	func() {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("Waterfall without args must panic")
-			}
-		}()
-		ctx.Waterfall("wf-panic")
-	}()
-	func() {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("Waterfall with a non-terminal last arg must panic")
-			}
-		}()
-		ctx.Waterfall("wf-panic", 42)
-	}()
 }
 
 // Prepend ordering, Global filter exemption and Emit panic propagation.

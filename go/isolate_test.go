@@ -2,10 +2,19 @@ package cordis
 
 import "testing"
 
+func mustScope(t testing.TB, ctx *Context, name string, label ...any) *Context {
+	t.Helper()
+	child, err := ctx.Isolate(name, label...)
+	if err != nil {
+		t.Fatalf("isolate %q: %v", name, err)
+	}
+	return child
+}
+
 func TestIsolatedContexts(t *testing.T) {
 	ctx := New()
-	ctx1 := ctx.Isolate("foo")
-	ctx2 := ctx.Isolate("foo")
+	ctx1 := mustScope(t, ctx, "foo")
+	ctx2 := mustScope(t, ctx, "foo")
 
 	calls := 0
 	disposed := 0
@@ -54,8 +63,8 @@ func TestIsolatedContexts(t *testing.T) {
 
 func TestIsolateSharedLabel(t *testing.T) {
 	ctx := New()
-	ctx1 := ctx.Isolate("foo", "shared")
-	ctx2 := ctx.Isolate("foo", "shared")
+	ctx1 := mustScope(t, ctx, "foo", "shared")
+	ctx2 := mustScope(t, ctx, "foo", "shared")
 
 	calls := 0
 	disposed := 0
@@ -110,7 +119,7 @@ func TestIsolateSharedLabel(t *testing.T) {
 
 func TestIsolatedEvents(t *testing.T) {
 	ctx := New()
-	isolated := ctx.Isolate("foo")
+	isolated := mustScope(t, ctx, "foo")
 
 	rootCalls := 0
 	isolatedCalls := 0
@@ -138,10 +147,10 @@ func TestIsolateLabelsAreCollisionFree(t *testing.T) {
 	ctx := New()
 	// With the previous fmt.Sprintf("%s\x00%v") encoding these four labels
 	// collapsed into two identical synthetic keys.
-	a := ctx.Isolate("foo", "bar\x00baz")
-	b := ctx.Isolate("foo", "bar", "baz")
-	c := ctx.Isolate("foo\x00bar", "baz")
-	d := ctx.Isolate("foo", "bar\x00", "baz")
+	a := mustScope(t, ctx, "foo", "bar\x00baz")
+	b := mustScope(t, ctx, "foo", "bar", "baz")
+	c := mustScope(t, ctx, "foo\x00bar", "baz")
+	d := mustScope(t, ctx, "foo", "bar\x00", "baz")
 
 	if _, err := a.Provide("foo", 1); err != nil {
 		t.Fatal(err)
@@ -157,7 +166,7 @@ func TestIsolateLabelsAreCollisionFree(t *testing.T) {
 	}
 
 	// Equal labels still share one realm.
-	a2 := ctx.Isolate("foo", "bar\x00baz")
+	a2 := mustScope(t, ctx, "foo", "bar\x00baz")
 	if _, ok := a2.Get("foo"); !ok {
 		t.Fatal("equal labels must share the realm")
 	}
@@ -167,9 +176,9 @@ func TestIsolateLabelOfEveryKind(t *testing.T) {
 	ctx := New()
 	type tenant struct{ id int }
 
-	shared := ctx.Isolate("foo", tenant{id: 7})
-	other := ctx.Isolate("foo", tenant{id: 8})
-	same := ctx.Isolate("foo", tenant{id: 7})
+	shared := mustScope(t, ctx, "foo", tenant{id: 7})
+	other := mustScope(t, ctx, "foo", tenant{id: 8})
+	same := mustScope(t, ctx, "foo", tenant{id: 7})
 
 	if _, err := shared.Provide("foo", 1); err != nil {
 		t.Fatal(err)
@@ -182,12 +191,10 @@ func TestIsolateLabelOfEveryKind(t *testing.T) {
 	}
 }
 
-func TestIsolateUncomparableLabelPanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected a panic for an uncomparable label")
-		}
-	}()
+func TestIsolateUncomparableLabelErrors(t *testing.T) {
 	ctx := New()
-	ctx.Isolate("foo", []int{1, 2, 3})
+	_, err := ctx.Isolate("foo", []int{1, 2, 3})
+	if err == nil {
+		t.Fatal("expected an error for an uncomparable label")
+	}
 }

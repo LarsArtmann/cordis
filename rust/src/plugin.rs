@@ -164,16 +164,19 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
     /// them are available and active, unloads when one disappears and
     /// reloads when it returns.
     ///
-    /// # Panics
-    /// When called after the plugin was started or cloned.
-    #[must_use]
-    pub fn inject(mut self, deps: &[&str]) -> Self {
-        // Builder misuse is a programmer error, documented under # Panics.
-        #[allow(clippy::expect_used)]
-        let base = Rc::get_mut(&mut self.base)
-            .expect("plugin.inject must be called before the plugin is started or shared");
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::PluginShared`] when the plugin was already
+    /// cloned or started: inject mutates the shared plugin base, which is
+    /// no longer exclusively owned at that point.
+    pub fn inject(mut self, deps: &[&str]) -> crate::Result<Self> {
+        let Some(base) = Rc::get_mut(&mut self.base) else {
+            return Err(crate::Error::PluginShared {
+                name: self.base.name.clone(),
+            });
+        };
         base.inject.extend(deps.iter().map(std::string::ToString::to_string));
-        self
+        Ok(self)
     }
 
     /// The plugin's registry id, unique per constructed plugin value.
@@ -265,7 +268,7 @@ impl Context {
     ///
     /// Returns the same errors as [`start_fn`] for the underlying plugin.
     pub fn inject(&self, deps: &[&str], f: impl Fn(&Self) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static) -> crate::Result<Fiber> {
-        let p = plugin::<(), _>("anonymous", move |ctx: &Self, (): &()| f(ctx)).inject(deps);
+        let p = plugin::<(), _>("anonymous", move |ctx: &Self, (): &()| f(ctx)).inject(deps)?;
         start_fn(self, &p, ())
     }
 
@@ -344,7 +347,6 @@ impl Registry {
                         .fibers
                         .last()
                         .and_then(|fid| core.fibers.get(fid.0))
-                        .and_then(|data| data.as_ref())
                         .map(|cell| {
                             let f = cell.borrow();
                             (Rc::clone(&runtime.base), f.config.clone())

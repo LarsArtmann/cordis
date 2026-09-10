@@ -70,13 +70,13 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 	if n == 0 {
 		return store()
 	}
-	result := c.Waterfall(EventSet, name, value, func(...any) any {
+	result := c.Waterfall(EventSet, func(...any) any {
 		dispose, err := store()
 		if err != nil {
 			return err
 		}
 		return dispose
-	})
+	}, name, value)
 	switch r := result.(type) {
 	case error:
 		return nil, r

@@ -108,7 +108,10 @@ func TestTypedServiceInjectReactivity(t *testing.T) {
 
 func TestTypedServiceIsolation(t *testing.T) {
 	ctx := New()
-	isolated := ctx.Isolate(ServiceName[*typedTestDatabase]())
+	isolated, err := ctx.Isolate(ServiceName[*typedTestDatabase]())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := Provide(ctx, &typedTestDatabase{DSN: "root"}); err != nil {
 		t.Fatal(err)

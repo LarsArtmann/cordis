@@ -136,7 +136,11 @@ fn make_plugin(
         for spawn in &spawns {
             let child = make_plugin(&spawn.name, false, Vec::new(), &trace, &fibers);
             let deps: Vec<&str> = spawn.deps.iter().map(String::as_str).collect();
-            let child = if deps.is_empty() { child } else { child.inject(&deps) };
+            let child = if deps.is_empty() {
+                child
+            } else {
+                child.inject(&deps).expect("plugin inject")
+            };
             let fiber = start_fn(ctx, &child, spawn.config)?;
             fibers.borrow_mut().insert(spawn.name.clone(), fiber);
         }
@@ -165,7 +169,7 @@ impl Runner {
         let mut p = make_plugin(name, params.lifo, spawns, &self.trace, &self.fibers);
         let deps: Vec<&str> = params.deps.iter().map(String::as_str).collect();
         if !deps.is_empty() {
-            p = p.inject(&deps);
+            p = p.inject(&deps).expect("plugin inject");
         }
         let p = Rc::new(p);
         self.plugins.borrow_mut().insert(name.to_string(), Rc::clone(&p));

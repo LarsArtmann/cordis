@@ -111,7 +111,8 @@ fn services_and_events_race_safely() {
                     Ok(())
                 }
             })
-            .inject(&["dep"]);
+            .inject(&["dep"])
+            .expect("consumer inject");
             for _ in 0..10 {
                 let provider = start_fn(&scope, &provider_plugin, 0).expect("provider");
                 let _ = start_fn(&scope, &consumer_plugin, 0).expect("consumer");

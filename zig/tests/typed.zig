@@ -41,7 +41,7 @@ test "typed service duplicate and realm isolation" {
     _ = try ctx.provide(&root_db);
     try std.testing.expectError(cordis.Error.DuplicateService, ctx.provide(&iso_db));
 
-    const isolated = ctx.isolate(@typeName(Database));
+    const isolated = try ctx.isolate(@typeName(Database));
     _ = try isolated.provide(&iso_db);
     try std.testing.expectEqualStrings("root", ctx.getTyped(Database).?.dsn);
     try std.testing.expectEqualStrings("isolated", isolated.getTyped(Database).?.dsn);

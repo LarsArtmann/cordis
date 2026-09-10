@@ -89,7 +89,7 @@ func BenchmarkWaterfallEvent(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		ctx.Waterfall("bench/waterfall", i, func(args ...any) any { return nil })
+		ctx.Waterfall("bench/waterfall", func(args ...any) any { return nil }, i)
 	}
 }
 
