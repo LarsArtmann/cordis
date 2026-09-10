@@ -34,6 +34,19 @@
 //! [`EVENT_UPDATE`] intercepts config updates as a waterfall whose listeners
 //! may rewrite the config before calling `next`, or veto by ending the chain.
 //!
+//! Four further interception events power loader-style ports:
+//! [`EVENT_GET`] ([`GetError`]/[`GetResult`]), [`EVENT_SET`], [`EVENT_LISTENER`]
+//! ([`ListenerRef`]) and [`EVENT_DISPATCH`] ([`DispatchArgs`]); see their
+//! documentation for the listener contracts.
+//!
+//! # Logger
+//!
+//! Every tree owns a logger service ([`Context::logger`],
+//! [`Context::add_exporter`]): leveled handles whose messages fan out to
+//! exporters and land in a bounded buffer. The framework's error channel
+//! dispatches into it at [`Level::Error`] and is read back through
+//! [`Context::logged_errors`].
+//!
 //! The root fiber deliberately stands outside this machinery: it owns no
 //! plugin runtime, so disposing it just rolls back and restarts the root
 //! scope (firing no [`EVENT_PLUGIN`]), and updating its config returns
@@ -45,13 +58,18 @@ pub mod sync;
 mod core;
 mod events;
 mod fiber;
+mod logger;
 mod plugin;
 mod service;
 mod snapshot;
 
 pub use context::{Context, Disposer, Filter, Guard};
-pub use events::{event_name, service_name, value, EventOptions, Listener, Next, Value};
+pub use events::{
+    event_name, service_name, value, DispatchArgs, EventOptions, GetError, GetResult, Listener,
+    ListenerRef, Next, SetOutcome, Value, EVENT_DISPATCH, EVENT_GET, EVENT_LISTENER, EVENT_SET,
+};
 pub use fiber::{EffectMeta, Fiber, FiberState, StatusChange, EVENT_PLUGIN, EVENT_STATUS, EVENT_UPDATE};
+pub use logger::{format_message, Arg, ConsoleExporter, Exporter, Level, Logger, LoggerIntercept, Message};
 pub use plugin::{plugin, plugin_type_id, start, start_fn, FnPlugin, Plugin, Registry, Runtime};
 pub use snapshot::{FiberSnapshot, RegistrySnapshot, RuntimeSnapshot};
 
@@ -82,6 +100,10 @@ pub enum Error {
     /// A builder method ran after the plugin value was already cloned or
     /// started, so the shared plugin base is no longer exclusively owned.
     PluginShared { name: String },
+    /// An interception event listener returned a value violating its
+    /// contract (a non-`Disposer` from `internal/listener`, a missing
+    /// disposer from `internal/set`).
+    Interception(String),
 }
 
 impl fmt::Display for Error {
@@ -106,6 +128,7 @@ impl fmt::Display for Error {
                 f,
                 "plugin {name:?} was already started or shared; call inject before cloning or starting it"
             ),
+            Self::Interception(message) => write!(f, "cordis: {message}"),
         }
     }
 }

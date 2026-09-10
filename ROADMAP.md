@@ -6,29 +6,29 @@ its architecture.
 
 ## Parity matrix
 
-| Feature                                                     | Go                 | Rust                              | Zig                     |
-| ----------------------------------------------------------- | ------------------ | --------------------------------- | ----------------------- |
-| Context tree (extend)                                       | DONE               | DONE                              | DONE                    |
-| Isolation realms + shared labels                            | DONE               | DONE                              | DONE                    |
-| Intercept (per-scope service config)                        | DONE               | DONE                              | -                       |
-| Effects: nested, labeled, LIFO rollback, introspection      | DONE               | DONE                              | DONE                    |
-| Events: emit / parallel / serial / bail / waterfall         | DONE               | DONE                              | DONE                    |
-| Event filters + global listeners                            | DONE               | DONE                              | DONE                    |
-| Fiber states, dispose, restart, update                      | DONE               | DONE                              | DONE                    |
-| Inject reactivity (pending / unload / reload in place)      | DONE               | DONE                              | DONE                    |
-| Registry (size / has / delete, snapshot restore)            | DONE               | DONE                              | view only (no snapshot) |
-| Interception events (internal/get\|set\|listener\|dispatch) | DONE               | -                                 | -                       |
-| Status events (internal/status)                             | DONE               | DONE                              | -                       |
-| Config validation                                           | DONE               | DONE                              | -                       |
-| Fiber Await (+ stdlib-context variant in Go)                | DONE               | n/a (drain settles synchronously) | -                       |
-| Batch transactions                                          | DONE               | DONE                              | DONE                    |
-| Logger service (levels, exporters, buffer)                  | DONE               | -                                 | -                       |
-| Accessor / mixin derived services                           | DONE               | -                                 | -                       |
-| Callable services + tracker                                 | DONE               | -                                 | -                       |
-| Timer (interval, debounce, throttle)                        | DONE               | -                                 | -                       |
-| Loader (config entries, watch/reload)                       | DONE               | -                                 | -                       |
-| HMR (implementation swap, rollback)                         | DONE               | -                                 | -                       |
-| Concurrent access safety                                    | DONE (race tested) | thread-safe build (Mutex)         | single-threaded         |
+| Feature                                                     | Go                 | Rust                              | Zig                               |
+| ----------------------------------------------------------- | ------------------ | --------------------------------- | --------------------------------- |
+| Context tree (extend)                                       | DONE               | DONE                              | DONE                              |
+| Isolation realms + shared labels                            | DONE               | DONE                              | DONE                              |
+| Intercept (per-scope service config)                        | DONE               | DONE                              | DONE                              |
+| Effects: nested, labeled, LIFO rollback, introspection      | DONE               | DONE                              | DONE                              |
+| Events: emit / parallel / serial / bail / waterfall         | DONE               | DONE                              | DONE                              |
+| Event filters + global listeners                            | DONE               | DONE                              | DONE                              |
+| Fiber states, dispose, restart, update                      | DONE               | DONE                              | DONE                              |
+| Inject reactivity (pending / unload / reload in place)      | DONE               | DONE                              | DONE                              |
+| Registry (size / has / delete, snapshot restore)            | DONE               | DONE                              | DONE                              |
+| Interception events (internal/get\|set\|listener\|dispatch) | DONE               | DONE                              | -                                 |
+| Status events (internal/status)                             | DONE               | DONE                              | DONE                              |
+| Config validation                                           | DONE               | DONE                              | DONE                              |
+| Fiber Await (+ stdlib-context variant in Go)                | DONE               | n/a (drain settles synchronously) | n/a (drain settles synchronously) |
+| Batch transactions                                          | DONE               | DONE                              | DONE                              |
+| Logger service (levels, exporters, buffer)                  | DONE               | DONE                              | DONE                              |
+| Accessor / mixin derived services                           | DONE               | -                                 | DONE                              |
+| Callable services + tracker                                 | DONE               | -                                 | -                                 |
+| Timer (interval, debounce, throttle)                        | DONE               | -                                 | -                                 |
+| Loader (config entries, watch/reload)                       | DONE               | -                                 | -                                 |
+| HMR (implementation swap, rollback)                         | DONE               | -                                 | -                                 |
+| Concurrent access safety                                    | DONE (race tested) | thread-safe build (Mutex)         | single-threaded                   |
 
 ## Planned, in priority order
 
@@ -51,13 +51,22 @@ Landed native APIs:
 - **Rust**: typed services (`provide`/`get::<T>()`/`try_get` keyed by
   `type_name`), typed events (`on::<E>`/`once::<E>`/`emit::<E>`), RAII
   `Guard` (dispose on drop, `detach()` to opt out), `Plugin` trait with
-  associated `Config` (closure form preserved as `FnPlugin`/`start_fn`).
+  associated `Config` (closure form preserved as `FnPlugin`/`start_fn`),
+  logger service (`Context::logger`, `Exporter` trait, `format_message`,
+  2026-09-10), interception events with an ownership-carrying
+  `SetOutcome` cell (2026-09-10).
 - **Zig**: comptime plugin construction (`TypedPlugin(name, Config, apply,
-  inject)` — the type is the registry identity), typed services/events
-  keyed by `@typeName`, plain cleanup attachment (`Context.attach`),
-  `OutOfMemory` threaded through every fallible registration and scope
-  constructor (2026-09-10; dispatch callbacks keep the abort path, see
-  the panic-free surface note below).
+  inject)` — the type is the registry identity), validated plugins
+  (`ValidatedPlugin(name, Config, validate, apply, inject)`), typed
+  services/events keyed by `@typeName`, plain cleanup attachment
+  (`Context.attach` / `attachLabeled`), registry snapshot/restore with a
+  stashing delete, internal events (`event_status`, `event_plugin`,
+  `event_update` waterfall in `Fiber.update`), logger service
+  (`Context.logger`, `Exporter.bind`, 2026-09-10), comptime accessors
+  (`accessor(S, V, ...)` / `mixin(S, V, ...)` with a typed `Member(S, V)`
+  write-back handle), `OutOfMemory` threaded through every fallible
+  registration and scope constructor (2026-09-10; dispatch callbacks keep
+  the abort path, see the panic-free surface note below).
 
 Divergences from TS behavior, by design:
 
@@ -94,16 +103,43 @@ Divergences from TS behavior, by design:
   arity/type guards (Go/Rust) fire inside listener wrappers at dispatch,
   where the shared `func(E)`/`Fn(&E)` callback contract has no error
   channel in any port; they guard the typed/string boundary and are
-  pinned by tests. The remaining Zig aborts (15 after the audit:
-  emit/bail/serial/waterfall dispatch, `effects()`, `Registry.delete`,
-  `isolateKey`, `Fiber.dispose`) keep the distinct message
-  `cordis: out of memory in dispatch` and are pinned by
-  `scripts/panic-allowlist.sh`. Go `Must*`
+  pinned by tests. The remaining Zig aborts (17 after the 2026-09-10
+  parity pass: emit/bail/serial/waterfall dispatch, `effects()`,
+  `Registry.delete` including its stash write, `isolateKey`,
+  `Fiber.dispose`, and the `event_update` terminal's queue write) keep
+  the distinct message `cordis: out of memory in dispatch` and are pinned
+  by `scripts/panic-allowlist.sh`. Go `Must*`
   helpers are opt-in sugar over error-returning APIs, the idiomatic Go
   escape hatch.
 - Rust rejects root-fiber updates with a typed `Error::RootUpdate` where
   Go returns a plain error string; both roll the root scope back in place
-  with its identity intact.
+  with their identity intact. Zig now returns `error.RootUpdate` too
+  (2026-09-10), and its `Fiber.update` runs the `event_update` waterfall
+  like the other ports — a null config clears the stored config directly,
+  with nothing to intercept.
+- Interception contracts follow each language's ownership model (landed
+  2026-09-10): Go's `internal/set`/`internal/listener` hand a `Disposer`
+  through the `any` channel; Rust's listeners fill a shared
+  `SetOutcome` cell (`Rc<RefCell<..>>`/`Arc<Mutex<..>>`) because a
+  `Disposer` cannot travel through `Rc<dyn Any>` by value; Zig has no
+  interception events yet (only the loader-relevant `get`/`set` pair is
+  on its roadmap when a Zig loader is decided).
+- Config validation failure shapes: Go fails the created fiber
+  (`StateFailed`, logged); Rust and Zig (2026-09-10) return the typed
+  error (`Error::Validation`) before any fiber exists.
+- Logger shape divergences (2026-09-10): Rust's `Arg` is a typed enum
+  (`Arg::Json` carries pre-serialized `%o` payloads — the crate is
+  dependency free) and does not expand joined/wrapped errors like Go,
+  whose flat expansion relies on `errors.Join`/`Unwrap`. Zig has no
+  ambient clock in 0.16 (clocks moved to `std.Io`), so `Message.time`
+  carries the tree's monotonic sequence, and `formatMessage` space-joins
+  the pre-rendered arguments because Zig formats at the call site through
+  `std.fmt` — the printf verb pipeline is a Go/Rust surface.
+- Zig registration labels now carry their names (`ctx.on(name)`,
+  `ctx.provide(name)`, `ctx.once(name)`) matching the Go/Rust
+  introspection trees; `attach` grew the labeled variant `attachLabeled`
+  like Go's `Context.Cleanup(label, run)` and Rust's
+  `Context::attach_labeled`.
 - String event names are not restricted in code, but the convention is
   that only the framework's `internal/` namespace uses them; application
   events should be typed.
@@ -131,22 +167,26 @@ Go, Rust and Zig test suites with byte-identical expected traces, plus
 
 ### Rust
 
-1. Effect introspection parity (`EffectMeta` trees are implemented; expose
-   nested labels on more registration kinds).
-2. Logger service.
-3. `internal/get|set|listener|dispatch` interception events (the loader
-   ports need `get`/`set`).
+Nothing pending from the previous list — effect introspection
+(`attach_labeled`), the logger service and the
+`internal/get|set|listener|dispatch` interception events landed
+2026-09-10. The loader prerequisites (`get`/`set` interception) now
+exist; a Rust loader/hmr port is the remaining gap, pending the same
+module-layout decision as Zig.
 
 ### Zig
 
 Landed since the foundation: registry view, serial / waterfall / parallel
 dispatch modes, batch coalescing, effect labels with introspection, typed
-events, shared isolation labels.
+events, shared isolation labels; and on 2026-09-10: intercept
+(`Context.intercept`/`intercepted`), registry snapshot/restore with a
+stashing delete, `internal/status`/`plugin` events plus the
+`internal/update` waterfall, config validation (`ValidatedPlugin`), the
+logger service and comptime accessors/mixins.
 
-1. Snapshot/restore and status events (Rust parity).
-2. Accessor/mixin derived services (Go parity).
-3. Logger service.
-4. Loader / hmr equivalents — pending the module-layout decision.
+1. `internal/get|set|listener|dispatch` interception events — needed only
+   once a Zig loader/hmr port is decided.
+2. Loader / hmr equivalents — pending the module-layout decision.
 
 ### Repo
 
@@ -196,7 +236,7 @@ opens for the ports are tracked in the Go section above.
   ride to the next planned release? The CHANGELOG `[Unreleased]` section
   already records the surface.
 - **Zig dispatch end-state (2026-09-10):** is the channel-less dispatch
-  abort (15 reviewed `@panic` sites, allowlist-gated) a permanent end
+  abort (17 reviewed `@panic` sites, allowlist-gated) a permanent end
   state, or should the shared dispatch callback contract change across
   all three ports (envelope values / error-carrying listeners) for
   literal zero panics outside `Must*` sugar?

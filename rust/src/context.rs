@@ -199,10 +199,19 @@ impl Context {
         }
     }
 
-    /// Errors reported by failing cleanups and plugin bodies.
+    /// Errors reported by failing cleanups and plugin bodies: the logger
+    /// buffer's error entries, rendered as `<name> message`.
     #[must_use]
     pub fn logged_errors(&self) -> Vec<String> {
-        self.core.borrow().errors.clone()
+        let core = self.core.borrow();
+        core.logger
+            .buffer()
+            .iter()
+            .filter(|message| message.level == crate::logger::Level::Error)
+            .map(|message| {
+                format!("<{}> {}", message.name, crate::logger::format_message(message))
+            })
+            .collect()
     }
 
     /// Run `f` as one framework transaction: fiber transitions triggered
@@ -241,7 +250,10 @@ pub struct Disposer {
 }
 
 impl Disposer {
-    pub(crate) fn new(f: impl FnOnce() + crate::sync::MaybeSendSync + 'static) -> Self {
+    /// Build a disposer from a cleanup function. Disposal is idempotent and
+    /// ownership-consuming: it runs at most once.
+    #[must_use]
+    pub fn new(f: impl FnOnce() + crate::sync::MaybeSendSync + 'static) -> Self {
         Self {
             inner: Some(Box::new(f)),
         }

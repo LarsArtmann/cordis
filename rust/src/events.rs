@@ -53,6 +53,79 @@ pub type Listener = Rc<dyn Fn(&[Value]) -> Option<Value>>;
 #[cfg(feature = "thread-safe")]
 pub type Listener = std::sync::Arc<dyn Fn(&[Value]) -> Option<Value> + Send + Sync>;
 
+/// The canonical name of the failed-lookup interception event, mirroring
+/// `internal/get` upstream. It runs as a waterfall around every failed
+///
+/// [`Context::get_named`] with the arguments `[name, GetError]` followed by
+/// the `next` continuation; the chain's result unwraps into a [`GetResult`],
+/// so a listener may supply a fallback service by calling `next` with one
+/// (or returning it directly).
+pub const EVENT_GET: &str = "internal/get";
+
+/// The canonical name of the service registration interception event,
+/// mirroring `internal/set` upstream. It runs as a waterfall around every
+///
+/// [`Context::provide_named`] with the arguments `[name, value]` followed by
+/// the `next` continuation. A listener may rewrite the value before calling
+/// `next`, veto the registration by returning [`Rc<Error>`](crate::sync::Rc),
+/// or replace the registration by returning an [`SetOutcome`] cell holding
+/// its own disposer; the framework terminal stores its own outcome in a
+/// fresh cell and returns it.
+pub const EVENT_SET: &str = "internal/set";
+
+/// The canonical name of the listener registration interception event,
+/// mirroring `internal/listener` upstream. It runs as a bail around every
+///
+/// [`Context::on_named`] with the arguments `[name, ListenerRef, prepend]`;
+/// the first non-`None` result must be an [`SetOutcome`] cell holding the
+/// replacement registration's disposer (or an error), and the original
+/// registration never happens.
+pub const EVENT_LISTENER: &str = "internal/listener";
+
+/// The canonical name of the dispatch observation event, mirroring
+/// `internal/dispatch` upstream. It is emitted (as an ordinary event, with
+///
+/// the arguments `[mode, name, DispatchArgs]`) before every non-`internal/`
+/// dispatch through emit, parallel, serial/bail and waterfall.
+pub const EVENT_DISPATCH: &str = "internal/dispatch";
+
+/// Describes a failed service lookup handed to [`EVENT_GET`] listeners.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetError {
+    /// The unresolved service name.
+    pub name: String,
+    /// The framework's failure message.
+    pub message: String,
+}
+
+/// The terminal value of the [`EVENT_GET`] waterfall: the fallback a
+/// listener supplied, if any.
+#[derive(Debug, Clone, Default)]
+pub struct GetResult {
+    /// The fallback value.
+    pub value: Option<Value>,
+    /// Whether the fallback resolves the lookup.
+    pub ok: bool,
+}
+
+/// The disposer carrier of the [`EVENT_SET`] and [`EVENT_LISTENER`]
+/// interception contracts: a shared cell whose entry the interception
+///
+/// listener fills with the outcome of the (possibly replaced) registration.
+/// Taking the entry transfers the disposer's ownership back to the caller.
+pub struct SetOutcome {
+    /// The registration outcome: a disposer on success, an error on veto or
+    /// failure, `None` while nothing has been decided yet.
+    pub entry: Option<crate::Result<Disposer>>,
+}
+
+/// The listener handed to [`EVENT_LISTENER`] interception listeners,
+/// carrying the listener about to be registered.
+pub struct ListenerRef(pub Listener);
+
+/// The argument slice of a dispatch, handed to [`EVENT_DISPATCH`] listeners.
+pub struct DispatchArgs(pub Vec<Value>);
+
 pub struct Hook {
     pub owner: Context,
     pub listener: Listener,
@@ -88,6 +161,36 @@ impl Context {
 
     fn on_inner(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
         self.fiber().assert_active()?;
+
+        // The EVENT_LISTENER interception can replace the registration
+        // entirely: the first non-none bail result must be a SetOutcome cell.
+        if let Some(result) = self.bail(
+            EVENT_LISTENER,
+            &[
+                value(name.to_string()),
+                value(ListenerRef(Rc::clone(&listener))),
+                value(options.prepend),
+            ],
+        ) {
+            return result.downcast::<RefCell<SetOutcome>>().map_or_else(
+                |_| {
+                    Err(crate::Error::Interception(
+                        "internal/listener interception returned an unexpected value".to_string(),
+                    ))
+                },
+                |cell| {
+                    let entry = cell.borrow_mut().entry.take();
+                    match entry {
+                        Some(Ok(disposer)) => Ok(disposer),
+                        Some(Err(err)) => Err(err),
+                        None => Err(crate::Error::Interception(
+                            "internal/listener interception returned no disposer".to_string(),
+                        )),
+                    }
+                },
+            );
+        }
+
         let hook = Rc::new(Hook {
             owner: self.clone(),
             listener,
@@ -185,6 +288,7 @@ impl Context {
     /// Deliver the string event `name` synchronously to every matching
     /// listener in registration order.
     pub fn emit_named(&self, name: &str, args: &[Value]) {
+        self.notify_dispatch("emit", name, args);
         for hook in self.resolve_hooks(name) {
             (hook.listener)(args);
         }
@@ -200,6 +304,7 @@ impl Context {
     /// Returns [`crate::Error::Validation`] joining every listener failure:
     /// a returned error payload or a listener panic.
     pub fn parallel(&self, name: &str, args: &[Value]) -> crate::Result<()> {
+        self.notify_dispatch("parallel", name, args);
         let mut errors = Vec::new();
         for hook in self.resolve_hooks(name) {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.listener)(args)));
@@ -223,6 +328,7 @@ impl Context {
     /// Return the first non-none listener result, mirroring ctx.serial and
     /// ctx.bail upstream (identical in a synchronous runtime).
     pub fn bail(&self, name: &str, args: &[Value]) -> Option<Value> {
+        self.notify_dispatch("serial", name, args);
         for hook in self.resolve_hooks(name) {
             if let Some(result) = (hook.listener)(args) {
                 return Some(result);
@@ -234,6 +340,116 @@ impl Context {
     /// Alias of [`Context::bail`].
     pub fn serial(&self, name: &str, args: &[Value]) -> Option<Value> {
         self.bail(name, args)
+    }
+
+    /// Run the [`EVENT_GET`] waterfall around a failed lookup, mirroring
+    /// `interceptGet` in the Go port: a no-op passthrough when no listener
+    /// is registered.
+    pub(crate) fn intercept_get(&self, name: &str) -> Option<Value> {
+        let has_listeners = {
+            let core = self.core.borrow();
+            core.hooks.get(EVENT_GET).is_some_and(|hooks| !hooks.is_empty())
+        };
+        if !has_listeners {
+            return None;
+        }
+        let terminal: Next = Rc::new(|args: &[Value]| {
+            if let Some(first) = args.first()
+                && first.clone().downcast::<GetResult>().is_ok()
+            {
+                return Some(first.clone());
+            }
+            Some(value(GetResult::default()))
+        });
+        let result = self.waterfall(
+            EVENT_GET,
+            vec![
+                value(name.to_string()),
+                value(GetError {
+                    name: name.to_string(),
+                    message: format!("cannot get property {name:?} without inject"),
+                }),
+            ],
+            &terminal,
+        );
+        match result {
+            Some(v) => {
+                if let Ok(result) = v.clone().downcast::<GetResult>()
+                    && result.ok
+                {
+                    return result.value.clone();
+                }
+                Some(v)
+            }
+            None => None,
+        }
+    }
+
+    /// Run the [`EVENT_SET`] waterfall around a service registration,
+    /// mirroring `Provide` in the Go port: a direct store when no listener
+    /// is registered.
+    pub(crate) fn intercept_set(&self, name: &str, v: Value) -> crate::Result<Disposer> {
+        let outcome: Rc<RefCell<SetOutcome>> = Rc::new(RefCell::new(SetOutcome { entry: None }));
+        let terminal_outcome = Rc::clone(&outcome);
+        let ctx = self.clone();
+        let key = name.to_string();
+        let terminal: Next = Rc::new(move |args: &[Value]| {
+            let value = args.get(1)?;
+            let result = ctx.provide_inner(&key, Rc::clone(value));
+            terminal_outcome.borrow_mut().entry = Some(result);
+            let carrier: Rc<RefCell<SetOutcome>> = Rc::clone(&terminal_outcome);
+            Some(carrier)
+        });
+        match self.waterfall(EVENT_SET, vec![value(name.to_string()), v], &terminal) {
+            Some(v) => match v.downcast::<RefCell<SetOutcome>>() {
+                Ok(cell) => {
+                    let entry = cell.borrow_mut().entry.take();
+                    match entry {
+                        Some(Ok(disposer)) => Ok(disposer),
+                        Some(Err(err)) => Err(err),
+                        None => Err(crate::Error::Interception(
+                            "internal/set interception returned no disposer".to_string(),
+                        )),
+                    }
+                }
+                Err(other) => {
+                    if let Ok(err) = other.downcast::<crate::Error>() {
+                        return Err((*err).clone());
+                    }
+                    Err(crate::Error::Interception(
+                        "internal/set interception returned an unexpected value".to_string(),
+                    ))
+                }
+            },
+            None => Err(crate::Error::Interception(
+                "internal/set interception returned no disposer".to_string(),
+            )),
+        }
+    }
+
+    /// Emit [`EVENT_DISPATCH`] for non-internal dispatches when an observer
+    /// is registered, mirroring `notifyDispatch` in the Go port.
+    fn notify_dispatch(&self, mode: &str, name: &str, args: &[Value]) {
+        if name.starts_with("internal/") {
+            return;
+        }
+        let has_observers = {
+            let core = self.core.borrow();
+            core.hooks
+                .get(EVENT_DISPATCH)
+                .is_some_and(|hooks| !hooks.is_empty())
+        };
+        if !has_observers {
+            return;
+        }
+        self.emit_named(
+            EVENT_DISPATCH,
+            &[
+                value(mode.to_string()),
+                value(name.to_string()),
+                value(DispatchArgs(args.to_vec())),
+            ],
+        );
     }
 
     /// Subscribe to the event type `E`. Typed events are the primary event
@@ -302,6 +518,7 @@ impl Context {
             rest.push(Rc::new(next));
             (hook.listener)(&rest)
         }
+        self.notify_dispatch("waterfall", name, &args);
         let hooks = self.resolve_hooks(name);
         call(&hooks, args, terminal)
     }

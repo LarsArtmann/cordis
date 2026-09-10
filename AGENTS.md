@@ -211,7 +211,7 @@ ROADMAP.md.
   drops its line instead of aborting). Remaining panics are contract-
   bound and pinned by `scripts/panic-allowlist.sh`: typed event guards
   run inside listener wrappers (no error channel in any port's callback
-  contract), 15 Zig dispatch/void-query aborts keep
+  contract), 17 Zig dispatch/void-query aborts keep
   `cordis: out of memory in dispatch`. Details in ROADMAP.md.
 - Plugin apply errors move the fiber to `StateFailed`, roll back partial
   effects and are routed to the logger, never thrown across the framework

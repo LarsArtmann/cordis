@@ -162,7 +162,7 @@ test "comptime plugin error fails the fiber" {
 
     const fiber = try faulty.start(ctx, {});
     try std.testing.expectEqual(cordis.FiberState.failed, fiber.state());
-    try std.testing.expectEqual(@as(usize, 1), ctx.loggedErrors().len);
+    try std.testing.expectEqual(@as(usize, 1), (try ctx.loggedErrors()).len);
 }
 
 test "effect scope collects, introspects and rolls back" {

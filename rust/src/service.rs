@@ -28,7 +28,17 @@ impl Context {
     /// this context has no active fiber or effect bag to bind to.
     pub fn provide_named(&self, name: &str, v: Value) -> crate::Result<Disposer> {
         core::enter(&self.core);
-        let result = self.provide_inner(name, v);
+        let intercepted = {
+            let core = self.core.borrow();
+            core.hooks
+                .get(crate::events::EVENT_SET)
+                .is_some_and(|hooks| !hooks.is_empty())
+        };
+        let result = if intercepted {
+            self.intercept_set(name, v)
+        } else {
+            self.provide_inner(name, v)
+        };
         core::leave(&self.core);
         result
     }
@@ -59,7 +69,7 @@ impl Context {
         self.provide_named(crate::events::service_name::<T>(), Rc::new(value))
     }
 
-    fn provide_inner(&self, name: &str, v: Value) -> crate::Result<Disposer> {
+    pub(crate) fn provide_inner(&self, name: &str, v: Value) -> crate::Result<Disposer> {
         self.fiber().assert_active()?;
         let key = self.isolate_key(name);
         let fiber_id = self.data.fiber;
@@ -129,6 +139,13 @@ impl Context {
     /// ```
     #[must_use]
     pub fn get_named(&self, name: &str) -> Option<Value> {
+        if let Some(value) = self.lookup(name) {
+            return Some(value);
+        }
+        self.intercept_get(name)
+    }
+
+    fn lookup(&self, name: &str) -> Option<Value> {
         let key = {
             let mut core = self.core.borrow_mut();
             self.find_isolate_override(name)

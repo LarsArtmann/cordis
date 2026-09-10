@@ -364,20 +364,21 @@ fn core_enter_leave(fiber: &Fiber, f: impl FnOnce(&Fiber)) {
 }
 
 impl Context {
-    /// Attach a cleanup to the current effect scope: the enclosing effect
-    /// body while one runs, otherwise the fiber itself. Cleanups run on
-    /// rollback, last in, first out.
+    /// Attach a labeled cleanup to the current effect scope, mirroring the
+    /// labeled `Cleanup` entry point of the Go port: the label appears in
+    /// the fiber's [`Fiber::effects`] introspection tree. The unlabeled
+    /// counterpart is [`Context::attach`].
     ///
     /// # Errors
     ///
     /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed or
     /// there is no effect bag to attach to.
-    pub fn attach(&self, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
+    pub fn attach_labeled(&self, label: &str, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = (|| {
             self.fiber().assert_active()?;
             let bag = self.bag().ok_or(crate::Error::InactiveEffect)?;
-            let entry = Bag::push(&bag, "ctx.attach()".to_string(), Box::new(cleanup));
+            let entry = Bag::push(&bag, label.to_string(), Box::new(cleanup));
             Ok(Disposer::new({
                 let core = Rc::clone(&self.core);
                 move || Bag::dispose_entry(&core, &bag, &entry)
@@ -385,6 +386,20 @@ impl Context {
         })();
         crate::core::leave(&self.core);
         result
+    }
+
+    /// Attach a cleanup to the current effect scope: the enclosing effect
+    /// body while one runs, otherwise the fiber itself. Cleanups run on
+    /// rollback, last in, first out. Registered under the generic
+    /// `ctx.attach()` label; use [`Context::attach_labeled`] for a label of
+    /// your own.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed or
+    /// there is no effect bag to attach to.
+    pub fn attach(&self, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
+        self.attach_labeled("ctx.attach()", cleanup)
     }
 
     /// Execute `f` within an effect scope: registrations made through the
@@ -751,7 +766,7 @@ fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
         if let Some(bag) = bag {
             Bag::drain(core, &bag);
         }
-        core.borrow_mut().log_error(&name, &message);
+        crate::logger::log_error(core, &name, &message);
         let fiber = core.borrow().fiber(id);
         fiber.borrow_mut().state = FiberState::Failed;
         settle_state(core, id, FiberState::Loading);

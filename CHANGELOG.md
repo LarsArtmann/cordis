@@ -10,6 +10,56 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Added
 
+- **Rust port: interception events** — `internal/get` (fallback services
+  via a `GetResult` waterfall around failed lookups), `internal/set`
+  (veto/observe/rewrite service registrations), `internal/listener`
+  (replace listener registrations) and `internal/dispatch` (observe every
+  non-internal dispatch), mirroring the Go contracts with an
+  ownership-carrying `SetOutcome` cell where Go hands a `Disposer`
+  through `any`.
+- **Rust port: logger service** — `Context::logger` (explicit name >
+  `LoggerIntercept` > fiber name), `Level`, typed `Arg`s, the
+  `Exporter` trait, `Context::add_exporter`/`clear_exporters`/
+  `logger_buffer`/`set_logger_buffer_size`, `format_message` with the
+  upstream printf verbs and a `ConsoleExporter`. The framework error
+  channel now dispatches into the logger; `Context::logged_errors`
+  reads the buffer's error entries back.
+- **Rust port: labeled cleanups** — `Context::attach_labeled` exposes the
+    cleanup's label in the `Fiber::effects` introspection tree, matching
+    Go's `Context.Cleanup(label, run)`; `attach` keeps its generic label.
+- **Zig port: intercept** — `Context.intercept(name, value)` /
+  `intercepted(name)` per-scope service configuration, honoring
+  `LoggerIntercept` values.
+- **Zig port: internal events** — `event_status` (a `StatusChange` per
+  fiber state transition, same emission order as Go/Rust),
+  `event_plugin` (fiber created/disposed) and the `event_update`
+  waterfall wrapping `Fiber.update` (rewrite via `next.invoke`, veto by
+  not invoking). Root updates now fail with `error.RootUpdate` and root
+  `restart` rolls the root scope back instead of falling into the plugin
+  load path.
+- **Zig port: registry snapshot/restore** — `Context.snapshot` /
+  `restore` with a stashing `Registry.delete`, mirroring the Go and Rust
+  semantics (delta disposed and stashed, missing runtimes restarted from
+  the stash on the calling context, pending fibers requeued).
+- **Zig port: config validation** — `ValidatedPlugin(name, Config,
+  validate, apply, inject)`; a rejected config fails the start with
+  `error.Validation` before any fiber exists (the Rust shape).
+- **Zig port: logger service** — `Context.logger`, `Level`, `Message`,
+  `Exporter.bind`, `Context.addExporter`/`clearExporters`/
+  `loggerBuffer`/`setLoggerBufferSize`, `formatMessage` and
+  `ConsoleExporter`; the error channel dispatches into it and
+  `loggedErrors` reads the error entries back (now fallible:
+  `Error![][]const u8`).
+- **Zig port: accessors and mixins** — comptime `accessor(S, V, ctx,
+  name, get, set)` and `mixin(S, V, ...)` publishing derived services
+  that follow the source's lifecycle, with a typed `Member(S, V)`
+  write-back handle (`set` returns `error.ReadOnlyAccessor` without a
+  write function).
+- **Zig port: named registration labels** — `ctx.on(name)`,
+  `ctx.provide(name)` and `ctx.once(name)` now carry their names in the
+  `effects()` introspection tree like the Go and Rust ports, plus
+  `Context.attachLabeled`.
+
 - Panic-allowlist CI gate (`scripts/panic-allowlist.sh`): production panic
   sites in the Go, Rust and Zig ports are pinned to the reviewed,
   channel-less set with per-file counts and rationales. A new panic fails
@@ -61,6 +111,18 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Fixed
 
+- Go port: the unload guard was missing — a service withdrawal notified
+  dependent fibers but did not settle them before the provider's remaining
+  cleanups ran, so in the canonical pool idiom (one effect owning a pool
+  and its service) `pool.destroy()` executed before dependents handed
+  their handles back. Upstream awaits dependents inside the provide
+  disposer (`Promise.allSettled`), the calculus's L-Unload guard
+  (Theorem 70). The provide cleanup now drains the notified dependents
+  synchronously (`core.settlePending`), matching upstream interleaving;
+  pinned by `go/teardown_order_test.go` (fiber dispose, dependency
+  chains leaf-first, direct effect disposal inside a batch, restart).
+  Rust and Zig still queue dependents without the guard — tracked as
+  their top parity task in `ROADMAP.md`.
 - Go loader: an uncomparable `Isolate` label decoded from entry config
   (YAML/JSON user input) used to panic the process; it is now a returned
   error wrapped with the entry name.

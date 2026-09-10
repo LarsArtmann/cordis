@@ -15,10 +15,11 @@
 # - rust/src/events.rs: typed-event dispatch guards; Fn(&E) listeners
 #   have no error channel.
 # - zig/src/cordis.zig: dispatch-path allocations and channel-less void
-#   queries (emit/bail/serial/waterfall, effects(), Registry.delete,
-#   isolateKey, Fiber.dispose) abort with the distinct greppable message
-#   "cordis: out of memory in dispatch"; the error log drops its line
-#   instead of aborting.
+#   queries (emit/bail/serial/waterfall, effects(), Registry.delete
+#   including its stash write, isolateKey, Fiber.dispose, the
+#   event_update terminal's queue write) abort with the distinct
+#   greppable message "cordis: out of memory in dispatch"; the error log
+#   drops its line instead of aborting.
 #
 # Patterns: Go `panic(`, Rust `panic!`/`expect`/`unwrap`/`unreachable!`/
 # `todo!`/`unimplemented!` (doc-comment doctests excluded), Zig `@panic`.
@@ -32,7 +33,7 @@ expected() {
 go/loader/resolver.go 1
 go/typed.go 6
 rust/src/events.rs 2
-zig/src/cordis.zig 15
+zig/src/cordis.zig 17
 EOF
 }
 

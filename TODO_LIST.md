@@ -55,8 +55,14 @@ gotchas).
 
 ## Parity
 
-Nothing pending — Zig runs all four golden scenarios (cascade runner landed
-2026-09-08 on top of its typed registry).
+The 2026-09-10 Rust/Zig catch-up landed: Rust effect introspection
+(`attach_labeled`), logger service and `internal/get|set|listener|dispatch`
+interception events; Zig intercept, snapshot/restore + stashing delete,
+`internal/status`/`plugin`/`update` events, config validation
+(`ValidatedPlugin`), logger service and comptime accessors/mixins.
+Remaining Go-only surface: callable services + tracker, timer, loader,
+hmr. Remaining Rust/Zig rows live in `ROADMAP.md` → Planned (loader/hmr
+gated on the module-layout decision).
 
 ## Rust follow-ups
 

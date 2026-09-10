@@ -1,6 +1,6 @@
 // Tests legitimately assert via panic; the strict production
 // lints (unwrap/expect/indexing/arithmetic) are relaxed here.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic, clippy::too_many_lines, clippy::as_conversions)]
 
 //! Parity tests mirroring the Go port's suite, which mirrors the TypeScript
 //! core test suite.
@@ -861,4 +861,289 @@ fn root_fiber_birth_emits_no_status() {
     let p = plugin("svc", |_ctx: &Context, (): &()| Ok(()));
     start_fn(&ctx, &p, ()).unwrap();
     assert_eq!(seen.borrow().len(), 2, "pending -> loading -> active");
+}
+
+#[test]
+fn interception_events() {
+    use cordis::{GetResult, ListenerRef, SetOutcome, EVENT_DISPATCH, EVENT_GET, EVENT_LISTENER, EVENT_SET};
+
+    let ctx = Context::new();
+
+    // EVENT_GET: supply a fallback for a missing service.
+    {
+        let listener: cordis::Listener = Rc::new(|args: &[Value]| {
+            // Defensive: the dispatch probe below re-emits this event with
+            // no waterfall arguments.
+            let next = args.get(2)?;
+            let next: Next = Rc::clone(next.downcast_ref::<Next>().unwrap());
+            let result = next(&[value(GetResult {
+                value: Some(value("fallback".to_string())),
+                ok: true,
+            })])
+            .unwrap();
+            Some(result)
+        });
+        ctx.on_named(EVENT_GET, listener, opts()).unwrap();
+    }
+    let fallback = ctx.get_named("missing").unwrap();
+    assert_eq!(*fallback.downcast::<String>().unwrap(), "fallback");
+
+    // Existing services bypass the interception.
+    ctx.provide_named("real", value(1_i64)).unwrap();
+    let real = ctx.get_named("real").unwrap();
+    assert_eq!(*real.downcast::<i64>().unwrap(), 1);
+
+    // EVENT_SET: veto a registration and observe a good one.
+    let vetoed = Rc::new(RefCell::new(false));
+    let seen = Rc::new(RefCell::new(false));
+    {
+        let vetoed = Rc::clone(&vetoed);
+        let seen = Rc::clone(&seen);
+        let listener: cordis::Listener = Rc::new(move |args: &[Value]| {
+            let name = args[0].downcast_ref::<String>().unwrap().clone();
+            if name == "forbidden" {
+                *vetoed.borrow_mut() = true;
+                return Some(Rc::new(Error::Validation("set rejected".to_string())));
+            }
+            let next: Next = Rc::clone(args[2].downcast_ref::<Next>().unwrap());
+            let result = next(&[Rc::clone(&args[0]), Rc::clone(&args[1])]);
+            *seen.borrow_mut() = true;
+            result
+        });
+        ctx.on_named(EVENT_SET, listener, opts()).unwrap();
+    }
+    assert!(ctx.provide_named("forbidden", value(1_i64)).is_err());
+    assert!(*vetoed.borrow());
+    assert!(!*seen.borrow());
+    ctx.provide_named("allowed", value(2_i64)).unwrap();
+    assert!(*seen.borrow());
+
+    // EVENT_LISTENER: replace a registration with a custom disposer.
+    {
+        let listener: cordis::Listener = Rc::new(|args: &[Value]| {
+            let name = args[0].downcast_ref::<String>().unwrap();
+            if name == "hooked" {
+                let outcome: Rc<RefCell<SetOutcome>> =
+                    Rc::new(RefCell::new(SetOutcome { entry: None }));
+                outcome.borrow_mut().entry = Some(Ok(cordis::Disposer::new(|| {})));
+                return Some(outcome);
+            }
+            None
+        });
+        ctx.on_named(EVENT_LISTENER, listener, opts()).unwrap();
+    }
+    let replaced = ctx
+        .on_named(
+            "hooked",
+            Rc::new(|_: &[Value]| None),
+            opts(),
+        )
+        .unwrap();
+    replaced.dispose(); // the replacement disposer, idempotent
+
+    // The intercepted registration never happened: "hooked" has no
+    // listeners, so a fresh (unintercepted) listener on another name is
+    // needed to prove dispatch still works.
+    ctx.emit_named("hooked", &[]);
+    let calls = Rc::new(RefCell::new(0));
+    ctx.on_named(
+        "counter",
+        {
+            let calls = Rc::clone(&calls);
+            Rc::new(move |_| {
+                *calls.borrow_mut() += 1;
+                None
+            })
+        },
+        opts(),
+    )
+    .unwrap();
+    ctx.emit_named("counter", &[]);
+    assert_eq!(*calls.borrow(), 1);
+
+    // EVENT_DISPATCH: observe non-internal emissions only.
+    let modes = Rc::new(RefCell::new(Vec::<String>::new()));
+    {
+        let modes = Rc::clone(&modes);
+        let listener: cordis::Listener = Rc::new(move |args: &[Value]| {
+            let mode = args[0].downcast_ref::<String>().unwrap().clone();
+            let name = args[1].downcast_ref::<String>().unwrap().clone();
+            modes.borrow_mut().push(format!("{mode},{name}"));
+            None
+        });
+        ctx.on_named(EVENT_DISPATCH, listener, opts()).unwrap();
+    }
+    ctx.emit_named("user-event", &[value(1_i64)]);
+    ctx.emit_named(EVENT_GET, &[]);
+    assert_eq!(*modes.borrow(), vec!["emit,user-event".to_string()]);
+
+    // The listener payload of EVENT_LISTENER carries the listener.
+    let got_listener = Rc::new(RefCell::new(false));
+    {
+        let got = Rc::clone(&got_listener);
+        let listener: cordis::Listener = Rc::new(move |args: &[Value]| {
+            if args[0].downcast_ref::<String>().map(String::as_str) == Some("probe") {
+                let _payload = args[1].downcast_ref::<ListenerRef>().unwrap();
+                *got.borrow_mut() = true;
+            }
+            None
+        });
+        ctx.on_named(EVENT_LISTENER, listener, opts()).unwrap();
+    }
+    ctx.on_named("probe", Rc::new(|_: &[Value]| None), opts()).unwrap();
+    assert!(*got_listener.borrow());
+}
+
+#[test]
+fn logger_buffer_exporters_and_levels() {
+    use cordis::{Arg, Exporter, Level, Message};
+
+    struct Collector {
+        lines: RefCell<Vec<String>>,
+    }
+    impl Exporter for Collector {
+        fn export(&self, message: &Message) {
+            self.lines.borrow_mut().push(cordis::format_message(message));
+        }
+    }
+
+    let ctx = Context::new();
+    ctx.set_logger_buffer_size(2);
+    let logger = ctx.logger(Some("test"));
+    logger.info(&[Arg::from("one")]);
+    logger.info(&[Arg::from("two")]);
+    logger.info(&[Arg::from("three")]);
+    let texts: Vec<String> = ctx
+        .logger_buffer()
+        .iter()
+        .map(cordis::format_message)
+        .collect();
+    assert_eq!(texts, vec!["two".to_string(), "three".to_string()]);
+
+    let collector = Rc::new(Collector { lines: RefCell::new(Vec::new()) });
+    let remove = ctx.add_exporter(Rc::clone(&collector) as Rc<dyn Exporter>, None);
+    let mut levels = std::collections::HashMap::new();
+    levels.insert("quiet".to_string(), Level::Error);
+    let quiet_only = ctx.add_exporter(
+        Rc::new(Collector { lines: RefCell::new(Vec::new()) }) as Rc<dyn Exporter>,
+        Some(levels),
+    );
+    quiet_only.dispose();
+    ctx.logger(Some("test")).info(&[Arg::from("hello")]);
+    assert_eq!(*collector.lines.borrow(), vec!["hello".to_string()]);
+    remove.dispose();
+    ctx.logger(Some("test")).info(&[Arg::from("world")]);
+    assert_eq!(*collector.lines.borrow(), vec!["hello".to_string()]);
+}
+
+#[test]
+fn logger_name_resolution_and_intercept_level() {
+    use cordis::{Level, LoggerIntercept};
+
+    let ctx = Context::new();
+    assert_eq!(ctx.logger(None).name(), "root");
+    assert_eq!(ctx.logger(Some("custom")).name(), "custom");
+
+    let scoped = ctx.intercept(
+        "logger",
+        value(LoggerIntercept {
+            name: Some("scoped".to_string()),
+            level: Some(Level::Warn),
+        }),
+    );
+    assert_eq!(scoped.logger(None).name(), "scoped");
+    // Explicit names win over intercepts.
+    assert_eq!(scoped.logger(Some("explicit")).name(), "explicit");
+
+    // The intercept level gates dispatch: info is dropped, warn passes.
+    ctx.set_logger_buffer_size(100);
+    scoped.logger(None).info(&[cordis::Arg::from("hidden")]);
+    scoped.logger(None).warn(&[cordis::Arg::from("shown")]);
+    let texts: Vec<String> = ctx
+        .logger_buffer()
+        .iter()
+        .map(cordis::format_message)
+        .collect();
+    assert_eq!(texts, vec!["shown".to_string()]);
+
+    // Fiber names resolve last.
+    let p = plugin("worker", |_: &Context, (): &()| Ok(()));
+    let fiber = start_fn(&ctx, &p, ()).unwrap();
+    assert_eq!(fiber.context().logger(None).name(), "worker");
+}
+
+#[test]
+fn logger_format_pipeline() {
+    use cordis::{format_message, Arg, Level, Message};
+
+    let render = |args: Vec<Arg>| {
+        format_message(&Message {
+            sn: 1,
+            time: std::time::SystemTime::UNIX_EPOCH,
+            name: "test".to_string(),
+            kind: "info",
+            level: Level::Info,
+            args,
+        })
+    };
+    assert_eq!(render(vec![Arg::from("hello")]), "hello");
+    assert_eq!(
+        render(vec![Arg::from("value: %d"), Arg::Float(42.7)]),
+        "value: 42"
+    );
+    assert_eq!(
+        render(vec![Arg::from("%s %s"), Arg::from("a"), Arg::from("b")]),
+        "a b"
+    );
+    assert_eq!(
+        render(vec![Arg::from("%o"), Arg::Json(r#"{"a":1}"#.to_string())]),
+        r#"{"a":1}"#
+    );
+    assert_eq!(render(vec![Arg::from("100%%")]), "100%");
+    assert_eq!(
+        render(vec![Arg::from("tail"), Arg::Int(1), Arg::from("two")]),
+        "tail 1 two"
+    );
+    assert_eq!(render(vec![Arg::from("es%o %d %f")]), "es%o %d %f");
+}
+
+#[test]
+fn framework_errors_flow_through_the_logger() {
+    let ctx = Context::new();
+    let faulty = plugin("faulty", |_: &Context, (): &()| {
+        Err(Error::Validation("boom".to_string()))
+    });
+    let faulty_fiber = start_fn(&ctx, &faulty, ()).unwrap();
+    assert_eq!(faulty_fiber.state(), FiberState::Failed);
+    let errors = ctx.logged_errors();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0], "<faulty> invalid config: boom");
+}
+
+#[test]
+fn attach_labeled_exposes_labels_in_introspection() {
+    let ctx = Context::new();
+    let ran = Rc::new(RefCell::new(0));
+    {
+        let ran = Rc::clone(&ran);
+        let _effect = ctx
+            .effect("test", move |ctx: &Context| {
+                let ran = Rc::clone(&ran);
+                ctx.attach_labeled("my-cleanup", move || {
+                    *ran.borrow_mut() += 1;
+                })?;
+                Ok(())
+            })
+            .unwrap();
+    }
+    let effects = ctx.fiber().effects();
+    assert_eq!(effects.len(), 1);
+    assert_eq!(effects[0].label, "test");
+    assert_eq!(effects[0].children.len(), 1);
+    assert_eq!(effects[0].children[0].label, "my-cleanup");
+    assert_eq!(effects[0].children[0].children, Vec::new());
+
+    // Default label for the unlabeled attach.
+    let _plain = ctx.attach(|| {}).unwrap();
+    assert_eq!(ctx.fiber().effects()[1].label, "ctx.attach()");
 }

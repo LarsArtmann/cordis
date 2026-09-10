@@ -190,9 +190,9 @@ pub struct Core {
     pub draining: bool,
     pub dirty: VecDeque<FiberId>,
 
-    /// Errors reported by failing cleanups and plugin bodies, mirroring the
-    /// logger error channel upstream.
-    pub errors: Vec<String>,
+    /// Errors reported by failing cleanups and plugin bodies are routed
+    /// through the tree's logger service (the error channel upstream).
+    pub logger: crate::logger::LoggerService,
 }
 
 impl Core {
@@ -211,7 +211,7 @@ impl Core {
             depth: 0,
             draining: false,
             dirty: VecDeque::new(),
-            errors: Vec::new(),
+            logger: crate::logger::LoggerService::new(),
         }))
     }
 
@@ -309,9 +309,6 @@ impl Core {
         }
     }
 
-    pub fn log_error(&mut self, name: &str, message: &str) {
-        self.errors.push(format!("<{name}> {message}"));
-    }
 }
 
 /// Enter a public API boundary.
@@ -355,7 +352,7 @@ pub fn leave(core: &Rc<RefCell<Core>>) {
 pub fn run_cleanup(core: &Rc<RefCell<Core>>, cleanup: Cleanup) {
     enter(core);
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(cleanup)).is_err() {
-        core.borrow_mut().log_error("root", "cleanup panicked");
+        crate::logger::log_error(core, "root", "cleanup panicked");
     }
     leave(core);
 }
