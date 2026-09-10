@@ -48,6 +48,12 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 			co.mu.Unlock()
 			co.notifyDependents(c, name)
 			c.emitService(name, nil)
+			// The unload guard: settle the dependents this withdrawal
+			// notified before the provider's remaining cleanups run, so a
+			// consumer's teardown hands its resources back while the
+			// provider's cleanup for them has not run yet (upstream: the
+			// await Promise.allSettled in the provide disposer).
+			co.settlePending()
 		})
 		if err != nil {
 			co.mu.Lock()

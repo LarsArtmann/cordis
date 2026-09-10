@@ -125,16 +125,34 @@ func (c *core) leave() {
 		return
 	}
 	c.draining = true
-	for len(c.dirty) > 0 {
+	c.mu.Unlock()
+	c.settlePending()
+	c.mu.Lock()
+	c.draining = false
+	c.mu.Unlock()
+}
+
+// settlePending drains the queue of scheduled fiber transitions to
+// completion. leave() calls it once the outermost public API call returns;
+// the provide cleanup calls it directly so the dependents notified by a
+// service withdrawal settle before the provider's remaining cleanups run.
+// That is the synchronous counterpart of the `await Promise.allSettled` in
+// the TypeScript provide disposer, and the unload guard of the calculus: a
+// consumer's teardown completes while the resource it hands back to the
+// provider still exists.
+func (c *core) settlePending() {
+	for {
+		c.mu.Lock()
+		if len(c.dirty) == 0 {
+			c.mu.Unlock()
+			return
+		}
 		f := c.dirty[0]
 		c.dirty = c.dirty[1:]
 		f.queued = false
 		c.mu.Unlock()
 		f.transition()
-		c.mu.Lock()
 	}
-	c.draining = false
-	c.mu.Unlock()
 }
 
 // queue schedules a state transition evaluation for f. It is safe to call
