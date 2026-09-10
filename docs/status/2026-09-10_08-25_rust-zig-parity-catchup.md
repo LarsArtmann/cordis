@@ -102,7 +102,7 @@ Trigger: user question ("Why are the Rust and Zig versions so small?")
     ROADMAP matrix (re-aligned all 23 rows).
 17. **Full verification**: `nix flake check` — all checks passed (Go, Rust,
     Zig suites + markdown + panic-allowlist derivations). Go suite green
-    including a *parallel session's* in-flight "unload guard" changes.
+    including a _parallel session's_ in-flight "unload guard" changes.
 
 ## b) PARTIALLY DONE
 
@@ -119,9 +119,9 @@ Trigger: user question ("Why are the Rust and Zig versions so small?")
 3. **Zig `restore` swallows restart errors**: `startPlugin` failures other
    than `OutOfMemory` (e.g. a stashed plugin failing validation) are
    silently dropped instead of routed to the error log.
-4. **Config validation on *update***: Go re-validates in the fiber update
+4. **Config validation on _update_**: Go re-validates in the fiber update
    path (`go/fiber.go:651`); Rust and now Zig validate only at start. The
-   divergence exists in Rust *and* Zig and is undocumented (I introduced
+   divergence exists in Rust _and_ Zig and is undocumented (I introduced
    the Zig half knowingly-mirroring Rust but did not write the divergence
    down).
 5. **Docs**: FEATURES.md and PORTS.md were NOT updated (discovered while
@@ -159,7 +159,7 @@ test/docs clean; panic allowlist green). The honest failures are process:
    (`downcast_ref::<StatusChange>`) was visible in the code I had already
    read. Should have been caught by writing the round-trip test first.
 2. **Test-after-semantics mistakes**: my Zig accessor test initially
-   asserted that a *root restart* preserves the derived service — wrong by
+   asserted that a _root restart_ preserves the derived service — wrong by
    the framework's own semantics (root restart is a full teardown). I
    wrote the assertion before thinking; the fix was to assert disposal
    instead.
@@ -168,7 +168,7 @@ test/docs clean; panic allowlist green). The honest failures are process:
    no-op'd a fix because the edit tool required a fresh read. Sloppy tool
    discipline; caught by compilers each time.
 4. **Hot-path change without benchmarking**: I added
-   `notify_dispatch` (a hooks-map lookup + core borrow) to *every*
+   `notify_dispatch` (a hooks-map lookup + core borrow) to _every_
    emit/parallel/bail/waterfall dispatch and did not run the benches,
    even though TODO_LIST already carries "re-run cargo bench" and the
    ROADMAP posts emit ≈65 ns / waterfall ≈0.21 µs baselines. Possibly a
@@ -306,9 +306,9 @@ gate a release on.)
 
 ---
 
-*Verification snapshot at session end: `nix flake check` all checks
+_Verification snapshot at session end: `nix flake check` all checks
 passed · Rust 67+66 tests, clippy clean both variants · Zig 46 tests,
 fmt + docs clean · Go suite green (incl. parallel-session changes) ·
 panic allowlist green at 17 · markdown gate green after the config fix.
 Working tree intentionally uncommitted (auto-commit daemon owns commits;
-user has not requested a commit).*
+user has not requested a commit)._

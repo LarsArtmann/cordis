@@ -9,7 +9,7 @@ TS reference and all three ports in **dependent-teardown ordering**.
 
 The paper's **L-Unload guard** (Section 4.2.2, Theorem 70) and TS's provide-disposer
 (`packages/core/src/reflect.ts:201-209`) settle a provider's dependents **at the point
-of withdrawal**, before the provider's *remaining* disposer chain continues:
+of withdrawal**, before the provider's _remaining_ disposer chain continues:
 
 ```ts
 return async () => {
@@ -29,7 +29,7 @@ boundary** — i.e. after the provider's entire remaining LIFO bag has already r
 
 ### What already works (do not "fix" what is not broken)
 
-- Dependent settle *within the withdrawing API call*: `fiber.Dispose()` /
+- Dependent settle _within the withdrawing API call_: `fiber.Dispose()` /
   direct-disposer withdrawal settles all dependents before returning. The golden
   traces pin this (`golden/expected.txt`: `cleanup consumer`, `cleanup watcher`
   precede `withdrawn config`). **Verified: unchanged by this fix.**
@@ -55,12 +55,12 @@ violated at the effect level.
 
 ## 2. Pareto decomposition
 
-| Tier | Deliverable | Why it dominates |
-|---|---|---|
-| **1% → 51%** | Go guard fix (`settlePending` at the provide-cleanup point) + ordering tests | Go is the flagship/reference port; the semantics, test shape and doc language every other port copies are decided here |
-| **4% → 64%** | Zig mirror fix + parity test; ROADMAP/CHANGELOG divergence entry | 2 of 3 ports semantically aligned with TS + paper; divergence class documented so it cannot silently regress |
-| **20% → 80%** | Rust mirror fix + parity test; new cross-language golden scenario `scenario-guard.txt`; confluence test (Thm 80) | Full three-port parity, machine-pinned cross-language, plus the next-biggest untested theorem |
-| **other 80% → 100%** | Long-tail backlog below (check() parity, interception events, Zig gaps, loader realm-migration, rc.10 loader reassessment, logger golden, coverage gates) | Real but bounded; none block the semantic alignment |
+| Tier                 | Deliverable                                                                                                                                               | Why it dominates                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **1% → 51%**         | Go guard fix (`settlePending` at the provide-cleanup point) + ordering tests                                                                              | Go is the flagship/reference port; the semantics, test shape and doc language every other port copies are decided here |
+| **4% → 64%**         | Zig mirror fix + parity test; ROADMAP/CHANGELOG divergence entry                                                                                          | 2 of 3 ports semantically aligned with TS + paper; divergence class documented so it cannot silently regress           |
+| **20% → 80%**        | Rust mirror fix + parity test; new cross-language golden scenario `scenario-guard.txt`; confluence test (Thm 80)                                          | Full three-port parity, machine-pinned cross-language, plus the next-biggest untested theorem                          |
+| **other 80% → 100%** | Long-tail backlog below (check() parity, interception events, Zig gaps, loader realm-migration, rc.10 loader reassessment, logger golden, coverage gates) | Real but bounded; none block the semantic alignment                                                                    |
 
 ## 3. The fix (identical shape in every port)
 
@@ -83,6 +83,7 @@ func (c *core) settlePending() {
 ```
 
 Safety analysis:
+
 - **Reentrancy**: settlePending runs on the cleanup's goroutine with no locks
   held; nested withdrawal (dependent's own provide-cleanup) recurses to
   dependency-tree depth — same logical nesting TS spreads over the event loop.
@@ -90,43 +91,43 @@ Safety analysis:
   must terminate on cascades; cycles cannot activate (mutual deps stay Pending).
 - **`executing` fibers popped mid-transition**: early-return in `transition()`
   is pre-existing behavior of the outer loop; not a new hazard.
-- **Golden bytes**: dependents settle earlier but *within the same API call*;
+- **Golden bytes**: dependents settle earlier but _within the same API call_;
   per-fiber order (uid-sorted queue) preserved → traces unchanged (verify
   empirically, both Go goldens + loader watch-golden).
 
 ## 4. Task plan — Level 1 (30–100 min each)
 
-| # | Task | Port | Impact | Effort | Status gate |
-|---|---|---|---|---|---|
-| L1.1 | Guard fix in Go (`settlePending` + provide-cleanup call) | Go | critical | 45m | unit tests + goldens green |
-| L1.2 | Teardown-ordering tests (nested idiom, chain A→B→C, direct disposer, explicit Dispose) | Go | critical | 60m | all pass, `-race` clean |
-| L1.3 | Zig mirror fix + parity test | Zig | high | 45m | `zig build test` green |
-| L1.4 | Rust mirror fix + parity test | Rust | high | 45m | both feature variants green |
-| L1.5 | ROADMAP divergence entry + CHANGELOG + plan | docs | high | 30m | markdownlint green |
-| L1.6 | Golden scenario `scenario-guard.txt` (3 runners) | all | high | 100m | byte-identical traces |
-| L1.7 | Confluence test (Thm 80): same final config via different op orders → equal settled state | Go | medium | 100m | passes |
-| L1.8 | `check()` readiness gate for Rust/Zig provide | Rust/Zig | medium | 60m | parity with Go `ProvideCheckGuardsDependents` |
-| L1.9 | Loader rc.10 parity reassessment (3-stage reload, include journal, `hmr.watch`) | Go | medium | 100m | document port/divergence |
-| L1.10 | Realm migration without provider reload (paper Alg 7) | Go loader | low | 100m | bench before/after |
+| #     | Task                                                                                      | Port      | Impact   | Effort | Status gate                                   |
+| ----- | ----------------------------------------------------------------------------------------- | --------- | -------- | ------ | --------------------------------------------- |
+| L1.1  | Guard fix in Go (`settlePending` + provide-cleanup call)                                  | Go        | critical | 45m    | unit tests + goldens green                    |
+| L1.2  | Teardown-ordering tests (nested idiom, chain A→B→C, direct disposer, explicit Dispose)    | Go        | critical | 60m    | all pass, `-race` clean                       |
+| L1.3  | Zig mirror fix + parity test                                                              | Zig       | high     | 45m    | `zig build test` green                        |
+| L1.4  | Rust mirror fix + parity test                                                             | Rust      | high     | 45m    | both feature variants green                   |
+| L1.5  | ROADMAP divergence entry + CHANGELOG + plan                                               | docs      | high     | 30m    | markdownlint green                            |
+| L1.6  | Golden scenario `scenario-guard.txt` (3 runners)                                          | all       | high     | 100m   | byte-identical traces                         |
+| L1.7  | Confluence test (Thm 80): same final config via different op orders → equal settled state | Go        | medium   | 100m   | passes                                        |
+| L1.8  | `check()` readiness gate for Rust/Zig provide                                             | Rust/Zig  | medium   | 60m    | parity with Go `ProvideCheckGuardsDependents` |
+| L1.9  | Loader rc.10 parity reassessment (3-stage reload, include journal, `hmr.watch`)           | Go        | medium   | 100m   | document port/divergence                      |
+| L1.10 | Realm migration without provider reload (paper Alg 7)                                     | Go loader | low      | 100m   | bench before/after                            |
 
 ## 5. Task plan — Level 2 (≤12 min each; this session's scope)
 
-| # | Task | Depends | Est |
-|---|---|---|---|
-| L2.1 | Write this plan file | — | 10m |
-| L2.2 | Go: extract `settlePending` from `leave()` (no behavior change) | — | 8m |
-| L2.3 | Go: call `settlePending` in provide-cleanup | L2.2 | 5m |
-| L2.4 | Go: run full suite — confirm zero regressions | L2.3 | 6m |
-| L2.5 | Go: nested-idiom ordering test (pool.destroy after dependents) | L2.3 | 12m |
-| L2.6 | Go: chain test A→B→C (transitive settle ordering) | L2.5 | 10m |
-| L2.7 | Go: direct-disposer-in-effect test | L2.5 | 8m |
-| L2.8 | Go: `go test -race` on root package | L2.6 | 8m |
-| L2.9 | ROADMAP divergence entry (resolved-in-Go / pending Zig+Rust) | L2.4 | 10m |
-| L2.10 | CHANGELOG `[Unreleased]` entry | L2.9 | 6m |
-| L2.11 | markdownlint + commit + push (Go + docs only) | L2.10 | 10m |
-| L2.12 | Poll tree; if unfrozen: Zig `drainDirty` extraction | L2.11 | 10m |
-| L2.13 | Zig: call drain in Removal.run + parity test | L2.12 | 12m |
-| L2.14 | Poll tree; if unfrozen: Rust fix + test | L2.13 | 12m |
+| #     | Task                                                            | Depends | Est |
+| ----- | --------------------------------------------------------------- | ------- | --- |
+| L2.1  | Write this plan file                                            | —       | 10m |
+| L2.2  | Go: extract `settlePending` from `leave()` (no behavior change) | —       | 8m  |
+| L2.3  | Go: call `settlePending` in provide-cleanup                     | L2.2    | 5m  |
+| L2.4  | Go: run full suite — confirm zero regressions                   | L2.3    | 6m  |
+| L2.5  | Go: nested-idiom ordering test (pool.destroy after dependents)  | L2.3    | 12m |
+| L2.6  | Go: chain test A→B→C (transitive settle ordering)               | L2.5    | 10m |
+| L2.7  | Go: direct-disposer-in-effect test                              | L2.5    | 8m  |
+| L2.8  | Go: `go test -race` on root package                             | L2.6    | 8m  |
+| L2.9  | ROADMAP divergence entry (resolved-in-Go / pending Zig+Rust)    | L2.4    | 10m |
+| L2.10 | CHANGELOG `[Unreleased]` entry                                  | L2.9    | 6m  |
+| L2.11 | markdownlint + commit + push (Go + docs only)                   | L2.10   | 10m |
+| L2.12 | Poll tree; if unfrozen: Zig `drainDirty` extraction             | L2.11   | 10m |
+| L2.13 | Zig: call drain in Removal.run + parity test                    | L2.12   | 12m |
+| L2.14 | Poll tree; if unfrozen: Rust fix + test                         | L2.13   | 12m |
 
 ## 6. Frozen-tree contingency (live constraint, discovered 07:58)
 
