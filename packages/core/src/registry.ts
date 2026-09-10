@@ -11,11 +11,17 @@ function isApplicable(object: Plugin) {
 export type Inject<M = Dict> = (keyof M)[] | { [K in keyof M]?: M[K] }
 
 export type InjectKey = keyof {
-  [K in keyof Context & string as Context[K] extends { [symbols.config]: any } ? K : never]: any
+  [K in keyof Context & string as Context[K] extends { [symbols.config]: any } ? K : never]: any;
 }
 
-export function Inject<K extends InjectKey>(name: K, config?: Context[K] extends { [symbols.config]: infer T } ? T : never) {
-  return function (value: any, decorator: ClassDecoratorContext<any> | ClassMethodDecoratorContext<any>) {
+export function Inject<K extends InjectKey>(
+  name: K,
+  config?: Context[K] extends { [symbols.config]: infer T } ? T : never,
+) {
+  return function (
+    value: any,
+    decorator: ClassDecoratorContext<any> | ClassMethodDecoratorContext<any>,
+  ) {
     if (decorator.kind === 'class') {
       if (!Object.hasOwn(value, 'inject')) {
         defineProperty(value, 'inject', Object.create(Object.getPrototypeOf(value).inject ?? null))
@@ -23,11 +29,11 @@ export function Inject<K extends InjectKey>(name: K, config?: Context[K] extends
       }
       value.inject[name] = config
     } else if (decorator.kind === 'method') {
-      const inject = (value[symbols.metadata] ??= {}).inject ??= Object.create(null)
+      const inject = ((value[symbols.metadata] ??= {}).inject ??= Object.create(null))
       inject[name] = config
       decorator.addInitializer(function () {
-        const property = this[symbols.tracker]?.property
-        ;(this[symbols.initHooks] ??= []).push(() => {
+        const property = this[symbols.tracker]?.property;
+        (this[symbols.initHooks] ??= []).push(() => {
           (this.ctx as Context).inject(inject, (ctx) => {
             return value.call(property ? withProps(this, { [property]: ctx }) : this)
           })
@@ -60,10 +66,7 @@ export namespace Inject {
   }
 }
 
-export type Plugin<T = any> =
-  | Plugin.Function<T>
-  | Plugin.Constructor<T>
-  | Plugin.Object<T>
+export type Plugin<T = any> = Plugin.Function<T> | Plugin.Constructor<T> | Plugin.Object<T>
 
 export namespace Plugin {
   export interface Base<T = any> {
@@ -101,24 +104,23 @@ export namespace Plugin {
 
 type Spread<T> = undefined extends T ? [config?: T] : [config: T]
 
-type GetPluginParameters<P> =
-  | P extends (ctx: Context, ...args: infer R) => any
+type GetPluginParameters<P> = P extends (ctx: Context, ...args: infer R) => any
   ? R
   : P extends new (ctx: Context, ...args: infer R) => any
-  ? R
-  : P extends { apply(ctx: Context, ...args: infer R): any }
-  ? R
-  : never
+    ? R
+    : P extends { apply(ctx: Context, ...args: infer R): any }
+      ? R
+      : never
 
-type GetPluginConfig<P> =
-  | P extends Plugin.Transform<infer S, any>
-  ? S
-  : GetPluginParameters<P>[0]
+type GetPluginConfig<P> = P extends Plugin.Transform<infer S, any> ? S : GetPluginParameters<P>[0]
 
 declare module './context' {
   export interface Context {
     inject(deps: Inject, callback: Plugin.Function<void>): Fiber & PromiseLike<Fiber>
-    plugin<P extends Plugin>(plugin: P, ...args: Spread<GetPluginConfig<P>>): Fiber & PromiseLike<Fiber>
+    plugin<P extends Plugin>(
+      plugin: P,
+      ...args: Spread<GetPluginConfig<P>>
+    ): Fiber & PromiseLike<Fiber>
   }
 }
 
@@ -193,7 +195,12 @@ export class RegistryService {
   plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack()) {
     // check if it's a valid plugin
     const callback = this.resolve(plugin)
-    if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)
+    if (!callback) {
+      throw new Error(
+        'invalid plugin, expect function or object with an "apply" method, received '
+          + typeof plugin,
+      )
+    }
     this.ctx.fiber.assertActive()
 
     let runtime = this._internal.get(callback)
@@ -204,7 +211,13 @@ export class RegistryService {
       this._internal.set(callback, runtime)
     }
 
-    const fiber = new Fiber(this.ctx, config, Inject.resolve(plugin.inject), runtime, getOuterStack)
+    const fiber = new Fiber(
+      this.ctx,
+      config,
+      Inject.resolve(plugin.inject),
+      runtime,
+      getOuterStack,
+    )
     const wrapped = Object.create(fiber) as Fiber & PromiseLike<Fiber>
     wrapped.then = (onFulfilled, onRejected) => {
       return fiber.await().then(onFulfilled, onRejected)

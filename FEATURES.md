@@ -64,14 +64,14 @@ is verified against `packages/core/src/`. Status vocabulary:
 
 ## Cross-language assurance
 
-| Feature                                                      | Status                                                                                                                                                                                      |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (4 scenarios: lifecycle, events, cascade, dispatch; every port runs all 4, see `golden/README.md` matrix)                                                                  |
-| DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                                                                                                            |
-| Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                                                                                                 |
-| `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                                                                                                            |
-| TypeScript suite (`packages/`)                               | FULLY_FUNCTIONAL locally: 248/248 after the 2026-09-08 rebase repair; CI verification pending the next push                                                                                 |
-| Markdown lint gate (flake `markdown` check, `test-markdown`) | FULLY_FUNCTIONAL (markdownlint clean since 2026-09-08; config and `packages/` exclusion fixed the same day)                                                                                 |
+| Feature                                                      | Status                                                                                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Golden scenarios, byte-identical across Go/Rust/Zig          | FULLY_FUNCTIONAL (4 scenarios: lifecycle, events, cascade, dispatch; every port runs all 4, see `golden/README.md` matrix) |
+| DSL parser unit tests in all three runners                   | FULLY_FUNCTIONAL                                                                                                           |
+| Ports CI (`ports.yml`: race tests, clippy, leak-checked Zig) | FULLY_FUNCTIONAL (green runs recorded in CHANGELOG history)                                                                |
+| `nix flake check` derivations for all three suites           | FULLY_FUNCTIONAL                                                                                                           |
+| TypeScript suite (`packages/`)                               | FULLY_FUNCTIONAL locally: 248/248 after the 2026-09-08 rebase repair; CI verification pending the next push                |
+| Markdown lint gate (flake `markdown` check, `test-markdown`) | FULLY_FUNCTIONAL (markdownlint clean since 2026-09-08; config and `packages/` exclusion fixed the same day)                |
 
 ## TypeScript original (`packages/`)
 

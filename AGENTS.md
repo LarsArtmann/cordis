@@ -20,8 +20,8 @@ Use the flake (`nix run .#test`, `.#test-go`, `.#test-rust`, `.#test-zig`)
 or run directly:
 
 - Go: `cd go && go test ./...` (also: `go vet`, `-race` clean; statement
-  coverage ≈90% for every package including loader — 90.8% measured
-  2026-09-08).
+  coverage 91.4% total, every package 88.8–91.7% — measured 2026-09-10
+  after the panic-free sweep).
   Requires Go 1.27 (see gotcha below). Timer tests run in a
   `testing/synctest` bubble (virtual clock, ~2 ms, deterministic); write
   new timing tests the same way instead of `time.Sleep`.
@@ -32,9 +32,9 @@ or run directly:
   `go/` module.
 - Rust: `cd rust && cargo test` (clippy clean on both feature variants:
   `cargo clippy --all-targets [--features thread-safe]`, gated in the flake
-  check/apps and ports.yml). Coverage baseline: 86.4% lines / 86.1% regions
-  (cargo-llvm-cov 0.8.5, 2026-09-08; code files 83–90%, `sync.rs` is cfg
-  plumbing and `lib.rs` doc-only) next to Go's ≈90% statement coverage —
+  check/apps and ports.yml). Coverage baseline: 86.7% lines / 86.1% regions
+  (cargo-llvm-cov 0.9.0, 2026-09-10; code files 82–91%, `sync.rs` is cfg
+  plumbing and `lib.rs` doc-only) next to Go's 91.4% statement coverage —
   reproduce with `nix shell nixpkgs#cargo-llvm-cov nixpkgs#llvm -c sh -c
   'export LLVM_COV=$(command -v llvm-cov) LLVM_PROFDATA=$(command -v
   llvm-profdata); cd rust && cargo llvm-cov --summary-only'`. Benchmarks:
