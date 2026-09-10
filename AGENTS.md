@@ -381,3 +381,18 @@ on 2026-09-08).
   variants before declaring any import dead.
 - Rust test binaries that can block need `timeout N cargo test ...` locally;
   CI enforces `timeout-minutes` (15 Ports / 20 Build).
+- vulnix environment audit: `scripts/vulnix-audit.sh [direct|closure]`
+  scans the flake's own derivations (checks + devShell + formatter; apps
+  are a subset) against the NVD — the scoped answer to buildflow's noisy
+  whole-store runs. Reviewed 2026-09-10
+  (`docs/status/2026-09-10_09-08_vulnix-environment-audit.md`): direct
+  scope flags 4 packages / 11 CVEs of which only coreutils-9.11
+  (uniq/unexpand, no fixed release yet) is genuine; closure flags 32
+  derivations / 120 CVEs, ~60% false positives from NVD product-name
+  collisions (MediaWiki "Cargo" vs cargo, ecies/go vs the Go toolchain,
+  Ada.cx "ada" vs the URL parser, npm "stringbuilder" vs the Rust
+  crate...). Nothing actionable in-repo. Keep vulnix out of CI (NVD
+  network fetch + noise); re-run `direct` after nixpkgs bumps. Never act
+  on a vulnix finding without opening the NVD entry; `vulnix
+  --no-requisites` on a runCommand .drv inspects nothing — the scoped
+  recipe extracts the drvs' `inputDrvs` first.

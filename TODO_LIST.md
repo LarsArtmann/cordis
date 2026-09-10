@@ -88,6 +88,20 @@ Earlier: the markdownlint gate (flake `markdown` check + `test-markdown`
 app) and GitHub Release pages for `go/v0.1.0` and `rust/v0.2.0` landed
 2026-09-08.
 
+## Environment audit follow-up (from the 2026-09-10 vulnix run)
+
+Source: `docs/status/2026-09-10_09-08_vulnix-environment-audit.md`.
+No in-repo action was required: every genuine finding is latest-release
+build/dev tooling whose fix lands with the next `nix flake update`
+(~60% of findings were NVD product-name false positives).
+
+- [ ] Re-run `scripts/vulnix-audit.sh direct` after the next nixpkgs
+      bump; expect glibc 2.43, python 3.14.7, coreutils 9.12, gzip 1.15,
+      binutils 2.47 to clear their entries (report §f1). — Low / S
+- [ ] One-off dependency-side audits vulnix cannot see: `yarn npm
+      audit` for the TS workspace (Go/Rust ports are dependency-free)
+      (report §f2). — Low / S
+
 ## User-gated
 
 Standing decisions (yarn.lock policy, oxlint policy for upstream TS,
