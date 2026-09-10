@@ -10,18 +10,18 @@ new `cordis-panic-allowlist` derivation).
 
 ## Verification Matrix (end of session)
 
-| Gate | Command | Result |
-| --- | --- | --- |
-| Zig tests | `nix run nixpkgs#zig -- build test` (in `zig/`) | ok, goldens byte-identical |
-| Zig doc emission | `zig build docs` | ok |
-| Zig format | `zig fmt --check src tests build.zig` | ok |
-| Zig remaining `@panic` | `grep -c '@panic' zig/src/cordis.zig` | 15 (was 27), all reviewed |
-| Go vet + gofmt + race | `go vet ./... && gofmt -l . && go test -race -count=1 ./...` | all ok (5 packages) |
-| Markdownlint | `nix run .#test-markdown` | ok |
-| Panic allowlist | `bash scripts/panic-allowlist.sh` | ok (verified failing on a canary too) |
-| Flake check attr | `nix build .#checks.x86_64-linux.panic-allowlist` | ok |
-| Full flake check | `nix flake check` | **all checks passed** (go, rust, zig, markdown, panic-allowlist) |
-| Rust unit | untouched this pass; covered by flake check | ok |
+| Gate                   | Command                                                      | Result                                                           |
+| ---------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Zig tests              | `nix run nixpkgs#zig -- build test` (in `zig/`)              | ok, goldens byte-identical                                       |
+| Zig doc emission       | `zig build docs`                                             | ok                                                               |
+| Zig format             | `zig fmt --check src tests build.zig`                        | ok                                                               |
+| Zig remaining `@panic` | `grep -c '@panic' zig/src/cordis.zig`                        | 15 (was 27), all reviewed                                        |
+| Go vet + gofmt + race  | `go vet ./... && gofmt -l . && go test -race -count=1 ./...` | all ok (5 packages)                                              |
+| Markdownlint           | `nix run .#test-markdown`                                    | ok                                                               |
+| Panic allowlist        | `bash scripts/panic-allowlist.sh`                            | ok (verified failing on a canary too)                            |
+| Flake check attr       | `nix build .#checks.x86_64-linux.panic-allowlist`            | ok                                                               |
+| Full flake check       | `nix flake check`                                            | **all checks passed** (go, rust, zig, markdown, panic-allowlist) |
+| Rust unit              | untouched this pass; covered by flake check                  | ok                                                               |
 
 LSP note: gopls/golangci-lint produced only the known Go 1.26-vs-1.27 skew
 errors all session (documented gotcha, unfixed, see f#9).
@@ -44,7 +44,7 @@ errors all session (documented gotcha, unfixed, see f#9).
      `startPlugin`/`notifyDependents` (so `provideNamed`, `Fiber.restart`,
      `Fiber.update` can no longer abort); `Fiber.dispose` keeps the
      catch-abort at its void boundary. Bonus bug fix: `queue` set
-     `f.queued = true` *before* the append, so a failed append would have
+     `f.queued = true` _before_ the append, so a failed append would have
      stranded the fiber (marked queued, never enqueued); the flag now
      flips only after success.
    - `Core.bindCleanup` → `Error!*Cleanup`; all six callers
@@ -105,7 +105,7 @@ errors all session (documented gotcha, unfixed, see f#9).
    impossibility.
 2. **The `test` meta-app edit was not executed end-to-end** (bash added
    to runtimeInputs + new step). The app itself passed shellcheck/nix
-   build implicitly? No — only the flake *check* attr and the
+   build implicitly? No — only the flake _check_ attr and the
    `test-panic-allowlist` app were actually built/run; `nix run .#test`
    was not run this session (it would duplicate flake check, but it is
    the only untested wiring edit). Listed as f#2.
@@ -154,7 +154,7 @@ trip):
 
 - **Pipeline masking (the documented gotcha, violated once):** the first
   `nix build .#checks...panic-allowlist 2>&1 | tail -3 && echo "=== OK ==="`
-  printed OK *after a failed build* because `tail`'s exit code masked
+  printed OK _after a failed build_ because `tail`'s exit code masked
   nix's. The AGENTS.md lesson ("verify the raw exit, not the filtered
   tail") existed and was still hit. Caught on the bare re-run.
 - **Untracked-file gotcha (also documented, also hit):** the gate script
@@ -201,58 +201,58 @@ trip):
 
 ## f) NEXT: 50 things to get done (brainstorm — top ~10 are commitments, the rest are ROADMAP fuel)
 
-| # | Task | Impact |
-| --- | --- | --- |
-| 1 | Push `04187f2` (+ AGENTS.md coverage edit) and watch Ports CI, incl. the first `panic-allowlist` job run | HIGH |
-| 2 | Run `nix run .#test` end-to-end to exercise the edited meta-app (bash runtimeInput + new step) | HIGH |
-| 3 | Zig `failure_allocator` tests pinning `error.OutOfMemory` from `isolateShared`/`provideNamed`/`restart`/`update`/registration paths | HIGH |
-| 4 | Design the typed-event guard error channel (Go `typed.go` 6 sites, Rust `events.rs` 2) — envelope value or `Result`-listener, one decision for all ports | HIGH |
-| 5 | Loader: field-precise `Isolate` label comparability validation at config decode | MED |
-| 6 | Rust: encapsulate `FiberId` (`pub(crate)` + accessor) so OOB indexing is unrepresentable externally | MED |
-| 7 | `cargo bench` re-run: arena `Option` removal + Waterfall arg reorder had no perf regression | MED |
-| 8 | Per-site `// dispatch: no error channel` markers on the 15 Zig sites | MED |
-| 9 | LSP fix: per-project gopls/golangci-lint wrapper pinned to flake Go 1.27 | MED |
-| 10 | PR workflow for the sweep (branch + PR; jj fork skill) | MED |
-| 11 | Harden the allowlist gate: pin exact lines or content hashes instead of counts (counts can't catch a swap-in-place edit) | MED |
-| 12 | Zig deinit/error-path leak audit for the new early returns, with a failing allocator | MED |
-| 13 | Cross-port API drift table: one place listing every intentional signature divergence | MED |
-| 14 | Upstream rebase checklist line: Go `Waterfall`/`Isolate` (+ Zig fallibility) diverge from TS shapes by design | MED |
-| 15 | Coverage/bench baselines as enforced gates (resolves the ROADMAP open decision) | MED |
-| 16 | ANNOTATE the 06:32 report: mark its resolved items (c1/c3/c5, f1/f3/f4/f5/f10) done at `04187f2` | LOW |
-| 17 | Codify three AGENTS.md gotchas from this session: policy-boundary → reachability audit; pipeline-exit verification; git-add-before-flake-build | LOW |
-| 18 | Zig sticky OOM latch (record once, surface on the next fallible call) as an alternative to the remaining dispatch aborts | LOW |
-| 19 | Cross-port error-carrying dispatch envelope design (literal zero panics end state) | LOW |
-| 20 | Rust typestate `FnPlugin` builder prototype (test the identity-model rationale) | LOW |
-| 21 | `Error::PluginShared` doc example in `FnPlugin` docs | LOW |
-| 22 | Zig dispatch abort messages with function context (`OOM in emitNamed`) | LOW |
-| 23 | Waterfall dispatch-observer args contract test (behavior preserved, currently unpinned) | LOW |
-| 24 | Go `ctx.Waterfall` godoc review + example for the new signature | LOW |
-| 25 | Check docs.rs render of `Error::PluginShared` doc links | LOW |
-| 26 | Group sync loop: confirm aggregated `errs` from `ensureIDLocked` carry entry context | LOW |
-| 27 | PORTS.md: per-port fallibility shapes section (`(T, error)` / `Result` / `Error!T`) | LOW |
-| 28 | FEATURES.md: "panic-free surface" inventory row with per-port status | LOW |
-| 29 | Review `#[allow]` inventories in `rust/src` (post-sweep staleness) | LOW |
-| 30 | Zig test harnesses: replace remaining `catch @panic`/`catch unreachable` with `try`/expects where legal | LOW |
-| 31 | Fork README port table: API-stability/fallibility note if the surface is mentioned | LOW |
-| 32 | Evaluate `#[deny(clippy::panic)]` crate-wide with site-level allows only | LOW |
-| 33 | Evaluate a vet-style Go check banning `panic(` in non-test library code (stronger than grep) | LOW |
-| 34 | ROADMAP parity matrix: panic-free-surface row | LOW |
-| 35 | `Must*` godoc: state the panic contract explicitly (opt-in sugar over `Get`/`Register`) | LOW |
-| 36 | Zig `isolateKey` vs `isolateKeyE` long-term direction (deprecate the aborting form?) | LOW |
-| 37 | `zig build docs` output review: new `Error!` signatures render correctly | LOW |
-| 38 | shellcheck the allowlist script under nixpkgs bash 5 vs ubuntu-latest bash (CI parity) | LOW |
-| 39 | Golden-adjacent idea: an OOM trace via `failure_allocator` as a fifth Zig-only transcript | LOW |
-| 40 | `error.OutOfMemory` naming review: Zig std convention is the builtin `error.OutOfMemory` — confirm doc site wording matches | LOW |
-| 41 | TS hmr/include suites: one explicit local green run post-sweep for the record | LOW |
-| 42 | erraudit re-verify on the next Go error-path change (gate for the new plumbing) | LOW |
-| 43 | `nix develop -c buildflow` mirror run (still blocked by the platform-mismatch limitation; keep on buildflow's fix list) | LOW |
-| 44 | Sweep `rust/tests` for `unwrap`-heavy misuse assertions that silently depend on panic semantics | LOW |
-| 45 | CONTRIBUTING.md: one paragraph on the panic policy + how to grow the allowlist | LOW |
-| 46 | Bench: re-run `BenchmarkWaterfallEvent` specifically (arg reorder cost) | LOW |
-| 47 | Zig `Registry.delete`/`effects()`/`isolateKey` doc comments: state "may abort on OOM" | LOW |
-| 48 | Consider a `justfile`-free `test-panic` convenience app alias naming review (`test-panic-allowlist` is long) | LOW |
-| 49 | Doc-site (zig build docs) emission of the allowlist policy comment — verify it reads well | LOW |
-| 50 | Loop closure: after CI green, mark the sweep DONE in the next status report | LOW |
+| #  | Task                                                                                                                                                     | Impact |
+| -- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1  | Push `04187f2` (+ AGENTS.md coverage edit) and watch Ports CI, incl. the first `panic-allowlist` job run                                                 | HIGH   |
+| 2  | Run `nix run .#test` end-to-end to exercise the edited meta-app (bash runtimeInput + new step)                                                           | HIGH   |
+| 3  | Zig `failure_allocator` tests pinning `error.OutOfMemory` from `isolateShared`/`provideNamed`/`restart`/`update`/registration paths                      | HIGH   |
+| 4  | Design the typed-event guard error channel (Go `typed.go` 6 sites, Rust `events.rs` 2) — envelope value or `Result`-listener, one decision for all ports | HIGH   |
+| 5  | Loader: field-precise `Isolate` label comparability validation at config decode                                                                          | MED    |
+| 6  | Rust: encapsulate `FiberId` (`pub(crate)` + accessor) so OOB indexing is unrepresentable externally                                                      | MED    |
+| 7  | `cargo bench` re-run: arena `Option` removal + Waterfall arg reorder had no perf regression                                                              | MED    |
+| 8  | Per-site `// dispatch: no error channel` markers on the 15 Zig sites                                                                                     | MED    |
+| 9  | LSP fix: per-project gopls/golangci-lint wrapper pinned to flake Go 1.27                                                                                 | MED    |
+| 10 | PR workflow for the sweep (branch + PR; jj fork skill)                                                                                                   | MED    |
+| 11 | Harden the allowlist gate: pin exact lines or content hashes instead of counts (counts can't catch a swap-in-place edit)                                 | MED    |
+| 12 | Zig deinit/error-path leak audit for the new early returns, with a failing allocator                                                                     | MED    |
+| 13 | Cross-port API drift table: one place listing every intentional signature divergence                                                                     | MED    |
+| 14 | Upstream rebase checklist line: Go `Waterfall`/`Isolate` (+ Zig fallibility) diverge from TS shapes by design                                            | MED    |
+| 15 | Coverage/bench baselines as enforced gates (resolves the ROADMAP open decision)                                                                          | MED    |
+| 16 | ANNOTATE the 06:32 report: mark its resolved items (c1/c3/c5, f1/f3/f4/f5/f10) done at `04187f2`                                                         | LOW    |
+| 17 | Codify three AGENTS.md gotchas from this session: policy-boundary → reachability audit; pipeline-exit verification; git-add-before-flake-build           | LOW    |
+| 18 | Zig sticky OOM latch (record once, surface on the next fallible call) as an alternative to the remaining dispatch aborts                                 | LOW    |
+| 19 | Cross-port error-carrying dispatch envelope design (literal zero panics end state)                                                                       | LOW    |
+| 20 | Rust typestate `FnPlugin` builder prototype (test the identity-model rationale)                                                                          | LOW    |
+| 21 | `Error::PluginShared` doc example in `FnPlugin` docs                                                                                                     | LOW    |
+| 22 | Zig dispatch abort messages with function context (`OOM in emitNamed`)                                                                                   | LOW    |
+| 23 | Waterfall dispatch-observer args contract test (behavior preserved, currently unpinned)                                                                  | LOW    |
+| 24 | Go `ctx.Waterfall` godoc review + example for the new signature                                                                                          | LOW    |
+| 25 | Check docs.rs render of `Error::PluginShared` doc links                                                                                                  | LOW    |
+| 26 | Group sync loop: confirm aggregated `errs` from `ensureIDLocked` carry entry context                                                                     | LOW    |
+| 27 | PORTS.md: per-port fallibility shapes section (`(T, error)` / `Result` / `Error!T`)                                                                      | LOW    |
+| 28 | FEATURES.md: "panic-free surface" inventory row with per-port status                                                                                     | LOW    |
+| 29 | Review `#[allow]` inventories in `rust/src` (post-sweep staleness)                                                                                       | LOW    |
+| 30 | Zig test harnesses: replace remaining `catch @panic`/`catch unreachable` with `try`/expects where legal                                                  | LOW    |
+| 31 | Fork README port table: API-stability/fallibility note if the surface is mentioned                                                                       | LOW    |
+| 32 | Evaluate `#[deny(clippy::panic)]` crate-wide with site-level allows only                                                                                 | LOW    |
+| 33 | Evaluate a vet-style Go check banning `panic(` in non-test library code (stronger than grep)                                                             | LOW    |
+| 34 | ROADMAP parity matrix: panic-free-surface row                                                                                                            | LOW    |
+| 35 | `Must*` godoc: state the panic contract explicitly (opt-in sugar over `Get`/`Register`)                                                                  | LOW    |
+| 36 | Zig `isolateKey` vs `isolateKeyE` long-term direction (deprecate the aborting form?)                                                                     | LOW    |
+| 37 | `zig build docs` output review: new `Error!` signatures render correctly                                                                                 | LOW    |
+| 38 | shellcheck the allowlist script under nixpkgs bash 5 vs ubuntu-latest bash (CI parity)                                                                   | LOW    |
+| 39 | Golden-adjacent idea: an OOM trace via `failure_allocator` as a fifth Zig-only transcript                                                                | LOW    |
+| 40 | `error.OutOfMemory` naming review: Zig std convention is the builtin `error.OutOfMemory` — confirm doc site wording matches                              | LOW    |
+| 41 | TS hmr/include suites: one explicit local green run post-sweep for the record                                                                            | LOW    |
+| 42 | erraudit re-verify on the next Go error-path change (gate for the new plumbing)                                                                          | LOW    |
+| 43 | `nix develop -c buildflow` mirror run (still blocked by the platform-mismatch limitation; keep on buildflow's fix list)                                  | LOW    |
+| 44 | Sweep `rust/tests` for `unwrap`-heavy misuse assertions that silently depend on panic semantics                                                          | LOW    |
+| 45 | CONTRIBUTING.md: one paragraph on the panic policy + how to grow the allowlist                                                                           | LOW    |
+| 46 | Bench: re-run `BenchmarkWaterfallEvent` specifically (arg reorder cost)                                                                                  | LOW    |
+| 47 | Zig `Registry.delete`/`effects()`/`isolateKey` doc comments: state "may abort on OOM"                                                                    | LOW    |
+| 48 | Consider a `justfile`-free `test-panic` convenience app alias naming review (`test-panic-allowlist` is long)                                             | LOW    |
+| 49 | Doc-site (zig build docs) emission of the allowlist policy comment — verify it reads well                                                                | LOW    |
+| 50 | Loop closure: after CI green, mark the sweep DONE in the next status report                                                                              | LOW    |
 
 ## g) QUESTIONS I CANNOT FIGURE OUT MYSELF
 
@@ -263,7 +263,7 @@ trip):
    to the next planned release?
 2. **End-state for the remaining 24 reviewed panics:** is the current
    split (Must* sugar + typed-event guards + 15 channel-less Zig aborts,
-   all allowlist-gated) an acceptable *permanent* end state, or do you
+   all allowlist-gated) an acceptable _permanent_ end state, or do you
    want the full conversion — including changing the shared dispatch
    callback contract in all three ports (envelope values /
    `Result`-listeners) — for literal zero panics outside `Must*`?
@@ -273,4 +273,4 @@ trip):
 
 ---
 
-*Awaiting instructions.*
+_Awaiting instructions._
