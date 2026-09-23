@@ -32,11 +32,11 @@ cd "$(dirname "$0")/.."
 
 mode="${1:-direct}"
 case "$mode" in
-  direct | closure) ;;
-  *)
-    echo "usage: $0 [direct|closure]" >&2
-    exit 64
-    ;;
+direct | closure) ;;
+*)
+  echo "usage: $0 [direct|closure]" >&2
+  exit 64
+  ;;
 esac
 
 system="$(nix eval --impure --expr 'builtins.currentSystem' --raw)"

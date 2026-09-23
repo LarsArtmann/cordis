@@ -83,6 +83,7 @@ itself; annotated with one correction during this self-review).
 4. SECURITY.md / advisory-channel decision for audit findings.
 
 ## d) TOTALLY FUCKED UP (caught in time — landed impact zero, but each
+
 was one lazy step from a wrong deliverable)
 
 1. **Almost shipped a false-clean scan.** First scoped attempt
@@ -123,7 +124,7 @@ was one lazy step from a wrong deliverable)
    `agentic_fetch` with an extraction prompt, or parse the local vulnix
    cache; verification of all 120 then becomes cheap.
 4. **Nuance the "~60% false positives" claim** where it leaked into
-   TODO_LIST.md wording: 61% of a *biased sample* (all direct-scope +
+   TODO_LIST.md wording: 61% of a _biased sample_ (all direct-scope +
    all high-severity + oddities — selection favors collisions), not of
    the 120. State sample bias explicitly when citing the number.
 5. **Pin the scanner** (`github:NixOS/nixpkgs/<lock-rev>#vulnix`) in
@@ -139,6 +140,7 @@ was one lazy step from a wrong deliverable)
 ## f) NEXT THINGS (impact-ordered; ~25 real items, not padded to 50)
 
 **Now / this session's loose ends:**
+
 1. Fix `scripts/vulnix-audit.sh` silent-failure hole (d#4). — S
 2. Verify and bucket jq's 3 CVEs (only untriaged package). — S
 3. Script: include apps' closures in target derivation; assert counts.
@@ -149,13 +151,13 @@ was one lazy step from a wrong deliverable)
 
 **Verification depth:**
 7. Verify the remaining 84 CVEs with lean fetching (e#3); upgrade the
-   audit report from sample-based to full. — M
+audit report from sample-based to full. — M
 8. Re-check the glibc 2025/26 batch against GLIBC-SA advisories
-   (sourceware), not just NVD CPEs. — S each
+(sourceware), not just NVD CPEs. — S each
 9. Verify perl CVE-2026-57432 and libmicrohttpd CVE-2025-62689 (the
-   two stragglers in otherwise-verified families). — S
+two stragglers in otherwise-verified families). — S
 10. Confirm zlib CVE-2023-6992 is the zlib-ng mismatch it looks like.
-    — S
+— S
 
 **Dependency-side (vulnix-blind):**
 11. `yarn npm audit` one-off for the TS workspace; record verdict. — S
@@ -164,36 +166,36 @@ was one lazy step from a wrong deliverable)
 
 **Automation / hygiene:**
 14. Decide whether the vulnix re-run belongs in the documented
-    `nix flake update` routine (AGENTS.md checklist) vs TODO checkbox.
-    — S (needs user preference, g#2)
+`nix flake update` routine (AGENTS.md checklist) vs TODO checkbox.
+— S (needs user preference, g#2)
 15. Machine-level vulnix scan (`-S`, `--gc-roots`) if the user wants
-    the box audited too — out of repo scope by default. — M
+the box audited too — out of repo scope by default. — M
 16. SECURITY.md or a `docs/SECURITY_AUDITS.md` index pointing at audit
-    reports + scripts. — S
+reports + scripts. — S
 17. Consider a GitHub-scheduled (monthly) issue template for "re-run
-    vulnix audit" instead of a TODO checkbox. — S
+vulnix audit" instead of a TODO checkbox. — S
 18. Add `scripts/vulnix-audit.sh` mention to CONTRIBUTING.md's tooling
-    list (if audits are contributor-relevant). — S
+list (if audits are contributor-relevant). — S
 19. The daemon-committed `a24eaa5` "markdownlint formatting fixes"
-    introduced the trailing-comma breakage: add a one-line CI-grade
-    guard? (`jq empty .markdownlint.jsonc` in the markdown check) — S
+introduced the trailing-comma breakage: add a one-line CI-grade
+guard? (`jq empty .markdownlint.jsonc` in the markdown check) — S
 20. Observation (not researched, out of scope): `.github/dependabot.yml`
-    appeared and got daemon-committed during this session's window —
-    worth a glance by whoever owns it. — S
+appeared and got daemon-committed during this session's window —
+worth a glance by whoever owns it. — S
 
 **Watch list (from the audit; all ride the next nixpkgs bump):**
 21. glibc 2.43 (scanf `%mc` CVE-2026-5450 et al.), python 3.14.7
-    (CVE-2026-15308/-0864), coreutils 9.12 (CVE-2026-56391/-92), gzip
-    1.15 (CVE-2026-41991/-92), binutils 2.47, libssh2 1.11.2+, bison
-    release with 3169c1e, patch release. — S (re-run f#14's routine)
+(CVE-2026-15308/-0864), coreutils 9.12 (CVE-2026-56391/-92), gzip
+1.15 (CVE-2026-41991/-92), binutils 2.47, libssh2 1.11.2+, bison
+release with 3169c1e, patch release. — S (re-run f#14's routine)
 22. go bootstrap chain: nixpkgs bump of `go_1_27`'s bootstrap (1.24.13
-    carries 26 genuine toolchain CVEs; build-time-only exposure). — S
+carries 26 genuine toolchain CVEs; build-time-only exposure). — S
 23. Re-run `scripts/vulnix-audit.sh direct` after the bump; expect the
-    watch list to clear and re-baseline. — S
+watch list to clear and re-baseline. — S
 
 ## g) QUESTIONS (cannot be answered from the repo)
 
-1. **Scope policy**: is vulnix auditing *this repo's flake world* only
+1. **Scope policy**: is vulnix auditing _this repo's flake world_ only
    (current choice, per the 2026-09-08 noise lesson), or do you also
    want the machine-level closures (system profile, `~/.nix-profile`,
    GC roots) audited and reported?

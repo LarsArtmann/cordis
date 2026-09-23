@@ -49,12 +49,12 @@ sees trusted inputs. 61% of the verified findings are false positives
 
 ## c) Scoped scan — all 11 findings, individually verified
 
-| Package (nixpkgs) | CVEs | NVD verdict |
-| --- | --- | --- |
-| cargo-1.97.1 (latest) | CVE-2026-14363, -58521, -39837, -39839, -39840, -58519 (+ -39841 same family) | **FP**: all MediaWiki "Cargo" PHP extension (SQLi/XSS). Name collision with rust cargo. |
-| go-1.27.1 (latest) | CVE-2023-49292 | **FP**: `ecies/go` secp256k1 library (versions < 2.0.8); not the Go toolchain. 1.27.1 < 2.0.8 numerically. |
-| ShellCheck-0.11.0 (latest) | CVE-2021-28794 | **FP**: unofficial VS Code ShellCheck extension; not the CLI. |
-| coreutils-9.11 (latest) | CVE-2026-56391, CVE-2026-56392 | **Genuine**: `uniq -w` multibyte OOB read; `unexpand -t` heap overflow. Affects ≤9.11, fixed in unreleased upstream commits. Exposure here: shell scripts on trusted artifacts only; CVSS AV:L/UI:R. |
+| Package (nixpkgs)          | CVEs                                                                          | NVD verdict                                                                                                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cargo-1.97.1 (latest)      | CVE-2026-14363, -58521, -39837, -39839, -39840, -58519 (+ -39841 same family) | **FP**: all MediaWiki "Cargo" PHP extension (SQLi/XSS). Name collision with rust cargo.                                                                                                              |
+| go-1.27.1 (latest)         | CVE-2023-49292                                                                | **FP**: `ecies/go` secp256k1 library (versions < 2.0.8); not the Go toolchain. 1.27.1 < 2.0.8 numerically.                                                                                           |
+| ShellCheck-0.11.0 (latest) | CVE-2021-28794                                                                | **FP**: unofficial VS Code ShellCheck extension; not the CLI.                                                                                                                                        |
+| coreutils-9.11 (latest)    | CVE-2026-56391, CVE-2026-56392                                                | **Genuine**: `uniq -w` multibyte OOB read; `unexpand -t` heap overflow. Affects ≤9.11, fixed in unreleased upstream commits. Exposure here: shell scripts on trusted artifacts only; CVSS AV:L/UI:R. |
 
 The other 17 direct inputs (go bootstrap chain aside) scan clean, incl.
 zig 0.16.0, nodejs 24.19.0, yarn-berry 4.14.1, gopls, golangci-lint,
@@ -69,7 +69,7 @@ Product-name collisions: cargo ×7 (MediaWiki), go (ecies/go), ShellCheck
 crate here), yoke (yokecd K8s deployer; ICU4X crate here), ada (Ada.cx
 SaaS — NOT the ada-url parser bundled in nodejs), dash (Plotly Dash),
 python ×2 (VS Code Python extension), zlib CVE-2026-27820 (Ruby zlib
-bindings, not C zlib), curl-0.4.49 (the Rust curl *crate* matched
+bindings, not C zlib), curl-0.4.49 (the Rust curl _crate_ matched
 against 2022/23 libcurl tool CVEs; the actual libcurl in the store is
 NOT flagged — nixpkgs ships it patched). Disputed/NA: gcc CVE-2023-4039
 (DISPUTED, AArch64-only stack-protector miss; x86_64 here), libxml2
@@ -91,6 +91,7 @@ exposure (verified sample: 9).**
 > never triaged into a bucket — it slipped between the attribution pass
 > and the bucket tables. Treat as **unclassified pending verification**,
 > not implicitly clean.
+
 - glibc-2.42 (all closures): CVE-2026-5450 scanf `%mc` 1-byte heap
   overflow (2.7–2.43), CVE-2026-0861 memalign integer overflow (needs
   attacker-controlled size+alignment; "not easily exploitable" per
@@ -103,7 +104,7 @@ exposure (verified sample: 9).**
   attacker-written grammar), binutils-2.46 (readelf NULL-deref class,
   crash-only, on crafted ELFs), patch-2.8, ninja-1.13.2
   (CVE-2021-4336, unfixed DoS), libssh2-1.11.1 (SFTP `sftp_open`
-  double-free etc., exploitable only by a malicious SSH *server*;
+  double-free etc., exploitable only by a malicious SSH _server_;
   nothing here speaks SSH via libssh2).
 - Bootstrap-chain relics: gzip-1.2.4 is the 1993 GNU gzip built inside
   the tinycc bootstrap (CVE-2022-1271 etc. technically apply); runs only
@@ -160,5 +161,5 @@ libmicrohttpd.
    `nix flake update` (watch: glibc 2.43, python 3.14.7, coreutils
    9.12, gzip 1.15, binutils 2.47, libssh2 1.11.2+). — Low / S
 2. Consider `cargo audit` / `govulncheck` / `yarn npm audit` runs for
-   the *dependency* side vulnix cannot see (Go/Rust ports are
+   the _dependency_ side vulnix cannot see (Go/Rust ports are
    dependency-free today, so this is TS-workspace-only). — Low / S

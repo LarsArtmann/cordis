@@ -62,7 +62,7 @@
     "esbuild": "^0.28.2"
   },
   "dependencies": {
-    "@babel/code-frame": "^8.0.0",
+    "@babel/code-frame": "^8.0.6",
     "chokidar": "^5.0.0",
     "cosmokit": "^1.8.1",
     "picomatch": "^4.0.7",
