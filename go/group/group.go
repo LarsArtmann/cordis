@@ -41,6 +41,7 @@ func Start(ctx *cordis.Context) (*Group, error) {
 	if _, err := ctx.Provide(ServiceName, g); err != nil {
 		return nil, err
 	}
+
 	return g, nil
 }
 
@@ -51,11 +52,13 @@ func (g *Group) Create(id string, factory Factory) error {
 	g.mu.Lock()
 	if _, ok := g.fibers[id]; ok {
 		g.mu.Unlock()
+
 		return fmt.Errorf("group: entry %q already exists", id)
 	}
 	g.mu.Unlock()
 
 	scope := g.ctx.Extend()
+
 	fiber, err := cordis.Start(scope, cordis.NewPlugin("group:"+id, func(c *cordis.Context, _ struct{}) error {
 		return factory(c)
 	}), struct{}{})
@@ -65,12 +68,16 @@ func (g *Group) Create(id string, factory Factory) error {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	if _, ok := g.fibers[id]; ok {
 		// Raced with another Create; drop the newcomer.
 		fiber.Dispose()
+
 		return fmt.Errorf("group: entry %q already exists", id)
 	}
+
 	g.fibers[id] = &entry{fiber: fiber}
+
 	return nil
 }
 
@@ -80,6 +87,7 @@ func (g *Group) Remove(id string) {
 	e, ok := g.fibers[id]
 	delete(g.fibers, id)
 	g.mu.Unlock()
+
 	if ok {
 		e.fiber.Dispose()
 	}
@@ -90,7 +98,9 @@ func (g *Group) Remove(id string) {
 func (g *Group) Get(id string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	e := g.fibers[id]
+
 	return e != nil && e.fiber.State() == cordis.StateActive
 }
 
@@ -98,9 +108,11 @@ func (g *Group) Get(id string) bool {
 func (g *Group) State(id string) cordis.FiberState {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	if e := g.fibers[id]; e != nil {
 		return e.fiber.State()
 	}
+
 	return cordis.StateDisposed
 }
 
@@ -108,11 +120,14 @@ func (g *Group) State(id string) cordis.FiberState {
 func (g *Group) IDs() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	ids := make([]string, 0, len(g.fibers))
 	for id := range g.fibers {
 		ids = append(ids, id)
 	}
+
 	sort.Strings(ids)
+
 	return ids
 }
 
@@ -121,13 +136,17 @@ func (g *Group) IDs() []string {
 // every change has settled.
 func (g *Group) Update(wanted map[string]Factory) error {
 	g.mu.Lock()
+
 	var stale []string
+
 	for id := range g.fibers {
 		if _, ok := wanted[id]; !ok {
 			stale = append(stale, id)
 		}
 	}
+
 	var fresh []string
+
 	for id := range wanted {
 		if _, ok := g.fibers[id]; !ok {
 			fresh = append(fresh, id)
@@ -138,10 +157,12 @@ func (g *Group) Update(wanted map[string]Factory) error {
 	for _, id := range stale {
 		g.Remove(id)
 	}
+
 	for _, id := range fresh {
 		if err := g.Create(id, wanted[id]); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

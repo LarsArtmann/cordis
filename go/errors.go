@@ -28,6 +28,7 @@ func (e *Error) Error() string {
 	if e.Message != "" {
 		return e.Message
 	}
+
 	return string(e.Code)
 }
 
@@ -41,6 +42,7 @@ var ErrInactiveEffect error = &Error{
 // IsInactiveEffect reports whether err is or wraps an inactive-effect error.
 func IsInactiveEffect(err error) bool {
 	ce, ok := errors.AsType[*Error](err)
+
 	return ok && ce.Code == ErrCodeInactiveEffect
 }
 
@@ -59,6 +61,7 @@ type ValidationError struct {
 func (e *ValidationError) Error() string {
 	var b strings.Builder
 	b.WriteString("invalid config:")
+
 	for _, issue := range e.Issues {
 		if len(issue.Path) > 0 {
 			fmt.Fprintf(&b, "\n  - %s (at %s)", issue.Message, strings.Join(issue.Path, "."))
@@ -66,5 +69,6 @@ func (e *ValidationError) Error() string {
 			fmt.Fprintf(&b, "\n  - %s", issue.Message)
 		}
 	}
+
 	return b.String()
 }

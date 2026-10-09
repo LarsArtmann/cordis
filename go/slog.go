@@ -31,10 +31,12 @@ type SlogHandler struct {
 // reach any exporter.
 func NewSlogHandler(ctx *Context, names ...string) *SlogHandler {
 	l := ctx.Logger(names...)
+
 	target := l.level
 	if target == LevelUnset {
 		target = LevelInfo
 	}
+
 	return &SlogHandler{service: l.service, name: l.name, target: target}
 }
 
@@ -45,6 +47,7 @@ func (l *Logger) Slog() *slog.Logger {
 	if target == LevelUnset {
 		target = LevelInfo
 	}
+
 	return slog.New(&SlogHandler{service: l.service, name: l.name, target: target})
 }
 
@@ -59,17 +62,23 @@ func (h *SlogHandler) Handle(_ context.Context, r slog.Record) error {
 	level := cordisLevel(r.Level)
 	attrs := make([]string, 0, len(h.attrs)+r.NumAttrs())
 	attrs = append(attrs, h.attrs...)
+
 	r.Attrs(func(a slog.Attr) bool {
 		attrs = appendAttr(attrs, h.group, a)
+
 		return true
 	})
+
 	args := make([]any, 1, 2+len(attrs))
 	args[0] = "%s"
+
 	args = append(args, r.Message)
 	for _, a := range attrs {
 		args = append(args, a)
 	}
+
 	h.service.dispatch(h.name, level, args)
+
 	return nil
 }
 
@@ -79,6 +88,7 @@ func (h *SlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	for _, a := range attrs {
 		clone.attrs = appendAttr(clone.attrs, h.group, a)
 	}
+
 	return &clone
 }
 
@@ -88,11 +98,13 @@ func (h *SlogHandler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return &clone
 	}
+
 	if clone.group == "" {
 		clone.group = name
 	} else {
 		clone.group += "." + name
 	}
+
 	return &clone
 }
 
@@ -116,6 +128,7 @@ func cordisLevel(level slog.Level) Level {
 func appendAttr(dst []string, prefix string, a slog.Attr) []string {
 	if a.Value.Kind() == slog.KindGroup {
 		group := a.Value.Group()
+
 		next := prefix
 		if a.Key != "" {
 			if next == "" {
@@ -124,18 +137,23 @@ func appendAttr(dst []string, prefix string, a slog.Attr) []string {
 				next += "." + a.Key
 			}
 		}
+
 		for _, member := range group {
 			dst = appendAttr(dst, next, member)
 		}
+
 		return dst
 	}
+
 	key := a.Key
 	if prefix != "" {
 		key = prefix + "." + key
 	}
+
 	var b strings.Builder
 	b.WriteString(key)
 	b.WriteByte('=')
 	b.WriteString(a.Value.String())
+
 	return append(dst, b.String())
 }

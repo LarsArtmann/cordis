@@ -52,13 +52,17 @@ func NewResolver() *Resolver {
 func (r *Resolver) Register(name string, reg Registration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if _, ok := r.entries[name]; ok {
 		return fmt.Errorf("loader: plugin %q is already registered", name)
 	}
+
 	if reg.New == nil {
 		return fmt.Errorf("loader: plugin %q registered without a factory", name)
 	}
+
 	r.entries[name] = reg
+
 	return nil
 }
 
@@ -80,10 +84,13 @@ func (r *Resolver) Replace(name string, reg Registration) (previous Registration
 	if reg.New == nil {
 		return Registration{}, false, fmt.Errorf("loader: plugin %q registered without a factory", name)
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	previous, found = r.entries[name]
 	r.entries[name] = reg
+
 	return previous, found, nil
 }
 
@@ -97,6 +104,7 @@ func TypedRegistration[C any](name string, apply func(ctx *cordis.Context, confi
 	if apply == nil {
 		return Registration{}
 	}
+
 	return Registration{
 		New: func() cordis.PluginHandle { return cordis.NewPlugin(name, apply) },
 		Decode: func(raw any) (any, error) {
@@ -117,7 +125,11 @@ func RegisterType[C any](r *Resolver, name string, apply func(ctx *cordis.Contex
 // apply function, the typed counterpart of Replace and the sugar mirror of
 // RegisterType. It returns the previous registration so callers can roll a
 // failed swap back.
-func ReplaceType[C any](r *Resolver, name string, apply func(ctx *cordis.Context, config C) error) (previous Registration, found bool, err error) {
+func ReplaceType[C any](
+	r *Resolver,
+	name string,
+	apply func(ctx *cordis.Context, config C) error,
+) (previous Registration, found bool, err error) {
 	return r.Replace(name, TypedRegistration(name, apply))
 }
 
@@ -127,6 +139,7 @@ func (r *Resolver) Resolve(name string) (cordis.PluginHandle, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return reg.New(), nil
 }
 
@@ -137,9 +150,11 @@ func (r *Resolver) Decode(name string, raw any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if reg.Decode == nil {
 		return raw, nil
 	}
+
 	return reg.Decode(raw)
 }
 
@@ -147,9 +162,11 @@ func (r *Resolver) lookup(name string) (Registration, error) {
 	r.mu.Lock()
 	reg, ok := r.entries[name]
 	r.mu.Unlock()
+
 	if !ok {
 		return Registration{}, fmt.Errorf("loader: unknown plugin %q", name)
 	}
+
 	return reg, nil
 }
 
@@ -164,12 +181,15 @@ func DecodeInto[C any](raw any) (C, error) {
 			return raw.(C), nil
 		}
 	}
+
 	data, err := json.Marshal(raw)
 	if err != nil {
 		return out, fmt.Errorf("loader: cannot encode config: %w", err)
 	}
+
 	if err := json.Unmarshal(data, &out); err != nil {
 		return out, fmt.Errorf("loader: cannot decode config: %w", err)
 	}
+
 	return out, nil
 }

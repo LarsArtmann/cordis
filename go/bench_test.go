@@ -21,15 +21,18 @@ func BenchmarkStartDispose(b *testing.B) {
 	ctx := cordis.New()
 	handle := cordis.NewPlugin("bench", func(ctx *cordis.Context, conf *benchConfig) error {
 		_, err := ctx.Cleanup("bench", func() {})
+
 		return err
 	})
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		fiber, err := cordis.StartAny(ctx, handle, &benchConfig{N: i})
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		fiber.Dispose()
 	}
 }
@@ -38,14 +41,17 @@ func BenchmarkProvideDisposeGet(b *testing.B) {
 	ctx := cordis.New()
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		d, err := cordis.Provide(ctx, &benchConfig{N: i})
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		if _, err := cordis.Get[*benchConfig](ctx); err != nil {
 			b.Fatal(err)
 		}
+
 		d()
 	}
 }
@@ -57,7 +63,8 @@ func BenchmarkGet(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for range b.N {
 		if _, err := cordis.Get[*benchConfig](ctx); err != nil {
 			b.Fatal(err)
 		}
@@ -71,7 +78,8 @@ func BenchmarkEventEmit(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		ctx.Emit("bench/event", i)
 	}
 }
@@ -81,6 +89,7 @@ func BenchmarkWaterfallEvent(b *testing.B) {
 	for range 5 {
 		if _, err := ctx.On("bench/waterfall", func(args ...any) any {
 			next, _ := args[len(args)-1].(func(...any) any)
+
 			return next(args[:len(args)-1]...)
 		}); err != nil {
 			b.Fatal(err)
@@ -88,7 +97,8 @@ func BenchmarkWaterfallEvent(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		ctx.Waterfall("bench/waterfall", func(args ...any) any { return nil }, i)
 	}
 }
@@ -100,7 +110,8 @@ func BenchmarkTypedEventDispatch(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		cordis.Emit(ctx, benchEvent{Seq: i})
 	}
 }

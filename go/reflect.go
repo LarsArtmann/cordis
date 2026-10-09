@@ -1,6 +1,9 @@
 package cordis
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // Provide publishes value under name in this context's service realm. The
 // service is bound to the context's fiber: it is withdrawn automatically
@@ -14,6 +17,7 @@ import "fmt"
 // fiber is inactive.
 func (c *Context) Provide(name string, value any, check ...func() bool) (Disposer, error) {
 	co := c.core
+
 	co.enter()
 	defer co.leave()
 
@@ -26,14 +30,19 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 		co.mu.Lock()
 		if t, ok := co.props[name]; ok && t != propService {
 			co.mu.Unlock()
+
 			return nil, fmt.Errorf("property %q is already declared as accessor", name)
 		}
+
 		co.props[name] = propService
+
 		key := c.isolateKeyLocked(co, name)
 		if old := co.store[key]; old != nil {
 			co.mu.Unlock()
+
 			return nil, fmt.Errorf("service %q has been registered at <%s>", name, old.fiber.Name())
 		}
+
 		im := &impl{name: name, key: key, fiber: c.fiber, value: value, check: chk}
 		co.store[key] = im
 		co.bumpGenerationLocked()
@@ -60,11 +69,13 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 			delete(co.store, key)
 			co.bumpGenerationLocked()
 			co.mu.Unlock()
+
 			return nil, err
 		}
 
 		co.notifyDependents(c, name)
 		c.emitService(name, value)
+
 		return dispose, nil
 	}
 
@@ -73,14 +84,17 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 	co.mu.Lock()
 	n := len(co.hooks[EventSet])
 	co.mu.Unlock()
+
 	if n == 0 {
 		return store()
 	}
+
 	result := c.Waterfall(EventSet, func(...any) any {
 		dispose, err := store()
 		if err != nil {
 			return err
 		}
+
 		return dispose
 	}, name, value)
 	switch r := result.(type) {
@@ -89,7 +103,7 @@ func (c *Context) Provide(name string, value any, check ...func() bool) (Dispose
 	case Disposer:
 		return r, nil
 	case nil:
-		return nil, fmt.Errorf("cordis: internal/set interception returned no disposer")
+		return nil, errors.New("cordis: internal/set interception returned no disposer")
 	default:
 		return nil, fmt.Errorf("cordis: internal/set interception returned %T", result)
 	}
@@ -109,6 +123,7 @@ func (c *Context) Get(name string) (any, bool) {
 	if ok {
 		return value, true
 	}
+
 	return c.interceptGet(name)
 }
 
@@ -116,11 +131,14 @@ func (c *Context) get(name string) (any, bool) {
 	co := c.core
 	co.mu.Lock()
 	key := c.isolateKeyLocked(co, name)
+
 	im := co.store[key]
 	if im == nil {
 		co.mu.Unlock()
+
 		return nil, false
 	}
+
 	state := im.fiber.state
 	value := im.value
 	check := im.check
@@ -129,9 +147,11 @@ func (c *Context) get(name string) (any, bool) {
 	if state != StateActive {
 		return nil, false
 	}
+
 	if check != nil && !check() {
 		return nil, false
 	}
+
 	return value, true
 }
 
@@ -141,6 +161,8 @@ func (c *Context) Has(name string) bool {
 	co := c.core
 	co.mu.Lock()
 	defer co.mu.Unlock()
+
 	_, ok := co.props[name]
+
 	return ok
 }

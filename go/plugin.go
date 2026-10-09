@@ -52,14 +52,17 @@ func NewPlugin[C any](name string, apply func(ctx *Context, config C) error) *Pl
 			typed, ok := config.(C)
 			if !ok {
 				var zero C
+
 				return fmt.Errorf("cordis: plugin %q received config of type %T, expected %T", name, config, zero)
 			}
+
 			return apply(ctx, typed)
 		},
 	}
 	if base.name == "" {
 		base.name = funcName(apply)
 	}
+
 	return &Plugin[C]{base: base}
 }
 
@@ -70,11 +73,14 @@ func funcName(fn any) string {
 		if _, after, ok := strings.CutLast(name, "/"); ok {
 			name = after
 		}
+
 		if _, after, ok := strings.CutLast(name, "."); ok {
 			name = after
 		}
+
 		return strings.TrimSuffix(name, "-fm")
 	}
+
 	return "anonymous"
 }
 
@@ -87,6 +93,7 @@ func (p *Plugin[C]) Name() string { return p.base.name }
 // chaining and must be called before the first Start.
 func (p *Plugin[C]) Inject(deps ...string) *Plugin[C] {
 	p.base.inject = append(p.base.inject, deps...)
+
 	return p
 }
 
@@ -98,7 +105,9 @@ func (p *Plugin[C]) InjectConfig(name string, config any) *Plugin[C] {
 	if p.base.injectConfig == nil {
 		p.base.injectConfig = make(map[string]any)
 	}
+
 	p.base.injectConfig[name] = config
+
 	return p
 }
 
@@ -110,13 +119,22 @@ func (p *Plugin[C]) Validate(fn func(config C) error) *Plugin[C] {
 		typed, ok := config.(C)
 		if !ok {
 			var zero C
-			return nil, fmt.Errorf("cordis: plugin %q received config of type %T, expected %T", p.base.name, config, zero)
+
+			return nil, fmt.Errorf(
+				"cordis: plugin %q received config of type %T, expected %T",
+				p.base.name,
+				config,
+				zero,
+			)
 		}
+
 		if err := fn(typed); err != nil {
 			return nil, err
 		}
+
 		return config, nil
 	}
+
 	return p
 }
 
@@ -128,6 +146,7 @@ func Start[C any](ctx *Context, plugin *Plugin[C], config C) (*Fiber, error) {
 	if plugin == nil {
 		return nil, fmt.Errorf("invalid plugin, expect function or object with an apply method, received %T", plugin)
 	}
+
 	return startPlugin(ctx, plugin.base, config)
 }
 
@@ -138,6 +157,7 @@ func StartAny(ctx *Context, plugin PluginHandle, config any) (*Fiber, error) {
 	if plugin == nil || plugin.handle() == nil {
 		return nil, fmt.Errorf("invalid plugin, expect function or object with an apply method, received %T", plugin)
 	}
+
 	return startPlugin(ctx, plugin.handle(), config)
 }
 
@@ -154,6 +174,7 @@ func InjectSpec(plugin PluginHandle, spec map[string]any) {
 			if base.injectConfig == nil {
 				base.injectConfig = make(map[string]any)
 			}
+
 			base.injectConfig[name] = cfg
 		}
 	}
@@ -171,29 +192,35 @@ func (c *Context) Inject(deps []string, fn func(ctx *Context) error) (*Fiber, er
 			return fn(ctx)
 		},
 	}
+
 	return startPlugin(c, base, nil)
 }
 
 func startPlugin(ctx *Context, base *pluginBase, config any) (*Fiber, error) {
 	c := ctx.core
+
 	c.enter()
 	defer c.leave()
 
 	if base == nil || base.apply == nil {
 		return nil, fmt.Errorf("invalid plugin, expect function or object with an apply method, received %T", base)
 	}
+
 	if err := ctx.fiber.assertActive(); err != nil {
 		return nil, err
 	}
+
 	parent := ctx.collect
 	if parent == nil {
 		parent = ctx.fiber.bag()
 	}
+
 	if parent == nil {
 		return nil, ErrInactiveEffect
 	}
 
 	c.mu.Lock()
+
 	rt := c.runtimes[base]
 	if rt == nil {
 		rt = &Runtime{Name: base.name, base: base, core: c}
@@ -206,6 +233,7 @@ func startPlugin(ctx *Context, base *pluginBase, config any) (*Fiber, error) {
 	f.entry = parent.push("ctx.plugin()", f.disposeBody)
 
 	c.mu.Lock()
+
 	rt.fibers = append(rt.fibers, f)
 	c.mu.Unlock()
 
@@ -220,14 +248,17 @@ func startPlugin(ctx *Context, base *pluginBase, config any) (*Fiber, error) {
 			c.mu.Unlock()
 			c.logError(f.Name(), err)
 			f.settle()
+
 			return f, nil
 		}
+
 		c.mu.Lock()
 		f.config = validated
 		c.mu.Unlock()
 	}
 
 	c.queue(f)
+
 	return f, nil
 }
 
@@ -245,6 +276,7 @@ type Runtime struct {
 func (rt *Runtime) Fibers() []*Fiber {
 	rt.core.mu.Lock()
 	defer rt.core.mu.Unlock()
+
 	return append([]*Fiber(nil), rt.fibers...)
 }
 
@@ -253,6 +285,7 @@ func (rt *Runtime) removeFiberLocked(f *Fiber) {
 	for i, candidate := range rt.fibers {
 		if candidate == f {
 			rt.fibers = append(rt.fibers[:i], rt.fibers[i+1:]...)
+
 			return
 		}
 	}
@@ -273,6 +306,7 @@ func (c *Context) Registry() *Registry {
 func (r *Registry) Size() int {
 	r.core.mu.Lock()
 	defer r.core.mu.Unlock()
+
 	return len(r.core.runtimes)
 }
 
@@ -280,7 +314,9 @@ func (r *Registry) Size() int {
 func (r *Registry) Has(p PluginHandle) bool {
 	r.core.mu.Lock()
 	defer r.core.mu.Unlock()
+
 	_, ok := r.core.runtimes[p.handle()]
+
 	return ok
 }
 
@@ -288,6 +324,7 @@ func (r *Registry) Has(p PluginHandle) bool {
 func (r *Registry) Get(p PluginHandle) *Runtime {
 	r.core.mu.Lock()
 	defer r.core.mu.Unlock()
+
 	return r.core.runtimes[p.handle()]
 }
 
@@ -295,16 +332,21 @@ func (r *Registry) Get(p PluginHandle) *Runtime {
 // restoring the exact state from before its first Start.
 func (r *Registry) Delete(p PluginHandle) {
 	c := r.core
+
 	c.enter()
 	defer c.leave()
 
 	c.mu.Lock()
+
 	rt := c.runtimes[p.handle()]
 	if rt == nil {
 		c.mu.Unlock()
+
 		return
 	}
+
 	delete(c.runtimes, p.handle())
+
 	fibers := append([]*Fiber(nil), rt.fibers...)
 	c.mu.Unlock()
 

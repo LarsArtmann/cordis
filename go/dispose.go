@@ -48,8 +48,10 @@ func newDisposeBag(c *core) *disposeBag {
 func (b *disposeBag) push(label string, run Cleanup) *disposeItem {
 	b.core.mu.Lock()
 	defer b.core.mu.Unlock()
+
 	item := &disposeItem{label: label, run: run}
 	b.items = append(b.items, item)
+
 	return item
 }
 
@@ -57,8 +59,10 @@ func (b *disposeBag) push(label string, run Cleanup) *disposeItem {
 func (b *disposeBag) pushEffect(label string, children *disposeBag) *disposeItem {
 	b.core.mu.Lock()
 	defer b.core.mu.Unlock()
+
 	item := &disposeItem{label: label, children: children}
 	b.items = append(b.items, item)
+
 	return item
 }
 
@@ -67,6 +71,7 @@ func (b *disposeBag) pushEffect(label string, children *disposeBag) *disposeItem
 func (item *disposeItem) detach(b *disposeBag) {
 	b.core.mu.Lock()
 	defer b.core.mu.Unlock()
+
 	item.done = true
 	b.detachLocked(item)
 }
@@ -76,6 +81,7 @@ func (b *disposeBag) detachLocked(item *disposeItem) {
 	for i, candidate := range b.items {
 		if candidate == item {
 			b.items = append(b.items[:i], b.items[i+1:]...)
+
 			return
 		}
 	}
@@ -85,6 +91,7 @@ func (b *disposeBag) detachLocked(item *disposeItem) {
 // returns them in disposal order (last in, first out).
 func (b *disposeBag) take() []*disposeItem {
 	b.core.mu.Lock()
+
 	items := make([]*disposeItem, 0, len(b.items))
 	for _, item := range b.items {
 		if !item.done {
@@ -92,11 +99,14 @@ func (b *disposeBag) take() []*disposeItem {
 			items = append(items, item)
 		}
 	}
+
 	b.items = nil
 	b.core.mu.Unlock()
+
 	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
 		items[i], items[j] = items[j], items[i]
 	}
+
 	return items
 }
 
@@ -106,8 +116,10 @@ func (item *disposeItem) dispose(b *disposeBag) {
 	b.core.mu.Lock()
 	if item.done {
 		b.core.mu.Unlock()
+
 		return
 	}
+
 	item.done = true
 	b.detachLocked(item)
 	b.core.mu.Unlock()
@@ -121,6 +133,7 @@ func (item *disposeItem) execute(c *core) {
 			child.execute(c)
 		}
 	}
+
 	if item.run != nil {
 		c.runCleanup(item.run)
 	}
@@ -138,6 +151,7 @@ func (c *core) runCleanup(run Cleanup) {
 			c.logError("", fmt.Errorf("cleanup panicked: %v", r))
 		}
 	}()
+
 	run()
 }
 
@@ -145,10 +159,12 @@ func (c *core) runCleanup(run Cleanup) {
 func (b *disposeBag) meta() []EffectMeta {
 	b.core.mu.Lock()
 	defer b.core.mu.Unlock()
+
 	result := make([]EffectMeta, 0, len(b.items))
 	for _, item := range b.items {
 		result = append(result, item.metaLocked())
 	}
+
 	return result
 }
 
@@ -159,8 +175,10 @@ func (item *disposeItem) metaLocked() EffectMeta {
 			meta.Children = append(meta.Children, child.metaLocked())
 		}
 	}
+
 	if meta.Children == nil {
 		meta.Children = []EffectMeta{}
 	}
+
 	return meta
 }

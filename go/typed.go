@@ -60,6 +60,7 @@ func MustGet[T any](ctx *Context) T {
 	if err != nil {
 		panic(err)
 	}
+
 	return value
 }
 
@@ -68,14 +69,17 @@ func MustGet[T any](ctx *Context) T {
 // type, mirroring the two value lookup of named services.
 func TryGet[T any](ctx *Context) (T, bool) {
 	var zero T
+
 	value, ok := ctx.Get(ServiceName[T]())
 	if !ok {
 		return zero, false
 	}
+
 	typed, ok := value.(T)
 	if !ok {
 		return zero, false
 	}
+
 	return typed, true
 }
 
@@ -84,17 +88,21 @@ func TryGet[T any](ctx *Context) (T, bool) {
 // or shared across realms by contract.
 func GetNamed[T any](c *Context, name string) (T, error) {
 	var zero T
+
 	value, ok := c.Get(name)
 	if !ok {
 		if !c.Has(name) {
 			return zero, fmt.Errorf("cannot get property %q without inject", name)
 		}
+
 		return zero, fmt.Errorf("cannot get required service %q in inactive context", name)
 	}
+
 	typed, ok := value.(T)
 	if !ok {
 		return zero, fmt.Errorf("service %q has type %T, expected %T", name, value, zero)
 	}
+
 	return typed, nil
 }
 
@@ -104,6 +112,7 @@ func MustGetNamed[T any](c *Context, name string) T {
 	if err != nil {
 		panic(err)
 	}
+
 	return value
 }
 
@@ -115,15 +124,19 @@ func MustGetNamed[T any](c *Context, name string) T {
 func On[E any](ctx *Context, listener func(E), opts ...EventOption) (Disposer, error) {
 	want := reflect.TypeFor[E]()
 	name := EventName[E]()
+
 	return ctx.On(name, func(args ...any) any {
 		if len(args) != 1 {
 			panic(fmt.Sprintf("cordis: typed event %q expects 1 argument, got %d", name, len(args)))
 		}
+
 		event, ok := args[0].(E)
 		if !ok {
 			panic(fmt.Sprintf("cordis: typed event %q expects %s, got %T", name, want, args[0]))
 		}
+
 		listener(event)
+
 		return nil
 	}, opts...)
 }
@@ -133,15 +146,19 @@ func On[E any](ctx *Context, listener func(E), opts ...EventOption) (Disposer, e
 func Once[E any](ctx *Context, listener func(E), opts ...EventOption) (Disposer, error) {
 	want := reflect.TypeFor[E]()
 	name := EventName[E]()
+
 	return ctx.Once(name, func(args ...any) any {
 		if len(args) != 1 {
 			panic(fmt.Sprintf("cordis: typed event %q expects 1 argument, got %d", name, len(args)))
 		}
+
 		event, ok := args[0].(E)
 		if !ok {
 			panic(fmt.Sprintf("cordis: typed event %q expects %s, got %T", name, want, args[0]))
 		}
+
 		listener(event)
+
 		return nil
 	}, opts...)
 }

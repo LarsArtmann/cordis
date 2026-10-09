@@ -13,6 +13,7 @@ func Inject1[A any](ctx *Context, fn func(ctx *Context, a A) error) (*Fiber, err
 		if err != nil {
 			return err
 		}
+
 		return fn(ctx, a)
 	})
 }
@@ -24,10 +25,12 @@ func Inject2[A any, B any](ctx *Context, fn func(ctx *Context, a A, b B) error) 
 		if err != nil {
 			return err
 		}
+
 		b, err := Get[B](ctx)
 		if err != nil {
 			return err
 		}
+
 		return fn(ctx, a, b)
 	})
 }
@@ -39,14 +42,17 @@ func Inject3[A any, B any, C any](ctx *Context, fn func(ctx *Context, a A, b B, 
 		if err != nil {
 			return err
 		}
+
 		b, err := Get[B](ctx)
 		if err != nil {
 			return err
 		}
+
 		c, err := Get[C](ctx)
 		if err != nil {
 			return err
 		}
+
 		return fn(ctx, a, b, c)
 	})
 }

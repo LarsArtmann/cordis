@@ -1,7 +1,7 @@
 package loader
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"os"
 	"sync"
@@ -47,6 +47,7 @@ func NewPollWatcher(path string, interval time.Duration) *PollWatcher {
 	if interval <= 0 {
 		interval = 500 * time.Millisecond
 	}
+
 	w := &PollWatcher{
 		path:     path,
 		interval: interval,
@@ -54,6 +55,7 @@ func NewPollWatcher(path string, interval time.Duration) *PollWatcher {
 		done:     make(chan struct{}),
 	}
 	w.prime()
+
 	return w
 }
 
@@ -68,6 +70,7 @@ func (w *PollWatcher) prime() {
 // blocks until Close.
 func (w *PollWatcher) Watch(onChange func()) {
 	defer close(w.done)
+
 	for {
 		if info, err := os.Stat(w.path); err == nil {
 			if !w.primed {
@@ -75,9 +78,11 @@ func (w *PollWatcher) Watch(onChange func()) {
 				w.lastMod, w.lastSize = info.ModTime(), info.Size()
 			} else if info.ModTime() != w.lastMod || info.Size() != w.lastSize {
 				w.lastMod, w.lastSize = info.ModTime(), info.Size()
+
 				onChange()
 			}
 		}
+
 		select {
 		case <-w.stop:
 			return
@@ -90,6 +95,7 @@ func (w *PollWatcher) Watch(onChange func()) {
 func (w *PollWatcher) Close() error {
 	w.closeOnce.Do(func() { close(w.stop) })
 	<-w.done
+
 	return nil
 }
 
@@ -101,18 +107,23 @@ func (w *PollWatcher) Close() error {
 func (l *Loader) Reload() error {
 	path := l.configPath()
 	if path == "" {
-		return fmt.Errorf("loader: no config file to reload")
+		return errors.New("loader: no config file to reload")
 	}
+
 	l.reloadMu.Lock()
 	defer l.reloadMu.Unlock()
+
 	entries, err := LoadFile(path)
 	if err != nil {
 		return err
 	}
+
 	if err := l.Start(entries); err != nil {
 		return err
 	}
+
 	l.tree.ctx.Emit(EventConfigUpdate, entries)
+
 	return nil
 }
 
@@ -123,14 +134,18 @@ func (l *Loader) Serve(w Watcher) {
 	l.mu.Lock()
 	if l.watcher != nil {
 		l.mu.Unlock()
+
 		return
 	}
+
 	l.watcher = w
 	done := make(chan struct{})
 	l.watchDone = done
 	l.mu.Unlock()
+
 	go func() {
 		defer close(done)
+
 		w.Watch(func() {
 			if err := l.Reload(); err != nil {
 				slog.Error("loader: reload failed", "err", err)
@@ -142,6 +157,7 @@ func (l *Loader) Serve(w Watcher) {
 func (l *Loader) configPath() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.path
 }
 
@@ -153,11 +169,13 @@ func (l *Loader) stopWatcher() {
 	done := l.watchDone
 	l.watchDone = nil
 	l.mu.Unlock()
+
 	if w != nil {
 		if err := w.Close(); err != nil {
 			slog.Warn("loader: watcher close failed", "err", err)
 		}
 	}
+
 	if done != nil {
 		<-done
 	}

@@ -42,6 +42,7 @@ func New() *Context {
 	ctx := &Context{core: c}
 	root := newRootFiber(ctx)
 	ctx.fiber = root
+
 	return ctx
 }
 
@@ -50,6 +51,7 @@ func (c *Context) Root() *Context {
 	for c.parent != nil {
 		c = c.parent
 	}
+
 	return c
 }
 
@@ -76,11 +78,14 @@ func (c *Context) Extend() *Context {
 // programming mistake. When omitted, a fresh realm is created.
 func (c *Context) Isolate(name string, label ...any) (*Context, error) {
 	child := c.Extend()
+
 	key, err := c.realmKey(name, label)
 	if err != nil {
 		return nil, err
 	}
+
 	child.isolate = map[string]isolateKey{name: key}
+
 	return child, nil
 }
 
@@ -94,22 +99,30 @@ func (c *Context) realmKey(name string, label []any) (isolateKey, error) {
 		if key, ok := label[0].(isolateKey); ok {
 			return key, nil
 		}
+
 		lbl := label[0]
 		if !reflect.TypeOf(lbl).Comparable() {
 			return 0, fmt.Errorf("cordis: isolate label of type %T is not comparable", lbl)
 		}
+
 		c.core.mu.Lock()
 		defer c.core.mu.Unlock()
+
 		if key, ok := c.core.labels[lbl]; ok {
 			return key, nil
 		}
+
 		c.core.lastKey++
 		c.core.labels[lbl] = c.core.lastKey
+
 		return c.core.lastKey, nil
 	}
+
 	c.core.mu.Lock()
 	defer c.core.mu.Unlock()
+
 	c.core.lastKey++
+
 	return c.core.lastKey, nil
 }
 
@@ -128,6 +141,7 @@ func (c *Context) Cleanup(label string, run Cleanup) (Disposer, error) {
 func (c *Context) Intercept(name string, config any) *Context {
 	child := c.Extend()
 	child.intercept = map[string]any{name: config}
+
 	return child
 }
 
@@ -138,10 +152,12 @@ func (c *Context) Intercepted(name string) (any, bool) {
 		if ctx.intercept == nil {
 			continue
 		}
+
 		if value, ok := ctx.intercept[name]; ok {
 			return value, true
 		}
 	}
+
 	return nil, false
 }
 
@@ -151,6 +167,7 @@ func (c *Context) Intercepted(name string) (any, bool) {
 func (c *Context) WithFilter(filter func(listener *Context) bool) *Context {
 	child := c.Extend()
 	child.filter = filter
+
 	return child
 }
 
@@ -159,6 +176,7 @@ func (c *Context) WithFilter(filter func(listener *Context) bool) *Context {
 // keep their events inside their isolation realm.
 func (c *Context) RealmFilter(name string) func(*Context) bool {
 	key := c.isolateKey(name)
+
 	return func(listener *Context) bool {
 		return listener.isolateKey(name) == key
 	}
@@ -169,6 +187,7 @@ func (c *Context) RealmFilter(name string) func(*Context) bool {
 func (c *Context) isolateKey(name string) isolateKey {
 	c.core.mu.Lock()
 	defer c.core.mu.Unlock()
+
 	return c.isolateKeyLocked(c.core, name)
 }
 
@@ -177,10 +196,12 @@ func (c *Context) isolateKeyLocked(co *core, name string) isolateKey {
 		if ctx.isolate == nil {
 			continue
 		}
+
 		if key, ok := ctx.isolate[name]; ok {
 			return key
 		}
 	}
+
 	return co.rootKeyLocked(name)
 }
 
@@ -191,6 +212,7 @@ func (c *Context) isolateKeyLocked(co *core, name string) isolateKey {
 func (c *Context) Batch(fn func(ctx *Context)) {
 	c.core.enter()
 	defer c.core.leave()
+
 	fn(c)
 }
 
@@ -204,6 +226,7 @@ func (c *Context) String() string {
 func (c *Context) withCollect(bag *disposeBag) *Context {
 	child := *c
 	child.collect = bag
+
 	return &child
 }
 
@@ -215,13 +238,16 @@ func (c *Context) registerCleanup(label string, run Cleanup) (Disposer, error) {
 	if err := f.assertActive(); err != nil {
 		return nil, err
 	}
+
 	bag := c.collect
 	if bag == nil {
 		bag = f.bag()
 	}
+
 	if bag == nil {
 		return nil, ErrInactiveEffect
 	}
+
 	item := bag.push(label, run)
 	// The fiber may have unloaded between bag lookup and push; a cleanup
 	// registered on a drained bag would silently leak, so dispose it
@@ -229,9 +255,12 @@ func (c *Context) registerCleanup(label string, run Cleanup) (Disposer, error) {
 	f.core.mu.Lock()
 	stale := f.disposed || (f.state != StateActive && f.state != StateLoading)
 	f.core.mu.Unlock()
+
 	if stale {
 		item.dispose(bag)
+
 		return nil, ErrInactiveEffect
 	}
+
 	return func() { item.dispose(bag) }, nil
 }

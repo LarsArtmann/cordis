@@ -10,6 +10,7 @@ import (
 
 type trackedDB struct {
 	*cordis.ServiceMeta
+
 	DSN string
 }
 
@@ -19,6 +20,7 @@ type sumRequest struct {
 
 func TestProvideServiceFillsMeta(t *testing.T) {
 	ctx := cordis.New()
+
 	db := &trackedDB{ServiceMeta: &cordis.ServiceMeta{}, DSN: "postgres://x"}
 	if _, err := cordis.ProvideService(ctx, db); err != nil {
 		t.Fatal(err)
@@ -27,6 +29,7 @@ func TestProvideServiceFillsMeta(t *testing.T) {
 	if db.Name() != "*cordis_test.trackedDB" {
 		t.Fatalf("name = %q", db.Name())
 	}
+
 	if db.Ctx() != ctx {
 		t.Fatal("meta ctx does not point at the providing context")
 	}
@@ -59,6 +62,7 @@ func TestCallableRecoversPanic(t *testing.T) {
 	if err == nil {
 		t.Fatal("panicking callable returned no error")
 	}
+
 	if !strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("err = %v, want the panic message", err)
 	}
@@ -75,6 +79,7 @@ func TestCallableResolvesThroughBoundContext(t *testing.T) {
 		if err != nil {
 			return 0, err
 		}
+
 		return cfg.Port, nil
 	})
 
@@ -86,6 +91,7 @@ func TestCallableResolvesThroughBoundContext(t *testing.T) {
 
 func TestCallablePublishableAsService(t *testing.T) {
 	ctx := cordis.New()
+
 	add := cordis.Callable[sumRequest](ctx, "add", func(ctx *cordis.Context, req sumRequest) (int, error) {
 		return req.A + req.B, nil
 	})
@@ -97,6 +103,7 @@ func TestCallablePublishableAsService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	got, err := resolved(sumRequest{A: 7, B: 8})
 	if err != nil || got != 15 {
 		t.Fatalf("resolved add = %d, %v; want 15, nil", got, err)

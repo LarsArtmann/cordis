@@ -14,16 +14,19 @@ import (
 func openWatched(t *testing.T, dir string, resolver *Resolver, entries []EntryOptions) *Loader {
 	t.Helper()
 	writeConfig(t, dir, entries)
+
 	l, err := Open(cordis.New(), resolver, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return l
 }
 
 func TestReloadAppliesDiff(t *testing.T) {
 	dir := t.TempDir()
 	rec := &recorder{}
+
 	l := openWatched(t, dir, registerEcho(t, rec), []EntryOptions{
 		{ID: "a", Name: "echo", Config: echoConf{Msg: "a1"}},
 		{ID: "b", Name: "echo", Config: echoConf{Msg: "b"}},
@@ -34,6 +37,7 @@ func TestReloadAppliesDiff(t *testing.T) {
 		{ID: "a", Name: "echo", Config: echoConf{Msg: "a2"}},
 		{ID: "c", Name: "echo", Config: echoConf{Msg: "c"}},
 	})
+
 	if err := l.Reload(); err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +48,7 @@ func TestReloadAppliesDiff(t *testing.T) {
 			t.Fatalf("events = %v, missing %s", events, want)
 		}
 	}
+
 	if _, ok := l.Tree().Lookup("b"); ok {
 		t.Fatal("b survived the reload")
 	}
@@ -52,6 +57,7 @@ func TestReloadAppliesDiff(t *testing.T) {
 func TestReloadBadFileKeepsOldConfig(t *testing.T) {
 	dir := t.TempDir()
 	rec := &recorder{}
+
 	l := openWatched(t, dir, registerEcho(t, rec), []EntryOptions{
 		{ID: "a", Name: "echo", Config: echoConf{Msg: "keep"}},
 	})
@@ -60,13 +66,16 @@ func TestReloadBadFileKeepsOldConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, DefaultConfigName), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := l.Reload(); err == nil {
 		t.Fatal("Reload accepted a broken file")
 	}
+
 	events := rec.snapshot()
 	if slices.Contains(events, "stop:keep") {
 		t.Fatalf("events = %v, old config was torn down", events)
 	}
+
 	if e, ok := l.Tree().Lookup("a"); !ok || fiberState(t, e) != cordis.StateActive {
 		t.Fatal("old entry not active after failed reload")
 	}
@@ -75,6 +84,7 @@ func TestReloadBadFileKeepsOldConfig(t *testing.T) {
 func TestReloadRollsBackOnlyBrokenSubtree(t *testing.T) {
 	dir := t.TempDir()
 	rec := &recorder{}
+
 	l := openWatched(t, dir, registerEcho(t, rec), []EntryOptions{
 		{ID: "solo", Name: "echo", Config: echoConf{Msg: "solo"}},
 		{ID: "g", Name: "group", Config: []EntryOptions{
@@ -104,12 +114,15 @@ func TestReloadRollsBackOnlyBrokenSubtree(t *testing.T) {
 	if slices.Contains(events, "stop:g1") {
 		t.Fatalf("events = %v, healthy group child restarted", events)
 	}
+
 	if slices.Contains(events, "stop:solo") {
 		t.Fatalf("events = %v, sibling disposed by broken subtree", events)
 	}
+
 	if errs := l.Tree().Errors(); len(errs) != 1 {
 		t.Fatalf("errors = %v, want the single broken child", errs)
 	}
+
 	if e, ok := l.Tree().Lookup("g2"); !ok || e.Err() == nil {
 		t.Fatal("broken child not recorded with an error")
 	}
@@ -117,33 +130,42 @@ func TestReloadRollsBackOnlyBrokenSubtree(t *testing.T) {
 
 func TestPollWatcherDetectsChange(t *testing.T) {
 	dir := t.TempDir()
+
 	path := filepath.Join(dir, DefaultConfigName)
 	if err := os.WriteFile(path, []byte("[]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	w := NewPollWatcher(path, 10*time.Millisecond)
 
 	var changes sync.WaitGroup
 	changes.Add(1)
+
 	count := make(chan int, 8)
+
 	go func() {
 		n := 0
+
 		w.Watch(func() {
 			n++
 			count <- n
+
 			changes.Done()
 		})
 	}()
 
 	time.Sleep(30 * time.Millisecond)
+
 	if err := os.WriteFile(path, []byte("[{}]"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	changes.Wait()
 
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	if n := <-count; n != 1 {
 		t.Fatalf("first change number = %d, want 1", n)
 	}
@@ -155,6 +177,7 @@ func TestServeReloadsOnChange(t *testing.T) {
 	l := openWatched(t, dir, registerEcho(t, rec), []EntryOptions{
 		{ID: "a", Name: "echo", Config: echoConf{Msg: "v1"}},
 	})
+
 	l.Serve(NewPollWatcher(filepath.Join(dir, DefaultConfigName), 10*time.Millisecond))
 	defer l.Close()
 
@@ -167,8 +190,10 @@ func TestServeReloadsOnChange(t *testing.T) {
 		if slices.Contains(rec.snapshot(), "start:v2") {
 			return
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
+
 	t.Fatalf("reload never applied: %v", rec.snapshot())
 }
 
@@ -184,11 +209,13 @@ func TestConcurrentReloadAndUpdates(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
+
 			for range 4 {
 				writeConfig(t, dir, []EntryOptions{
 					{ID: "a", Name: "echo", Config: echoConf{Msg: "r"}},
 					{ID: "c", Name: "echo", Config: echoConf{Msg: "c"}},
 				})
+
 				_ = l.Reload()
 				if n%2 == 0 {
 					_ = l.Tree().SetConfig("a", echoConf{Msg: "direct"})
@@ -196,6 +223,7 @@ func TestConcurrentReloadAndUpdates(t *testing.T) {
 			}
 		}(i)
 	}
+
 	wg.Wait()
 	l.Tree().Await()
 	l.Close()
@@ -203,6 +231,7 @@ func TestConcurrentReloadAndUpdates(t *testing.T) {
 	if errs := l.Tree().Errors(); len(errs) > 0 {
 		t.Fatalf("unexpected entry errors: %v", errs)
 	}
+
 	if events := rec.snapshot(); len(events) == 0 {
 		t.Fatal("no lifecycle events recorded")
 	}
@@ -220,6 +249,7 @@ func TestCloseStopsWatcher(t *testing.T) {
 	if slices.Contains(rec.snapshot(), "stop:x") {
 		t.Fatal("unexpected stop before Close")
 	}
+
 	l.Close()
 
 	// After Close the entry is disposed and the watcher loop has returned.

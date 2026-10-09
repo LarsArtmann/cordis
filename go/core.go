@@ -72,6 +72,7 @@ func newCore() *core {
 		props:    make(map[string]propType),
 	}
 	c.logger = newLoggerService()
+
 	return c
 }
 
@@ -90,7 +91,9 @@ func (c *core) bumpGenerationLocked() {
 func (c *core) nextUID() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.counter++
+
 	return c.counter
 }
 
@@ -104,6 +107,7 @@ func (c *core) rootKeyLocked(name string) isolateKey {
 		key = c.lastKey
 		c.keys[name] = key
 	}
+
 	return key
 }
 
@@ -119,11 +123,14 @@ func (c *core) enter() {
 // before control is handed back to user code.
 func (c *core) leave() {
 	c.mu.Lock()
+
 	c.depth--
 	if c.depth != 0 || c.draining {
 		c.mu.Unlock()
+
 		return
 	}
+
 	c.draining = true
 	c.mu.Unlock()
 	c.settlePending()
@@ -145,8 +152,10 @@ func (c *core) settlePending() {
 		c.mu.Lock()
 		if len(c.dirty) == 0 {
 			c.mu.Unlock()
+
 			return
 		}
+
 		f := c.dirty[0]
 		c.dirty = c.dirty[1:]
 		f.queued = false
@@ -172,6 +181,7 @@ func (c *core) queue(f *Fiber) {
 // order is deterministic like the insertion ordered maps upstream.
 func (c *core) notifyDependents(from *Context, names ...string) {
 	c.mu.Lock()
+
 	var fibers []*Fiber
 	for _, rt := range c.runtimes {
 		for _, f := range rt.fibers {
@@ -180,8 +190,10 @@ func (c *core) notifyDependents(from *Context, names ...string) {
 			}
 		}
 	}
+
 	sort.Slice(fibers, func(i, j int) bool { return fibers[i].uid < fibers[j].uid })
 	c.mu.Unlock()
+
 	for _, f := range fibers {
 		c.queue(f)
 	}
@@ -194,9 +206,11 @@ func (f *Fiber) matchesAnyLocked(from *Context, names []string) bool {
 		if _, ok := f.inject[name]; !ok {
 			continue
 		}
+
 		if f.ctx.isolateKeyLocked(from.core, name) == from.isolateKeyLocked(from.core, name) {
 			return true
 		}
 	}
+
 	return false
 }

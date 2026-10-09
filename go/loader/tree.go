@@ -44,12 +44,14 @@ func NewTree(ctx *cordis.Context, resolver *Resolver) *Tree {
 	if resolver == nil {
 		resolver = NewResolver()
 	}
+
 	t := &Tree{
 		ctx:      ctx,
 		resolver: resolver,
 		store:    make(map[string]*Entry),
 		fibers:   make(map[*cordis.Fiber]*Entry),
 	}
+
 	t.root = &EntryGroup{tree: t, host: ctx}
 	if _, err := ctx.On(cordis.EventPlugin, t.onPlugin, cordis.Global()); err != nil {
 		slog.Warn("loader: cannot observe plugin disposal", "err", err)
@@ -60,6 +62,7 @@ func NewTree(ctx *cordis.Context, resolver *Resolver) *Tree {
 	if _, err := ctx.On(cordis.EventUpdate, t.onConfigUpdate, cordis.Global(), cordis.Prepend()); err != nil {
 		slog.Warn("loader: cannot observe config updates", "err", err)
 	}
+
 	return t
 }
 
@@ -69,19 +72,24 @@ func (t *Tree) onConfigUpdate(args ...any) any {
 	f, _ := args[0].(*cordis.Fiber)
 	config := args[1]
 	noSave, _ := args[2].(bool)
+
 	next, ok := args[3].(func(...any) any)
 	if !ok {
 		return nil
 	}
+
 	t.mu.Lock()
+
 	e := t.fibers[f]
 	if e != nil && !noSave {
 		e.opts.Config = config
 	}
 	t.mu.Unlock()
+
 	if e != nil && !noSave {
 		t.Write()
 	}
+
 	return next(f, config, noSave)
 }
 
@@ -96,24 +104,28 @@ func (t *Tree) Entries() []*Entry {
 	t.mu.Lock()
 	ids := slices.Clone(t.order)
 	t.mu.Unlock()
+
 	out := make([]*Entry, 0, len(ids))
 	for _, id := range ids {
 		if e := t.lookupEntry(id); e != nil {
 			out = append(out, e)
 		}
 	}
+
 	return out
 }
 
 // Lookup returns the entry with the given local id.
 func (t *Tree) Lookup(id string) (*Entry, bool) {
 	e := t.lookupEntry(id)
+
 	return e, e != nil
 }
 
 func (t *Tree) lookupEntry(id string) *Entry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return t.store[id]
 }
 
@@ -125,6 +137,7 @@ func (t *Tree) Resolve(id string) (*Entry, error) {
 	if e == nil {
 		return nil, fmt.Errorf("loader: cannot resolve entry %s", id)
 	}
+
 	return e, nil
 }
 
@@ -134,14 +147,17 @@ func (t *Tree) ResolveGroup(id string) (*EntryGroup, error) {
 	if id == "" {
 		return t.root, nil
 	}
+
 	e, err := t.Resolve(id)
 	if err != nil {
 		return nil, err
 	}
+
 	g := e.Subgroup()
 	if g == nil {
 		return nil, fmt.Errorf("loader: entry %s is not a group", id)
 	}
+
 	return g, nil
 }
 
@@ -153,22 +169,29 @@ func (t *Tree) Create(opts EntryOptions, parentID string, pos int) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("loader: create under %q: %w", parentID, err)
 	}
+
 	t.mu.Lock()
+
 	id, err := t.ensureIDLocked(&opts)
 	if err != nil {
 		t.mu.Unlock()
+
 		return "", fmt.Errorf("loader: create under %q: %w", parentID, err)
 	}
+
 	if pos < 0 || pos >= len(g.data) {
 		g.data = append(g.data, cloneOptions(opts))
 	} else {
 		g.data = slices.Insert(g.data, pos, cloneOptions(opts))
 	}
 	t.mu.Unlock()
+
 	if err := g.createEntry(opts, id); err != nil {
 		return id, fmt.Errorf("loader: create %q under %q: %w", id, parentID, err)
 	}
+
 	t.Write()
+
 	return id, nil
 }
 
@@ -179,8 +202,10 @@ func (t *Tree) Remove(id string) error {
 	if err != nil {
 		return err
 	}
+
 	e.parent.Remove(id, false)
 	t.Write()
+
 	return nil
 }
 
@@ -191,10 +216,13 @@ func (t *Tree) Update(id string, opts EntryOptions) error {
 	if err != nil {
 		return err
 	}
+
 	if err := e.update(opts, false, false); err != nil {
 		return err
 	}
+
 	t.Write()
+
 	return nil
 }
 
@@ -207,6 +235,7 @@ func (t *Tree) Refresh(id string) error {
 	if err != nil {
 		return err
 	}
+
 	return e.refresh()
 }
 
@@ -216,11 +245,14 @@ func (t *Tree) Replace(id string, opts EntryOptions) error {
 	if err != nil {
 		return err
 	}
+
 	opts.ID = id
 	if err := e.update(opts, true, true); err != nil {
 		return err
 	}
+
 	t.Write()
+
 	return nil
 }
 
@@ -232,6 +264,7 @@ func (t *Tree) SetConfig(id string, config any) error {
 	if err != nil {
 		return err
 	}
+
 	return e.update(EntryOptions{Config: config}, false, true)
 }
 
@@ -241,25 +274,31 @@ func (t *Tree) Move(id, parentID string, pos int) error {
 	if err != nil {
 		return fmt.Errorf("loader: move %q: %w", id, err)
 	}
+
 	target, err := t.ResolveGroup(parentID)
 	if err != nil {
 		return fmt.Errorf("loader: move %q to %q: %w", id, parentID, err)
 	}
+
 	source := e.parent
 	if source == target {
 		return nil
 	}
+
 	t.mu.Lock()
 	source.data = removeEntryOption(source.data, id)
+
 	opts := cloneOptions(e.opts)
 	if pos < 0 || pos >= len(target.data) {
 		target.data = append(target.data, opts)
 	} else {
 		target.data = slices.Insert(target.data, pos, opts)
 	}
+
 	e.parent = target
 	t.mu.Unlock()
 	t.Write()
+
 	return nil
 }
 
@@ -273,6 +312,7 @@ func (t *Tree) Move(id, parentID string, pos int) error {
 func (t *Tree) Await() {
 	for {
 		seen := make(map[*cordis.Fiber]bool)
+
 		for _, e := range t.Entries() {
 			if f := e.Fiber(); f != nil && f.State() != cordis.StatePending {
 				seen[f] = true
@@ -281,13 +321,17 @@ func (t *Tree) Await() {
 				}
 			}
 		}
+
 		grew := false
+
 		for _, e := range t.Entries() {
 			if f := e.Fiber(); f != nil && !seen[f] && f.State() != cordis.StatePending {
 				grew = true
+
 				break
 			}
 		}
+
 		if !grew {
 			return
 		}
@@ -299,12 +343,15 @@ func (t *Tree) Await() {
 func (t *Tree) Errors() map[string]error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	out := make(map[string]error)
+
 	for id, e := range t.store {
 		if e.err != nil {
 			out[id] = e.err
 		}
 	}
+
 	return out
 }
 
@@ -317,19 +364,23 @@ func (t *Tree) Validate() []error {
 	t.mu.Unlock()
 
 	var errs []error
+
 	for _, id := range ids {
 		e := t.lookupEntry(id)
 		if e == nil || e.Disabled() {
 			continue
 		}
+
 		_, reg, err := t.resolveFor(e, e.Name())
 		if err == nil && reg.Decode != nil {
 			_, err = reg.Decode(e.Options().Config)
 		}
+
 		if err != nil {
 			errs = append(errs, &EntryError{ID: id, Name: e.Name(), Err: err})
 		}
 	}
+
 	return errs
 }
 
@@ -346,11 +397,13 @@ func (t *Tree) SetWriteHook(hook func(data []EntryOptions)) {
 func (t *Tree) Write() {
 	t.mu.Lock()
 	hook := t.writeHook
+
 	var data []EntryOptions
 	if hook != nil {
 		data = cloneEntries(t.root.data)
 	}
 	t.mu.Unlock()
+
 	if hook != nil {
 		hook(data)
 	}
@@ -360,6 +413,7 @@ func (t *Tree) Write() {
 func (t *Tree) Export() []EntryOptions {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return cloneEntries(t.root.data)
 }
 
@@ -368,9 +422,11 @@ func (t *Tree) Locate(f *cordis.Fiber) (string, bool) {
 	t.mu.Lock()
 	e := t.fibers[f]
 	t.mu.Unlock()
+
 	if e == nil {
 		return "", false
 	}
+
 	return e.ID(), true
 }
 
@@ -387,25 +443,34 @@ func (t *Tree) onPlugin(args ...any) any {
 	if f == nil {
 		return nil
 	}
+
 	t.mu.Lock()
 	e := t.fibers[f]
 	tracked := e != nil && e.fiber == f
-	var id string
-	var opts EntryOptions
+
+	var (
+		id   string
+		opts EntryOptions
+	)
 	if tracked {
 		id = e.opts.ID
 		opts = cloneOptions(e.opts)
+
 		delete(t.fibers, f)
+
 		e.fiber = nil
 	}
 	t.mu.Unlock()
+
 	if !tracked {
 		return nil
 	}
+
 	t.markDisabled(e)
 	t.log("unload plugin " + opts.Name)
 	t.ctx.Emit(EventPartialDispose, id, opts, true)
 	t.Write()
+
 	return nil
 }
 
@@ -414,10 +479,12 @@ func (t *Tree) onPlugin(args ...any) any {
 func (t *Tree) markDisabled(e *Entry) {
 	t.mu.Lock()
 	e.opts.Disabled = true
+
 	g := e.parent
 	for i := range g.data {
 		if g.data[i].ID == e.opts.ID {
 			g.data[i].Disabled = true
+
 			break
 		}
 	}
@@ -431,6 +498,7 @@ func (t *Tree) resolveFor(e *Entry, name string) (cordis.PluginHandle, Registrat
 	if reg, err := t.resolver.lookup(name); err == nil {
 		return reg.New(), reg, nil
 	}
+
 	if name == "group" || name == GroupBuiltin {
 		reg := Registration{
 			New: func() cordis.PluginHandle { return t.groupHandle(e) },
@@ -438,8 +506,10 @@ func (t *Tree) resolveFor(e *Entry, name string) (cordis.PluginHandle, Registrat
 				return DecodeInto[[]EntryOptions](raw)
 			},
 		}
+
 		return reg.New(), reg, nil
 	}
+
 	return nil, Registration{}, fmt.Errorf("loader: unknown plugin %q", name)
 }
 
@@ -447,13 +517,16 @@ func (t *Tree) ensureIDLocked(opts *EntryOptions) (string, error) {
 	if opts.ID != "" {
 		return opts.ID, nil
 	}
+
 	for {
 		id, err := randomID()
 		if err != nil {
 			return "", err
 		}
+
 		if _, taken := t.store[id]; !taken {
 			opts.ID = id
+
 			return id, nil
 		}
 	}
@@ -468,6 +541,7 @@ func (t *Tree) removeOrderLocked(id string) {
 func (t *Tree) entryIDs() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return slices.Clone(t.order)
 }
 
@@ -475,6 +549,7 @@ func (t *Tree) log(msg string, args ...any) {
 	t.mu.Lock()
 	verbose := t.EnableLogs
 	t.mu.Unlock()
+
 	if verbose {
 		slog.Info(msg, args...)
 	} else {

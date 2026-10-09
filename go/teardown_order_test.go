@@ -33,11 +33,14 @@ func poolProvider(name, service string, order *[]string) *Plugin[int] {
 			if _, err := ectx.Cleanup("pool "+name, pool.destroy); err != nil {
 				return err
 			}
+
 			if _, err := ectx.Provide(service, pool); err != nil {
 				return err
 			}
+
 			return nil
 		}, service+"-pool")
+
 		return err
 	})
 }
@@ -49,21 +52,25 @@ func simpleConsumer(name string, services []string, order *[]string) *Plugin[int
 				return nil
 			}
 		}
+
 		_, err := ctx.Cleanup("teardown "+name, func() {
 			*order = append(*order, name+" teardown")
 		})
+
 		return err
 	}).Inject(services...)
 }
 
 func TestUnloadGuardDependentsSettleBeforeProviderCleanup(t *testing.T) {
 	ctx := New()
+
 	var order []string
 
 	providerFiber, err := Start(ctx, poolProvider("provider", "db", &order), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := Start(ctx, simpleConsumer("consumer", []string{"db"}, &order), 0); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +88,7 @@ func TestUnloadGuardDependentsSettleBeforeProviderCleanup(t *testing.T) {
 // withdrawal, and B settles inside A's — before each pool is destroyed.
 func TestUnloadGuardSettlesDependencyChainsLeafFirst(t *testing.T) {
 	ctx := New()
+
 	var order []string
 
 	a := NewPlugin("a", func(ctx *Context, _ int) error {
@@ -89,27 +97,34 @@ func TestUnloadGuardSettlesDependencyChainsLeafFirst(t *testing.T) {
 			if _, err := ectx.Cleanup("pool a", pool.destroy); err != nil {
 				return err
 			}
+
 			if _, err := ectx.Provide("s1", pool); err != nil {
 				return err
 			}
+
 			return nil
 		}, "s1-pool")
+
 		return err
 	})
 	b := NewPlugin("b", func(ctx *Context, _ int) error {
 		if _, ok := ctx.Get("s1"); !ok {
 			return nil
 		}
+
 		_, err := ctx.Effect(func(ectx *Context) error {
 			pool := &fakePool{name: "b", order: &order}
 			if _, err := ectx.Cleanup("pool b", pool.destroy); err != nil {
 				return err
 			}
+
 			if _, err := ectx.Provide("s2", pool); err != nil {
 				return err
 			}
+
 			return nil
 		}, "s2-pool")
+
 		return err
 	}).Inject("s1")
 	c := simpleConsumer("c", []string{"s2"}, &order)
@@ -118,9 +133,11 @@ func TestUnloadGuardSettlesDependencyChainsLeafFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := Start(ctx, b, 0); err != nil {
 		t.Fatal(err)
 	}
+
 	cFiber, err := Start(ctx, c, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -140,24 +157,30 @@ func TestUnloadGuardSettlesDependencyChainsLeafFirst(t *testing.T) {
 // disposal happens inside another framework call.
 func TestUnloadGuardDirectEffectDisposal(t *testing.T) {
 	ctx := New()
+
 	var order []string
 
 	var effectDisposer Disposer
+
 	provider := NewPlugin("provider", func(ctx *Context, _ int) error {
 		disposer, err := ctx.Effect(func(ectx *Context) error {
 			pool := &fakePool{name: "provider", order: &order}
 			if _, err := ectx.Cleanup("pool provider", pool.destroy); err != nil {
 				return err
 			}
+
 			if _, err := ectx.Provide("db", pool); err != nil {
 				return err
 			}
+
 			return nil
 		}, "db-pool")
 		if err != nil {
 			return err
 		}
+
 		effectDisposer = disposer
+
 		return nil
 	})
 	consumer := simpleConsumer("consumer", []string{"db"}, &order)
@@ -165,11 +188,13 @@ func TestUnloadGuardDirectEffectDisposal(t *testing.T) {
 	if _, err := Start(ctx, provider, 0); err != nil {
 		t.Fatal(err)
 	}
+
 	consumerFiber, err := Start(ctx, consumer, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer consumerFiber.Dispose()
+
 	if effectDisposer == nil {
 		t.Fatal("effect disposer was not captured")
 	}
@@ -190,12 +215,14 @@ func TestUnloadGuardDirectEffectDisposal(t *testing.T) {
 // dependents inside that unload, then the reload reactivates them.
 func TestUnloadGuardRestartUnloadsDependentsFirst(t *testing.T) {
 	ctx := New()
+
 	var order []string
 
 	providerFiber, err := Start(ctx, poolProvider("provider", "db", &order), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	consumerFiber, err := Start(ctx, simpleConsumer("consumer", []string{"db"}, &order), 0)
 	if err != nil {
 		t.Fatal(err)
@@ -208,6 +235,7 @@ func TestUnloadGuardRestartUnloadsDependentsFirst(t *testing.T) {
 	if got := consumerFiber.State(); got != StateActive {
 		t.Fatalf("consumer state after provider restart = %v, want ACTIVE", got)
 	}
+
 	want := []string{"consumer teardown", "provider pool destroyed"}
 	if !reflect.DeepEqual(order, want) {
 		t.Fatalf("teardown order = %v, want %v", order, want)

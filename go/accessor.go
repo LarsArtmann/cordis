@@ -1,6 +1,9 @@
 package cordis
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // Member is the write-back handle of an Accessor or Mixin. Set forwards a
 // new value into the source service through the accessor's set function and
@@ -16,6 +19,7 @@ func (m *Member[V]) Fiber() *Fiber {
 	if m == nil {
 		return nil
 	}
+
 	return m.accessor
 }
 
@@ -25,15 +29,17 @@ func (m *Member[V]) Set(v V) error {
 	if m == nil || m.set == nil {
 		return ErrReadOnlyAccessor
 	}
+
 	if err := m.set(v); err != nil {
 		return err
 	}
+
 	return m.accessor.Restart()
 }
 
 // ErrReadOnlyAccessor is returned by Member.Set on an accessor declared
 // without a set function.
-var ErrReadOnlyAccessor = fmt.Errorf("cordis: accessor is read-only")
+var ErrReadOnlyAccessor = errors.New("cordis: accessor is read-only")
 
 // Accessor publishes a derived service under name: the value of type V is
 // projected from the service S through get, and the derived service follows
@@ -52,24 +58,35 @@ var ErrReadOnlyAccessor = fmt.Errorf("cordis: accessor is read-only")
 //	    func(ctx *Context, cfg *Config, v int) error { cfg.Port = v; return nil },
 //	)
 //	port.Set(9090)
-func Accessor[S any, V any](ctx *Context, name string, get func(*Context, S) (V, error), set ...func(*Context, S, V) error) (*Fiber, *Member[V], error) {
+func Accessor[S any, V any](
+	ctx *Context,
+	name string,
+	get func(*Context, S) (V, error),
+	set ...func(*Context, S, V) error,
+) (*Fiber, *Member[V], error) {
 	sourceName := ServiceName[S]()
+
 	fiber, err := ctx.Inject([]string{sourceName}, func(actx *Context) error {
 		source, err := GetNamed[S](actx, sourceName)
 		if err != nil {
 			return err
 		}
+
 		value, err := get(actx, source)
 		if err != nil {
 			return err
 		}
+
 		_, err = actx.Provide(name, any(value))
+
 		return err
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("cordis: accessor of %s: %w", sourceName, err)
 	}
+
 	member := &Member[V]{accessor: fiber}
+
 	if len(set) > 0 {
 		write := set[0]
 		member.set = func(v V) error {
@@ -77,9 +94,11 @@ func Accessor[S any, V any](ctx *Context, name string, get func(*Context, S) (V,
 			if err != nil {
 				return err
 			}
+
 			return write(ctx, source, v)
 		}
 	}
+
 	return fiber, member, nil
 }
 
@@ -95,12 +114,15 @@ func Accessor[S any, V any](ctx *Context, name string, get func(*Context, S) (V,
 //	level.Set("debug")
 func Mixin[S any, V any](ctx *Context, name string, get func(S) V, set ...func(S, V)) (*Fiber, *Member[V], error) {
 	project := func(_ *Context, source S) (V, error) { return get(source), nil }
+
 	var write []func(*Context, S, V) error
 	if len(set) > 0 {
 		write = append(write, func(_ *Context, source S, v V) error {
 			set[0](source, v)
+
 			return nil
 		})
 	}
+
 	return Accessor[S](ctx, name, project, write...)
 }

@@ -27,6 +27,7 @@ func (g *EntryGroup) Data() []EntryOptions {
 	t := g.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return cloneEntries(g.data)
 }
 
@@ -35,6 +36,7 @@ func (g *EntryGroup) Data() []EntryOptions {
 func (g *EntryGroup) Entries() []*Entry {
 	t := g.tree
 	t.mu.Lock()
+
 	ids := make([]string, 0, len(g.data))
 	for _, o := range g.data {
 		if o.ID != "" {
@@ -50,6 +52,7 @@ func (g *EntryGroup) Entries() []*Entry {
 			out = append(out, e)
 		}
 	}
+
 	return out
 }
 
@@ -57,13 +60,17 @@ func (g *EntryGroup) Entries() []*Entry {
 func (g *EntryGroup) Create(opts EntryOptions) (string, error) {
 	t := g.tree
 	t.mu.Lock()
+
 	id, err := t.ensureIDLocked(&opts)
 	if err != nil {
 		t.mu.Unlock()
+
 		return "", err
 	}
+
 	g.data = append(g.data, cloneOptions(opts))
 	t.mu.Unlock()
+
 	return id, g.createEntry(opts, id)
 }
 
@@ -71,14 +78,17 @@ func (g *EntryGroup) Create(opts EntryOptions) (string, error) {
 func (g *EntryGroup) createEntry(opts EntryOptions, id string) error {
 	t := g.tree
 	t.mu.Lock()
+
 	entry := t.store[id]
 	if entry == nil {
 		entry = &Entry{parent: g}
 		t.store[id] = entry
 		t.order = append(t.order, id)
 	}
+
 	entry.parent = g
 	t.mu.Unlock()
+
 	return entry.update(opts, true, true)
 }
 
@@ -88,16 +98,21 @@ func (g *EntryGroup) createEntry(opts EntryOptions, id string) error {
 func (g *EntryGroup) Remove(id string, isDispose bool) {
 	t := g.tree
 	t.mu.Lock()
+
 	entry := t.store[id]
 	if entry == nil || entry.parent != g {
 		t.mu.Unlock()
+
 		return
 	}
+
 	if !isDispose {
 		g.data = removeEntryOption(g.data, id)
 	}
+
 	delete(t.store, id)
 	t.removeOrderLocked(id)
+
 	opts := cloneOptions(entry.opts)
 	t.mu.Unlock()
 
@@ -110,6 +125,7 @@ func (g *EntryGroup) Remove(id string, isDispose bool) {
 func (g *EntryGroup) Stop() {
 	t := g.tree
 	t.mu.Lock()
+
 	ids := make([]string, 0, len(g.data))
 	for _, o := range g.data {
 		if o.ID != "" {
@@ -117,6 +133,7 @@ func (g *EntryGroup) Stop() {
 		}
 	}
 	t.mu.Unlock()
+
 	for _, id := range ids {
 		g.Remove(id, true)
 	}
@@ -130,6 +147,7 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 	t.mu.Lock()
 	old := g.data
 	g.data = cloneEntries(config)
+
 	oldIDs := make(map[string]bool, len(old))
 	for _, o := range old {
 		if o.ID != "" {
@@ -139,7 +157,9 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 	t.mu.Unlock()
 
 	keep := make(map[string]bool, len(config))
+
 	var errs []error
+
 	for _, opts := range config {
 		id := opts.ID
 		if id != "" && oldIDs[id] {
@@ -147,7 +167,9 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 				if err := e.update(opts, true, true); err != nil {
 					errs = append(errs, err)
 				}
+
 				keep[id] = true
+
 				continue
 			}
 		}
@@ -156,13 +178,17 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 		t.mu.Lock()
 		id, idErr := t.ensureIDLocked(&opts)
 		t.mu.Unlock()
+
 		if idErr != nil {
 			errs = append(errs, idErr)
+
 			continue
 		}
+
 		if err := g.createEntry(opts, id); err != nil {
 			errs = append(errs, err)
 		}
+
 		keep[id] = true
 	}
 
@@ -171,10 +197,12 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 		if e == nil || e.parent != g {
 			continue
 		}
+
 		if !keep[id] {
 			g.Remove(id, false)
 		}
 	}
+
 	return joinedEntryErrors(errs)
 }
 
@@ -193,6 +221,7 @@ func (t *Tree) groupHandle(e *Entry) cordis.PluginHandle {
 // running, matching upstream semantics.
 func (t *Tree) runGroup(ctx *cordis.Context, host *Entry, config []EntryOptions) error {
 	t.mu.Lock()
+
 	g := host.subgroup
 	if g == nil {
 		g = &EntryGroup{tree: t, host: host.ctx, hostEntry: host}
@@ -205,36 +234,45 @@ func (t *Tree) runGroup(ctx *cordis.Context, host *Entry, config []EntryOptions)
 	if err := g.Update(config); err != nil {
 		t.log("group " + host.ID() + ": " + err.Error())
 	}
+
 	if _, err := ctx.Cleanup(GroupName, g.Stop); err != nil {
 		return err
 	}
+
 	_, err := ctx.On(cordis.EventUpdate, func(args ...any) any {
 		f, _ := args[0].(*cordis.Fiber)
 		raw := args[1]
 		noSave, _ := args[2].(bool)
+
 		next, ok := args[3].(func(...any) any)
 		if !ok {
 			return nil
 		}
+
 		if f == nil || f != ctx.Fiber() {
 			// Not this group's own config update; pass it through.
 			return next(args...)
 		}
+
 		cfg, derr := DecodeInto[[]EntryOptions](raw)
 		if derr != nil {
 			return next(args...)
 		}
+
 		if !noSave {
 			t.mu.Lock()
 			host.opts.Config = cfg
 			t.mu.Unlock()
 			t.Write()
 		}
+
 		if uerr := g.Update(cfg); uerr != nil {
 			t.log("group " + host.ID() + ": " + uerr.Error())
 		}
+
 		return nil
 	})
+
 	return err
 }
 
@@ -244,6 +282,7 @@ func removeEntryOption(config []EntryOptions, id string) []EntryOptions {
 	if idx < 0 {
 		return config
 	}
+
 	return slices.Delete(config, idx, idx+1)
 }
 
@@ -252,5 +291,6 @@ func cloneEntries(config []EntryOptions) []EntryOptions {
 	for i, o := range config {
 		out[i] = cloneOptions(o)
 	}
+
 	return out
 }

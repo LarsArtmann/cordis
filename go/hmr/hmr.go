@@ -81,6 +81,7 @@ func New(resolver *loader.Resolver, tree *loader.Tree) *Manager {
 func (m *Manager) Declare(name string, imports ...string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	m.imports[name] = slices.Clone(imports)
 }
 
@@ -89,6 +90,7 @@ func (m *Manager) Declare(name string, imports ...string) {
 func (m *Manager) Generation(name string) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	return m.gens[name]
 }
 
@@ -101,25 +103,32 @@ func (m *Manager) Swap(name string, reg loader.Registration) (Report, error) {
 	defer m.swapping.Unlock()
 
 	m.mu.Lock()
+
 	previous, found, err := m.resolver.Replace(name, reg)
 	if err != nil {
 		m.mu.Unlock()
+
 		return Report{}, err
 	}
+
 	m.gens[name]++
 	report := Report{Module: name, Generation: m.gens[name]}
 	affected := m.reach(name)
 	m.mu.Unlock()
 
 	var touched []string
+
 	for _, e := range m.tree.Entries() {
 		if !slices.Contains(affected, e.Name()) {
 			continue
 		}
+
 		if e.Fiber() == nil || e.Disabled() {
 			continue
 		}
+
 		id := e.ID()
+
 		touched = append(touched, id)
 		if err := m.tree.Refresh(id); err != nil {
 			return Report{Module: name}, m.rollback(name, previous, found, touched, err)
@@ -132,9 +141,11 @@ func (m *Manager) Swap(name string, reg loader.Registration) (Report, error) {
 				fmt.Errorf("hmr: entry %s failed under the new implementation: %w", id, f.Err()))
 		}
 	}
+
 	report.Reloaded = touched
 
 	m.tree.Context().Emit(EventReload, report)
+
 	return report, nil
 }
 
@@ -148,12 +159,20 @@ func SwapType[C any](m *Manager, name string, apply func(ctx *cordis.Context, co
 // rollback restores the previous registration and relinks every entry the
 // swap already touched back onto it, mirroring the upstream rollback of
 // failed re-imports. The generation does not count the failed swap.
-func (m *Manager) rollback(name string, previous loader.Registration, found bool, reloaded []string, cause error) error {
+func (m *Manager) rollback(
+	name string,
+	previous loader.Registration,
+	found bool,
+	reloaded []string,
+	cause error,
+) error {
 	var restoreErr error
+
 	m.mu.Lock()
 	if found {
 		_, _, restoreErr = m.resolver.Replace(name, previous)
 	}
+
 	m.gens[name]--
 	m.mu.Unlock()
 
@@ -162,12 +181,14 @@ func (m *Manager) rollback(name string, previous loader.Registration, found bool
 		errs = append(errs, fmt.Errorf("hmr: rollback of %s: %w", name, restoreErr))
 		slog.Warn("hmr: rollback could not restore registration", "name", name, "err", restoreErr)
 	}
+
 	for _, id := range reloaded {
 		if err := m.tree.Refresh(id); err != nil {
 			errs = append(errs, fmt.Errorf("hmr: rollback of entry %s: %w", id, err))
 			slog.Warn("hmr: rollback could not restore entry", "id", id, "err", err)
 		}
 	}
+
 	return errors.Join(errs...)
 }
 
@@ -175,17 +196,21 @@ func (m *Manager) rollback(name string, previous loader.Registration, found bool
 // including name itself, sorted. It is the accept set of a swap of name.
 func (m *Manager) reach(name string) []string {
 	reached := map[string]bool{name: true}
+
 	for changed := true; changed; {
 		changed = false
+
 		for mod, imports := range m.imports {
 			if reached[mod] {
 				continue
 			}
+
 			if slices.ContainsFunc(imports, func(dep string) bool { return reached[dep] }) {
 				reached[mod] = true
 				changed = true
 			}
 		}
 	}
+
 	return slices.Sorted(maps.Keys(reached))
 }

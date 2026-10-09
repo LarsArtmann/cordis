@@ -46,6 +46,7 @@ func ProvideService[T any](ctx *Context, svc T) (Disposer, error) {
 		meta.ctx = ctx
 		meta.name = ServiceName[T]()
 	}
+
 	return Provide(ctx, svc)
 }
 
@@ -57,13 +58,18 @@ func ProvideService[T any](ctx *Context, svc T) (Disposer, error) {
 //
 //	add := Callable[Sum, int](ctx, "add", func(ctx *Context, req Sum) (int, error) { ... })
 //	Provide(ctx, add)
-func Callable[Req any, Res any](ctx *Context, name string, fn func(ctx *Context, req Req) (Res, error)) func(Req) (Res, error) {
+func Callable[Req any, Res any](
+	ctx *Context,
+	name string,
+	fn func(ctx *Context, req Req) (Res, error),
+) func(Req) (Res, error) {
 	return func(req Req) (res Res, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("cordis: callable %q panicked: %v\n%s", name, r, debug.Stack())
 			}
 		}()
+
 		return fn(ctx, req)
 	}
 }

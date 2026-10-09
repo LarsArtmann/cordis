@@ -64,9 +64,11 @@ func (e *Entry) ID() string {
 	t.mu.Lock()
 	id := e.opts.ID
 	t.mu.Unlock()
+
 	for node := t.owner; node != nil; node = node.parent.tree.owner {
 		id = node.ID() + idSep + id
 	}
+
 	return id
 }
 
@@ -75,6 +77,7 @@ func (e *Entry) Name() string {
 	t := e.parent.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return e.opts.Name
 }
 
@@ -83,6 +86,7 @@ func (e *Entry) Options() EntryOptions {
 	t := e.parent.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return cloneOptions(e.opts)
 }
 
@@ -91,6 +95,7 @@ func (e *Entry) Fiber() *cordis.Fiber {
 	t := e.parent.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return e.fiber
 }
 
@@ -102,6 +107,7 @@ func (e *Entry) Err() error {
 	t := e.parent.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return e.err
 }
 
@@ -120,6 +126,7 @@ func (e *Entry) Subgroup() *EntryGroup {
 	t := e.parent.tree
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return e.subgroup
 }
 
@@ -131,14 +138,18 @@ func (e *Entry) Disabled() bool {
 		t.mu.Lock()
 		group, disabled := node.opts.Group, node.opts.Disabled
 		t.mu.Unlock()
+
 		if group {
 			return false
 		}
+
 		if disabled {
 			return true
 		}
+
 		node = node.parent.hostEntry
 	}
+
 	return false
 }
 
@@ -149,26 +160,32 @@ func (e *Entry) Disabled() bool {
 func (e *Entry) update(opts EntryOptions, create, force bool) error {
 	t := e.parent.tree
 	t.mu.Lock()
+
 	legacy := e.opts
 	if create {
 		e.opts = cloneOptions(opts)
 	} else {
 		e.opts = mergeOptions(e.opts, opts)
 	}
+
 	next := e.opts
 	live := e.fiber != nil
 	t.mu.Unlock()
 
 	if e.Disabled() {
 		e.dispose()
+
 		return nil
 	}
+
 	if live {
 		if !force && optionsEqual(legacy, next) {
 			return nil
 		}
+
 		return e.reconcile(legacy, next)
 	}
+
 	return e.init()
 }
 
@@ -182,8 +199,10 @@ func (e *Entry) reconcile(legacy, next EntryOptions) error {
 		!mapsEqual(legacy.Intercept, next.Intercept) ||
 		!mapsEqual(legacy.Isolate, next.Isolate) {
 		e.dispose()
+
 		return e.init()
 	}
+
 	if !reflect.DeepEqual(legacy.Config, next.Config) {
 		if f := e.Fiber(); f != nil {
 			cfg := next.Config
@@ -194,13 +213,17 @@ func (e *Entry) reconcile(legacy, next EntryOptions) error {
 					t.mu.Lock()
 					e.err = err
 					t.mu.Unlock()
+
 					return err
 				}
+
 				cfg = decoded
 			}
+
 			return f.Update(cfg)
 		}
 	}
+
 	return nil
 }
 
@@ -209,6 +232,7 @@ func (e *Entry) reconcile(legacy, next EntryOptions) error {
 // becomes visible here: init resolves the new implementation.
 func (e *Entry) refresh() error {
 	e.dispose()
+
 	return e.init()
 }
 
@@ -220,57 +244,71 @@ func (e *Entry) init() error {
 	if e.Disabled() {
 		return nil
 	}
+
 	handle, raw, err := t.resolveFor(e, e.opts.Name)
 	if err == nil {
 		t.mu.Lock()
 		e.reg = raw
 		t.mu.Unlock()
+
 		cfg := e.opts.Config
 		if raw.Decode != nil {
 			cfg, err = raw.Decode(e.opts.Config)
 		}
+
 		if err == nil {
 			err = e.start(handle, cfg)
 		}
 	}
+
 	if err != nil {
 		t.mu.Lock()
 		e.err = err
 		t.mu.Unlock()
+
 		return err
 	}
+
 	return nil
 }
 
 func (e *Entry) start(handle cordis.PluginHandle, cfg any) error {
 	t := e.parent.tree
+
 	ectx, err := e.buildContext()
 	if err != nil {
 		return fmt.Errorf("loader: entry %q: %w", e.opts.Name, err)
 	}
+
 	if len(e.opts.Inject) > 0 {
 		cordis.InjectSpec(handle, e.opts.Inject)
 	}
+
 	t.mu.Lock()
 	e.ctx = ectx
 	t.mu.Unlock()
 	t.log("apply plugin " + e.opts.Name)
+
 	f, err := cordis.StartAny(ectx, handle, cfg)
 	if err != nil {
 		return err
 	}
+
 	if f.State() == cordis.StateDisposed {
 		// The plugin disposed itself during apply. The disposal happened
 		// before the entry tracked the fiber, so mark the entry disabled
 		// here, mirroring the self-dispose detection.
 		t.markDisabled(e)
 		t.Write()
+
 		return nil
 	}
+
 	t.mu.Lock()
 	e.fiber, e.err = f, nil
 	t.mu.Unlock()
 	t.track(f, e)
+
 	return nil
 }
 
@@ -281,6 +319,7 @@ func (e *Entry) buildContext() (*cordis.Context, error) {
 	for _, name := range slices.Sorted(maps.Keys(e.opts.Intercept)) {
 		ectx = ectx.Intercept(name, e.opts.Intercept[name])
 	}
+
 	for _, name := range slices.Sorted(maps.Keys(e.opts.Isolate)) {
 		switch label := e.opts.Isolate[name].(type) {
 		case nil, bool:
@@ -288,15 +327,18 @@ func (e *Entry) buildContext() (*cordis.Context, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			ectx = child
 		default:
 			child, err := ectx.Isolate(name, label)
 			if err != nil {
 				return nil, err
 			}
+
 			ectx = child
 		}
 	}
+
 	return ectx, nil
 }
 
@@ -308,14 +350,18 @@ func (e *Entry) dispose() {
 	t.mu.Lock()
 	f := e.fiber
 	e.fiber = nil
+
 	if f != nil {
 		delete(t.fibers, f)
 	}
+
 	sub := e.subgroup
 	t.mu.Unlock()
+
 	if sub != nil {
 		sub.Stop()
 	}
+
 	if f != nil {
 		f.Dispose()
 	}
@@ -335,24 +381,31 @@ func mergeOptions(legacy, next EntryOptions) EntryOptions {
 	if next.Name != "" {
 		merged.Name = next.Name
 	}
+
 	if next.Config != nil {
 		merged.Config = next.Config
 	}
+
 	if next.Group {
 		merged.Group = true
 	}
+
 	if next.Disabled {
 		merged.Disabled = true
 	}
+
 	if len(next.Inject) > 0 {
 		merged.Inject = next.Inject
 	}
+
 	if len(next.Intercept) > 0 {
 		merged.Intercept = next.Intercept
 	}
+
 	if len(next.Isolate) > 0 {
 		merged.Isolate = next.Isolate
 	}
+
 	return merged
 }
 
@@ -361,18 +414,22 @@ func cloneOptions(opts EntryOptions) EntryOptions {
 	if opts.Inject != nil {
 		out.Inject = cloneMap(opts.Inject)
 	}
+
 	if opts.Intercept != nil {
 		out.Intercept = cloneMap(opts.Intercept)
 	}
+
 	if opts.Isolate != nil {
 		out.Isolate = cloneMap(opts.Isolate)
 	}
+
 	return out
 }
 
 func cloneMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	maps.Copy(out, m)
+
 	return out
 }
 
@@ -380,11 +437,13 @@ func mapsEqual(a, b map[string]any) bool {
 	if len(a) != len(b) {
 		return false
 	}
+
 	for k, v := range a {
 		if bv, ok := b[k]; !ok || !reflect.DeepEqual(v, bv) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -404,6 +463,7 @@ func randomID() (string, error) {
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return "", fmt.Errorf("loader: cannot generate id: %w", err)
 	}
+
 	return hex.EncodeToString(b), nil
 }
 
@@ -425,5 +485,6 @@ func joinedEntryErrors(errs []error) error {
 	if len(errs) == 0 {
 		return nil
 	}
+
 	return errors.Join(errs...)
 }

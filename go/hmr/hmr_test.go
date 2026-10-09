@@ -25,21 +25,25 @@ type recorder struct {
 func (r *recorder) add(event string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.events = append(r.events, event)
 }
 
 func (r *recorder) snapshot() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	return slices.Clone(r.events)
 }
 
 func (r *recorder) last() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if len(r.events) == 0 {
 		return ""
 	}
+
 	return r.events[len(r.events)-1]
 }
 
@@ -49,7 +53,9 @@ func (r *recorder) last() string {
 func echoImpl(tag string, rec *recorder) func(ctx *cordis.Context, conf echoConf) error {
 	return func(ctx *cordis.Context, conf echoConf) error {
 		rec.add("start:" + tag + ":" + conf.Msg)
+
 		_, err := ctx.Cleanup("echo", func() { rec.add("stop:" + tag) })
+
 		return err
 	}
 }
@@ -58,6 +64,7 @@ func echoImpl(tag string, rec *recorder) func(ctx *cordis.Context, conf echoConf
 func brokenImpl(rec *recorder) func(ctx *cordis.Context, conf echoConf) error {
 	return func(ctx *cordis.Context, conf echoConf) error {
 		rec.add("start:broken")
+
 		return errors.New("boom")
 	}
 }
@@ -68,6 +75,7 @@ func typeReg[C any](name string, apply func(*cordis.Context, C) error) loader.Re
 
 func setup(t *testing.T) (*hmr.Manager, *loader.Tree, *cordis.Context, *recorder) {
 	t.Helper()
+
 	ctx := cordis.New()
 	resolver := loader.NewResolver()
 	tree := loader.NewTree(ctx, resolver)
@@ -76,11 +84,13 @@ func setup(t *testing.T) (*hmr.Manager, *loader.Tree, *cordis.Context, *recorder
 	resolver.MustRegister("app", typeReg("app", echoImpl("app1", rec)))
 	resolver.MustRegister("lib", typeReg("lib", echoImpl("lib1", rec)))
 	resolver.MustRegister("solo", typeReg("solo", echoImpl("solo1", rec)))
+
 	return hmr.New(resolver, tree), tree, ctx, rec
 }
 
 func createEntry(t *testing.T, tree *loader.Tree, opts loader.EntryOptions) {
 	t.Helper()
+
 	if _, err := tree.Create(opts, "", -1); err != nil {
 		t.Fatal(err)
 	}
@@ -88,14 +98,17 @@ func createEntry(t *testing.T, tree *loader.Tree, opts loader.EntryOptions) {
 
 func fiberState(t *testing.T, tree *loader.Tree, id string) cordis.FiberState {
 	t.Helper()
+
 	e, ok := tree.Lookup(id)
 	if !ok {
 		t.Fatalf("entry %s missing", id)
 	}
+
 	f := e.Fiber()
 	if f == nil {
 		t.Fatalf("entry %s has no fiber", id)
 	}
+
 	return f.State()
 }
 
@@ -113,9 +126,11 @@ func TestSwapReloadsEntry(t *testing.T) {
 			t.Fatalf("events = %v, missing %s", events, want)
 		}
 	}
+
 	if fiberState(t, tree, "a") != cordis.StateActive {
 		t.Fatal("entry not active after swap")
 	}
+
 	if e, _ := tree.Lookup("a"); e.ID() != "a" {
 		t.Fatal("entry identity changed across swap")
 	}
@@ -126,14 +141,17 @@ func TestSwapEmitsEvent(t *testing.T) {
 	createEntry(t, tree, loader.EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "cfg"}})
 
 	var got hmr.Report
+
 	_, _ = ctx.On(hmr.EventReload, func(args ...any) any {
 		got = args[0].(hmr.Report)
+
 		return nil
 	})
 
 	if _, err := hmr.SwapType(mgr, "echo", echoImpl("v2", rec)); err != nil {
 		t.Fatal(err)
 	}
+
 	if got.Module != "echo" || got.Generation != 1 || !slices.Equal(got.Reloaded, []string{"a"}) {
 		t.Fatalf("report = %+v", got)
 	}
@@ -156,6 +174,7 @@ func TestSwapOnlyAffectsDependents(t *testing.T) {
 			t.Fatalf("events = %v, missing %s", events, want)
 		}
 	}
+
 	if slices.Contains(events, "stop:solo1") {
 		t.Fatalf("events = %v, unrelated solo reloaded", events)
 	}
@@ -178,6 +197,7 @@ func TestSwapTransitiveDependents(t *testing.T) {
 			t.Fatalf("events = %v, missing %s", events, want)
 		}
 	}
+
 	if slices.Contains(events, "stop:solo1") {
 		t.Fatalf("events = %v, unrelated solo reloaded", events)
 	}
@@ -188,6 +208,7 @@ func TestSwapRollsBackOnFailure(t *testing.T) {
 	createEntry(t, tree, loader.EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "cfg"}})
 
 	rollbackErr := error(nil)
+
 	if _, err := mgr.Swap("echo", typeReg("echo", brokenImpl(rec))); err == nil {
 		t.Fatal("swap with a broken implementation returned no error")
 	} else {
@@ -199,6 +220,7 @@ func TestSwapRollsBackOnFailure(t *testing.T) {
 	if !strings.Contains(rollbackErr.Error(), "failed under the new implementation") {
 		t.Fatalf("rollback error = %v, missing entry failure context", rollbackErr)
 	}
+
 	if !strings.Contains(rollbackErr.Error(), "boom") {
 		t.Fatalf("rollback error = %v, missing Fiber.Err detail", rollbackErr)
 	}
@@ -207,12 +229,15 @@ func TestSwapRollsBackOnFailure(t *testing.T) {
 	if !slices.Contains(events, "start:broken") {
 		t.Fatalf("events = %v, broken implementation never attempted", events)
 	}
+
 	if rec.last() != "start:v1:cfg" {
 		t.Fatalf("events = %v, rollback did not restart the old implementation", events)
 	}
+
 	if mgr.Generation("echo") != 0 {
 		t.Fatalf("generation = %d, rolled-back swap must not count", mgr.Generation("echo"))
 	}
+
 	if fiberState(t, tree, "a") != cordis.StateActive {
 		t.Fatal("old implementation not restored to active state")
 	}
@@ -221,6 +246,7 @@ func TestSwapRollsBackOnFailure(t *testing.T) {
 	if _, err := hmr.SwapType(mgr, "echo", echoImpl("v2", rec)); err != nil {
 		t.Fatal(err)
 	}
+
 	if !slices.Contains(rec.snapshot(), "start:v2:cfg") {
 		t.Fatal("recovery swap did not apply")
 	}
@@ -234,10 +260,12 @@ func TestSwapKeepsUnaffectedModulesLive(t *testing.T) {
 	if _, err := hmr.SwapType(mgr, "echo", echoImpl("a2", rec)); err != nil {
 		t.Fatal(err)
 	}
+
 	events := rec.snapshot()
 	if slices.Contains(events, "stop:solo1") {
 		t.Fatalf("events = %v, solo module was touched", events)
 	}
+
 	if fiberState(t, tree, "s") != cordis.StateActive {
 		t.Fatal("unaffected entry no longer active")
 	}
@@ -253,13 +281,17 @@ func TestRapidSuccessiveSwaps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 	if mgr.Generation("echo") != 50 {
 		t.Fatalf("generation = %d, want 50", mgr.Generation("echo"))
 	}
+
 	tree.Await()
+
 	if fiberState(t, tree, "a") != cordis.StateActive {
 		t.Fatal("entry not active after rapid swaps")
 	}
+
 	if rec.last() != "start:g49:cfg" {
 		t.Fatalf("last event = %s, want the final generation live", rec.last())
 	}
@@ -281,11 +313,14 @@ func TestSwapCreateRemoveStorm(t *testing.T) {
 	)
 
 	var wg sync.WaitGroup
+
 	errs := make(chan error, creators*entriesEach)
+
 	for w := range swappers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
+
 			for i := range swapsPerWorker {
 				tag := fmt.Sprintf("storm-w%d-g%d", w, i)
 				if _, err := mgr.Swap("echo", typeReg("echo", echoImpl(tag, rec))); err != nil {
@@ -297,16 +332,24 @@ func TestSwapCreateRemoveStorm(t *testing.T) {
 			}
 		}(w)
 	}
+
 	for c := range creators {
 		wg.Add(1)
 		go func(c int) {
 			defer wg.Done()
+
 			for i := range entriesEach {
 				id := fmt.Sprintf("storm-%d-%d", c, i)
-				if _, err := tree.Create(loader.EntryOptions{ID: id, Name: "echo", Config: echoConf{Msg: id}}, "", -1); err != nil {
+				if _, err := tree.Create(
+					loader.EntryOptions{ID: id, Name: "echo", Config: echoConf{Msg: id}},
+					"",
+					-1,
+				); err != nil {
 					errs <- fmt.Errorf("create %s: %w", id, err)
+
 					continue
 				}
+
 				if i%2 == 0 {
 					if err := tree.Remove(id); err != nil {
 						errs <- fmt.Errorf("remove %s: %w", id, err)
@@ -316,18 +359,25 @@ func TestSwapCreateRemoveStorm(t *testing.T) {
 			// One leftover swap-adjacent id per creator exercises Remove
 			// racing Refresh from the other direction.
 			id := fmt.Sprintf("late-%d", c)
-			if _, err := tree.Create(loader.EntryOptions{ID: id, Name: "echo", Config: echoConf{Msg: id}}, "", -1); err != nil {
+			if _, err := tree.Create(
+				loader.EntryOptions{ID: id, Name: "echo", Config: echoConf{Msg: id}},
+				"",
+				-1,
+			); err != nil {
 				errs <- fmt.Errorf("create %s: %w", id, err)
 			}
 		}(c)
 	}
+
 	wg.Wait()
 	close(errs)
+
 	for err := range errs {
 		t.Fatal(err)
 	}
 
 	tree.Await()
+
 	for _, e := range tree.Entries() {
 		if f := e.Fiber(); f != nil && f.State() != cordis.StateActive {
 			t.Fatalf("entry %s settled in %s, want active", e.ID(), f.State())
@@ -337,7 +387,9 @@ func TestSwapCreateRemoveStorm(t *testing.T) {
 	if _, err := mgr.Swap("echo", typeReg("echo", echoImpl("final", rec))); err != nil {
 		t.Fatalf("post-storm swap failed: %v", err)
 	}
+
 	tree.Await()
+
 	if fiberState(t, tree, "late-0") != cordis.StateActive {
 		t.Fatal("surviving entry not active after the final swap")
 	}
@@ -351,9 +403,11 @@ func TestSwapNewModuleRegistersWithoutReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(report.Reloaded) != 0 || report.Generation != 1 {
 		t.Fatalf("report = %+v", report)
 	}
+
 	if mgr.Generation("ghost") != 1 {
 		t.Fatalf("generation = %d, want 1", mgr.Generation("ghost"))
 	}

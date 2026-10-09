@@ -22,12 +22,14 @@ func DecodeConfig(data []byte) ([]EntryOptions, error) {
 	if err := json.Unmarshal(data, &arr); err == nil {
 		return arr, nil
 	}
+
 	var doc struct {
 		Plugins []EntryOptions `json:"plugins"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("loader: config must be an entry array or {\"plugins\":[...]}: %w", err)
 	}
+
 	return doc.Plugins, nil
 }
 
@@ -39,6 +41,7 @@ func EncodeConfig(entries []EntryOptions) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loader: cannot encode config: %w", err)
 	}
+
 	return append(data, '\n'), nil
 }
 
@@ -48,10 +51,12 @@ func LoadFile(path string) ([]EntryOptions, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loader: cannot read config %s: %w", path, err)
 	}
+
 	entries, err := DecodeConfig(data)
 	if err != nil {
 		return nil, fmt.Errorf("loader: %s: %w", path, err)
 	}
+
 	return entries, nil
 }
 
@@ -61,9 +66,11 @@ func SaveFile(path string, entries []EntryOptions) error {
 	if err != nil {
 		return fmt.Errorf("loader: %s: %w", path, err)
 	}
+
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("loader: cannot write config %s: %w", path, err)
 	}
+
 	return nil
 }
 
@@ -73,6 +80,7 @@ func FindConfig(dir string) (string, bool) {
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		return path, true
 	}
+
 	return "", false
 }
 
@@ -86,10 +94,12 @@ func Open(ctx *cordis.Context, resolver *Resolver, dir string) (*Loader, error) 
 	if !ok {
 		return nil, fmt.Errorf("loader: no %s in %s", DefaultConfigName, dir)
 	}
+
 	entries, err := LoadFile(path)
 	if err != nil {
 		return nil, err
 	}
+
 	l := New(ctx, resolver)
 	l.mu.Lock()
 	l.path = path
@@ -99,8 +109,10 @@ func Open(ctx *cordis.Context, resolver *Resolver, dir string) (*Loader, error) 
 			slog.Error("loader: cannot persist config", "err", err)
 		}
 	})
+
 	if err := l.Start(entries); err != nil {
 		return nil, err
 	}
+
 	return l, nil
 }

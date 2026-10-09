@@ -24,6 +24,7 @@ type UserCreated struct {
 
 var DatabasePlugin = cordis.NewPlugin("database", func(ctx *cordis.Context, cfg DatabaseConfig) error {
 	_, err := cordis.Provide(ctx, &Database{DSN: cfg.DSN})
+
 	return err
 })
 
@@ -32,6 +33,7 @@ var UserServicePlugin = cordis.NewPlugin("user-service", func(ctx *cordis.Contex
 	_, err := cordis.On(ctx, func(event UserCreated) {
 		fmt.Println(db.Query("SELECT * FROM users"))
 	})
+
 	return err
 }).Inject(cordis.ServiceName[*Database]())
 

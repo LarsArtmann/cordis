@@ -30,12 +30,14 @@ func TestAccessorDerivesFromSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	awaitFiber(t, fiber, cordis.StateActive)
 
 	port, err := cordis.GetNamed[int](ctx, "port")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if port != 8080 {
 		t.Fatalf("port = %d, want 8080", port)
 	}
@@ -50,6 +52,7 @@ func TestAccessorWithoutSourceStaysPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if fiber.State() != cordis.StatePending {
 		t.Fatalf("state = %s, want pending before the source exists", fiber.State())
 	}
@@ -57,7 +60,9 @@ func TestAccessorWithoutSourceStaysPending(t *testing.T) {
 	if _, err := cordis.Provide(ctx, &accConfig{Port: 80}); err != nil {
 		t.Fatal(err)
 	}
+
 	awaitFiber(t, fiber, cordis.StateActive)
+
 	port, err := cordis.GetNamed[int](ctx, "port")
 	if err != nil || port != 80 {
 		t.Fatalf("port = %d, %v; want 80, nil", port, err)
@@ -66,19 +71,23 @@ func TestAccessorWithoutSourceStaysPending(t *testing.T) {
 	// The derived service follows the source out again.
 	cordis.MustGet[*accConfig](ctx)
 }
+
 func awaitFiber(t *testing.T, fiber *cordis.Fiber, want cordis.FiberState) {
 	t.Helper()
+
 	deadline := time.Now().Add(2 * time.Second)
 	for fiber.State() != want {
 		if time.Now().After(deadline) {
 			t.Fatalf("state = %s, want %s", fiber.State(), want)
 		}
+
 		time.Sleep(time.Millisecond)
 	}
 }
 
 func TestAccessorFollowsSourceLifecycle(t *testing.T) {
 	ctx := cordis.New()
+
 	dispose, err := cordis.Provide(ctx, &accConfig{Port: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +99,7 @@ func TestAccessorFollowsSourceLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	awaitFiber(t, fiber, cordis.StateActive)
 
 	// Unloading the source unloads the accessor and withdraws the derived
@@ -97,6 +107,7 @@ func TestAccessorFollowsSourceLifecycle(t *testing.T) {
 	// is gone.
 	dispose()
 	awaitFiber(t, fiber, cordis.StatePending)
+
 	if _, ok := ctx.Get("port"); ok {
 		t.Fatal("derived service outlived its source")
 	}
@@ -104,6 +115,7 @@ func TestAccessorFollowsSourceLifecycle(t *testing.T) {
 
 func TestAccessorWriteBack(t *testing.T) {
 	ctx := cordis.New()
+
 	cfg := &accConfig{Port: 8080}
 	if _, err := cordis.Provide(ctx, cfg); err != nil {
 		t.Fatal(err)
@@ -113,6 +125,7 @@ func TestAccessorWriteBack(t *testing.T) {
 		func(ctx *cordis.Context, cfg *accConfig) (int, error) { return cfg.Port, nil },
 		func(ctx *cordis.Context, cfg *accConfig, v int) error {
 			cfg.Port = v
+
 			return nil
 		},
 	)
@@ -123,10 +136,13 @@ func TestAccessorWriteBack(t *testing.T) {
 	if err := port.Set(9090); err != nil {
 		t.Fatal(err)
 	}
+
 	awaitFiber(t, port.Fiber(), cordis.StateActive)
+
 	if cfg.Port != 9090 {
 		t.Fatalf("source port = %d, want 9090", cfg.Port)
 	}
+
 	got, err := cordis.GetNamed[int](ctx, "port")
 	if err != nil || got != 9090 {
 		t.Fatalf("derived port = %d, %v; want 9090, nil", got, err)
@@ -145,6 +161,7 @@ func TestAccessorReadOnlySetErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := port.Set(1); !errors.Is(err, cordis.ErrReadOnlyAccessor) {
 		t.Fatalf("err = %v, want ErrReadOnlyAccessor", err)
 	}
@@ -152,6 +169,7 @@ func TestAccessorReadOnlySetErrors(t *testing.T) {
 
 func TestMixinProjectsMember(t *testing.T) {
 	ctx := cordis.New()
+
 	logger := &accLogger{Level: "info"}
 	if _, err := cordis.Provide(ctx, logger); err != nil {
 		t.Fatal(err)
@@ -164,6 +182,7 @@ func TestMixinProjectsMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	awaitFiber(t, fiber, cordis.StateActive)
 
 	got, err := cordis.GetNamed[string](ctx, "level")
@@ -174,10 +193,13 @@ func TestMixinProjectsMember(t *testing.T) {
 	if err := level.Set("debug"); err != nil {
 		t.Fatal(err)
 	}
+
 	awaitFiber(t, fiber, cordis.StateActive)
+
 	if logger.Level != "debug" {
 		t.Fatalf("source level = %q, want debug", logger.Level)
 	}
+
 	if got, _ = cordis.GetNamed[string](ctx, "level"); got != "debug" {
 		t.Fatalf("derived level = %q, want debug", got)
 	}
@@ -188,6 +210,7 @@ func TestAccessorGetFailsWithoutSource(t *testing.T) {
 	if _, err := cordis.GetNamed[int](ctx, "port"); err == nil {
 		t.Fatal("GetNamed succeeded without the accessor")
 	}
+
 	if ctx.Has("port") {
 		t.Fatal("accessor registered without a source")
 	}
@@ -201,14 +224,18 @@ func TestAccessorWrappedStartError(t *testing.T) {
 	if _, err := cordis.Provide(ctx, &accConfig{Port: 8080}); err != nil {
 		t.Fatal(err)
 	}
+
 	var inner *cordis.Context
+
 	fiber, err := cordis.Start(ctx, cordis.NewPlugin("host", func(c *cordis.Context, _ struct{}) error {
 		inner = c
+
 		return nil
 	}), struct{}{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	fiber.Dispose()
 
 	_, _, err = cordis.Accessor(inner, "port",
@@ -217,10 +244,12 @@ func TestAccessorWrappedStartError(t *testing.T) {
 	if err == nil {
 		t.Fatal("accessor on a disposed context must fail to start")
 	}
+
 	wantPrefix := "cordis: accessor of " + cordis.ServiceName[*accConfig]() + ": "
 	if !strings.Contains(err.Error(), wantPrefix) {
 		t.Fatalf("error = %v, want prefix %q", err, wantPrefix)
 	}
+
 	if !errors.Is(err, cordis.ErrInactiveEffect) {
 		t.Fatalf("error = %v, want the inactive-effect cause preserved", err)
 	}

@@ -32,8 +32,10 @@ func TestDebounceThrottleProperty(t *testing.T) {
 				thrFires atomic.Int64
 				thrNT    atomic.Int64
 			)
+
 			deb, stopDeb, err := Debounce(ctx, func(args ...any) {
 				debFires.Add(1)
+
 				if n, ok := args[0].(int); ok {
 					debGot.Store(int64(n))
 				}
@@ -41,14 +43,17 @@ func TestDebounceThrottleProperty(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			thr, stopThr, err := Throttle(ctx, func(args ...any) { thrFires.Add(1) }, delay, false)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			thrNoTrailing, stopThrNT, err := Throttle(ctx, func(args ...any) { thrNT.Add(1) }, delay, true)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			defer func() {
 				stopDeb()
 				stopThr()
@@ -63,6 +68,7 @@ func TestDebounceThrottleProperty(t *testing.T) {
 				thr(call)
 				thrNoTrailing(call)
 			}
+
 			m.finish()
 			synctest.Sleep(10 * delay)
 			synctest.Wait()
@@ -70,12 +76,15 @@ func TestDebounceThrottleProperty(t *testing.T) {
 			if got, want := debFires.Load(), int64(m.debFires); got != want {
 				t.Fatalf("round %d: debounce fired %d times, want %d", round, got, want)
 			}
+
 			if got, want := debGot.Load(), int64(m.debLastFiredCall); got != want {
 				t.Fatalf("round %d: debounce delivered call %d, want %d", round, got, want)
 			}
+
 			if got, want := thrFires.Load(), int64(m.thrFires); got != want {
 				t.Fatalf("round %d: throttle fired %d times, want %d", round, got, want)
 			}
+
 			if got, want := thrNT.Load(), int64(m.thrNTFires); got != want {
 				t.Fatalf("round %d: no-trailing throttle fired %d times, want %d", round, got, want)
 			}
@@ -115,14 +124,18 @@ func newDispatchModel(delay time.Duration) *dispatchModel {
 func (m *dispatchModel) nextGap(rng *rand.Rand) time.Duration {
 	for {
 		g := time.Duration(1+rng.IntN(20)) * time.Millisecond
+
 		end := m.now + g
 		if m.debPending && end == m.debLast+m.delay {
 			continue
 		}
+
 		if m.thrTrailing != 0 && end == m.thrTrailing {
 			continue
 		}
+
 		m.now = end
+
 		return g
 	}
 }
@@ -135,6 +148,7 @@ func (m *dispatchModel) call(call int) {
 		m.debFires++
 		m.debLastFiredCall = m.lastDebCall
 	}
+
 	m.debLast = m.now
 	m.debPending = true
 	m.lastDebCall = call
@@ -147,6 +161,7 @@ func (m *dispatchModel) call(call int) {
 		m.thrLastRun = m.thrTrailing
 		m.thrTrailing = 0
 	}
+
 	if !m.thrStarted || m.now-m.thrLastRun >= m.delay {
 		m.thrFires++
 		m.thrLastRun = m.now
@@ -169,6 +184,7 @@ func (m *dispatchModel) finish() {
 		m.debFires++
 		m.debLastFiredCall = m.lastDebCall
 	}
+
 	m.debPending = false
 	if m.thrTrailing != 0 {
 		m.thrFires++

@@ -7,20 +7,25 @@ import (
 
 func TestFiberStateLifecycle(t *testing.T) {
 	ctx := New()
+
 	var states []FiberState
+
 	mustOn(t, ctx, EventStatus, func(args ...any) any {
 		f := args[0].(*Fiber)
 		if f.Name() == "p" {
 			states = append(states, f.State())
 		}
+
 		return nil
 	})
 
 	plugin := NewPlugin("p", func(ctx *Context, _ struct{}) error { return nil }).Inject("foo")
+
 	fiber, err := Start(ctx, plugin, struct{}{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if fiber.State() != StatePending {
 		t.Fatalf("expected PENDING, got %s", fiber.State())
 	}
@@ -29,16 +34,19 @@ func TestFiberStateLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if fiber.State() != StateActive {
 		t.Fatalf("expected ACTIVE, got %s", fiber.State())
 	}
 
 	dispose()
+
 	if fiber.State() != StatePending {
 		t.Fatalf("expected PENDING, got %s", fiber.State())
 	}
 
 	fiber.Dispose()
+
 	if fiber.State() != StateDisposed {
 		t.Fatalf("expected DISPOSED, got %s", fiber.State())
 	}
@@ -49,8 +57,10 @@ func TestFiberReloadsInPlace(t *testing.T) {
 	applies := 0
 	plugin := NewPlugin("p", func(ctx *Context, _ struct{}) error {
 		applies++
+
 		return nil
 	}).Inject("foo")
+
 	fiber, err := Start(ctx, plugin, struct{}{})
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +70,9 @@ func TestFiberReloadsInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	dispose1()
+
 	dispose2, err := ctx.Provide("foo", 2)
 	if err != nil {
 		t.Fatal(err)
@@ -70,9 +82,11 @@ func TestFiberReloadsInPlace(t *testing.T) {
 	if applies != 2 {
 		t.Fatalf("expected reload in place, got %d applies", applies)
 	}
+
 	if fiber.State() != StateActive {
 		t.Fatalf("expected ACTIVE, got %s", fiber.State())
 	}
+
 	if uid := fiber.UID(); uid != 1 {
 		t.Fatalf("the same fiber instance must reload, got uid %d", uid)
 	}
@@ -81,12 +95,15 @@ func TestFiberReloadsInPlace(t *testing.T) {
 func TestFiberAwait(t *testing.T) {
 	ctx := New()
 	plugin := NewPlugin("p", func(ctx *Context, _ struct{}) error { return nil })
+
 	fiber, err := Start(ctx, plugin, struct{}{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	done := make(chan error, 1)
 	go func() { done <- fiber.Await() }()
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -102,11 +119,14 @@ func TestFiberNames(t *testing.T) {
 	if ctx.String() != "Context <root>" {
 		t.Fatalf("expected root context, got %s", ctx.String())
 	}
+
 	named := NewPlugin("foo", func(ctx *Context, _ struct{}) error { return nil })
+
 	fiber, err := Start(ctx, named, struct{}{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if fiber.Context().String() != "Context <foo>" {
 		t.Fatalf("expected named context, got %s", fiber.Context().String())
 	}
@@ -114,20 +134,26 @@ func TestFiberNames(t *testing.T) {
 
 func TestConcurrentAccess(t *testing.T) {
 	ctx := New()
+
 	plugin := NewPlugin("p", func(ctx *Context, _ struct{}) error {
 		_, err := ctx.On("tick", func(...any) any { return nil })
+
 		return err
 	})
 	if _, err := Start(ctx, plugin, struct{}{}); err != nil {
 		t.Fatal(err)
 	}
 
-	const workers = 8
-	const iterations = 100
+	const (
+		workers    = 8
+		iterations = 100
+	)
+
 	done := make(chan struct{}, workers)
 	for w := range workers {
 		go func(w int) {
 			defer func() { done <- struct{}{} }()
+
 			for range iterations {
 				switch w % 4 {
 				case 0:
@@ -145,6 +171,7 @@ func TestConcurrentAccess(t *testing.T) {
 			}
 		}(w)
 	}
+
 	for range workers {
 		<-done
 	}

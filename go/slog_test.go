@@ -18,13 +18,16 @@ func TestSlogHandlerRoutesIntoLoggerService(t *testing.T) {
 	if len(buffer) != 1 {
 		t.Fatalf("expected one buffered message, got %d", len(buffer))
 	}
+
 	m := buffer[0]
 	if m.Name != "worker" {
 		t.Fatalf("expected name %q, got %q", "worker", m.Name)
 	}
+
 	if m.Level != LevelWarn || m.Type != "warn" {
 		t.Fatalf("expected warn level, got %s/%s", m.Level, m.Type)
 	}
+
 	if got := FormatMessage(m); got != "disk almost full percent=91" {
 		t.Fatalf("unexpected rendering: %q", got)
 	}
@@ -41,6 +44,7 @@ func TestSlogHandlerLevelFiltering(t *testing.T) {
 	for _, m := range ctx.core.logger.Buffer() {
 		levels = append(levels, m.Level)
 	}
+
 	if len(levels) != 2 || levels[0] != LevelInfo || levels[1] != LevelError {
 		t.Fatalf("expected info+error only (default target), got %v", levels)
 	}
@@ -54,8 +58,10 @@ func TestSlogHandlerHonorsLevelIntercept(t *testing.T) {
 	if logger.Enabled(context.TODO(), slog.LevelWarn) {
 		t.Fatal("warn must be disabled below the error intercept")
 	}
+
 	logger.Warn("dropped")
 	logger.Error("kept")
+
 	if got := len(ctx.core.logger.Buffer()); got != 1 {
 		t.Fatalf("expected only the error record, got %d", got)
 	}
@@ -70,6 +76,7 @@ func TestSlogHandlerAttrsAndGroups(t *testing.T) {
 	logger.Info("handled")
 
 	m := ctx.core.logger.Buffer()[0]
+
 	got := FormatMessage(m)
 	for _, want := range []string{"handled", "service=billing", "request.id=7"} {
 		if !strings.Contains(got, want) {
@@ -91,7 +98,9 @@ func TestSlogHandlerGroupAttrsFlatten(t *testing.T) {
 
 func TestSlogHandlerReachesExporters(t *testing.T) {
 	ctx := New()
+
 	var out bytes.Buffer
+
 	dispose := ctx.core.logger.AddExporter(NewConsoleExporter(&out))
 	defer dispose()
 

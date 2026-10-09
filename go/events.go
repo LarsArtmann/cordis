@@ -92,15 +92,18 @@ func (c *Context) interceptGet(name string) (any, bool) {
 	c.core.mu.Lock()
 	n := len(c.core.hooks[EventGet])
 	c.core.mu.Unlock()
+
 	if n == 0 {
 		return nil, false
 	}
+
 	result := c.Waterfall(EventGet, func(a ...any) any {
 		if len(a) > 0 {
 			if r, ok := a[0].(*GetResult); ok {
 				return r
 			}
 		}
+
 		return &GetResult{}
 	}, name, &GetError{
 		Name:    name,
@@ -109,6 +112,7 @@ func (c *Context) interceptGet(name string) (any, bool) {
 	if res, ok := result.(*GetResult); ok {
 		return res.Value, res.OK
 	}
+
 	return result, result != nil
 }
 
@@ -118,12 +122,15 @@ func (c *Context) notifyDispatch(mode, name string, args []any) {
 	if strings.HasPrefix(name, "internal/") {
 		return
 	}
+
 	c.core.mu.Lock()
 	n := len(c.core.hooks[EventDispatch])
 	c.core.mu.Unlock()
+
 	if n == 0 {
 		return
 	}
+
 	c.Emit(EventDispatch, mode, name, args)
 }
 
@@ -147,6 +154,7 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 		if d, ok := result.(Disposer); ok {
 			return d, nil
 		}
+
 		return nil, fmt.Errorf("cordis: internal/listener interception returned %T, expected Disposer", result)
 	}
 
@@ -161,10 +169,12 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 	dispose, err := c.registerCleanup(fmt.Sprintf("ctx.on(%q)", name), func() {
 		c.core.mu.Lock()
 		defer c.core.mu.Unlock()
+
 		hooks := c.core.hooks[name]
 		for i, candidate := range hooks {
 			if candidate == h {
 				c.core.hooks[name] = append(hooks[:i], hooks[i+1:]...)
+
 				return
 			}
 		}
@@ -173,8 +183,10 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 		c.core.mu.Lock()
 		c.core.removeHookLocked(name, h)
 		c.core.mu.Unlock()
+
 		return nil, err
 	}
+
 	return dispose, nil
 }
 
@@ -183,6 +195,7 @@ func (c *core) removeHookLocked(name string, h *hook) {
 	for i, candidate := range hooks {
 		if candidate == h {
 			c.hooks[name] = append(hooks[:i], hooks[i+1:]...)
+
 			return
 		}
 	}
@@ -190,35 +203,45 @@ func (c *core) removeHookLocked(name string, h *hook) {
 
 // Once subscribes listener to name and removes it after the first delivery.
 func (c *Context) Once(name string, listener Listener, opts ...EventOption) (Disposer, error) {
-	var mu sync.Mutex
-	var dispose Disposer
-	var fired bool
+	var (
+		mu      sync.Mutex
+		dispose Disposer
+		fired   bool
+	)
+
 	d, err := c.On(name, func(args ...any) any {
 		mu.Lock()
 		if fired {
 			mu.Unlock()
+
 			return nil
 		}
+
 		fired = true
 		d := dispose
 		mu.Unlock()
+
 		if d != nil {
 			d()
 		}
+
 		return listener(args...)
 	}, opts...)
 	if err != nil {
 		return nil, err
 	}
+
 	mu.Lock()
 	dispose = d
 	alreadyFired := fired
 	mu.Unlock()
+
 	if alreadyFired {
 		// The event fired between registration and assignment; remove the
 		// listener now so Once semantics hold exactly.
 		d()
 	}
+
 	return d, nil
 }
 
@@ -230,15 +253,18 @@ func (c *Context) resolveHooks(name string) []*hook {
 	hooks := append([]*hook(nil), c.core.hooks[name]...)
 	filter := c.filter
 	c.core.mu.Unlock()
+
 	if len(hooks) == 0 {
 		return nil
 	}
+
 	result := make([]*hook, 0, len(hooks))
 	for _, h := range hooks {
 		if h.global || filter == nil || filter(h.owner) {
 			result = append(result, h)
 		}
 	}
+
 	return result
 }
 
@@ -247,6 +273,7 @@ func (c *Context) resolveHooks(name string) []*hook {
 // caller, mirroring ctx.emit upstream.
 func (c *Context) Emit(name string, args ...any) {
 	c.notifyDispatch("emit", name, args)
+
 	for _, h := range c.resolveHooks(name) {
 		h.fn(args...)
 	}
@@ -257,11 +284,14 @@ func (c *Context) Emit(name string, args ...any) {
 // joined error, mirroring the AggregateError of ctx.parallel upstream.
 func (c *Context) Parallel(name string, args ...any) error {
 	c.notifyDispatch("parallel", name, args)
+
 	hooks := c.resolveHooks(name)
 	if len(hooks) == 0 {
 		return nil
 	}
+
 	var wg sync.WaitGroup
+
 	errs := make([]error, len(hooks))
 	for i, h := range hooks {
 		wg.Go(func() {
@@ -270,6 +300,7 @@ func (c *Context) Parallel(name string, args ...any) error {
 					errs[i] = fmt.Errorf("%v", r)
 				}
 			}()
+
 			if result := h.fn(args...); result != nil {
 				if err, ok := result.(error); ok {
 					errs[i] = err
@@ -277,7 +308,9 @@ func (c *Context) Parallel(name string, args ...any) error {
 			}
 		})
 	}
+
 	wg.Wait()
+
 	return errors.Join(errs...)
 }
 
@@ -285,11 +318,13 @@ func (c *Context) Parallel(name string, args ...any) error {
 // first non-nil result, mirroring ctx.serial upstream.
 func (c *Context) Serial(name string, args ...any) any {
 	c.notifyDispatch("serial", name, args)
+
 	for _, h := range c.resolveHooks(name) {
 		if result := h.fn(args...); isBailed(result) {
 			return result
 		}
 	}
+
 	return nil
 }
 
@@ -308,11 +343,14 @@ func (c *Context) Bail(name string, args ...any) any {
 func (c *Context) Waterfall(name string, terminal func(...any) any, args ...any) any {
 	c.notifyDispatch("waterfall", name, args)
 	hooks := c.resolveHooks(name)
+
 	var next func(...any) any
+
 	next = func(nextArgs ...any) any {
 		if len(hooks) == 0 {
 			return terminal(nextArgs...)
 		}
+
 		h := hooks[0]
 		hooks = hooks[1:]
 		// Copy: appending next must never write into the caller's slice
@@ -320,8 +358,10 @@ func (c *Context) Waterfall(name string, terminal func(...any) any, args ...any)
 		full := make([]any, 0, len(nextArgs)+1)
 		full = append(full, nextArgs...)
 		full = append(full, next)
+
 		return h.fn(full...)
 	}
+
 	return next(args...)
 }
 
@@ -331,8 +371,10 @@ func isBailed(value any) bool {
 	if value == nil {
 		return false
 	}
+
 	if b, ok := value.(bool); ok && !b {
 		return false
 	}
+
 	return true
 }

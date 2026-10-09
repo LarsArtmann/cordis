@@ -2,6 +2,7 @@ package cordis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 )
@@ -41,6 +42,7 @@ func (s FiberState) String() string {
 	case StateUnloading:
 		return "UNLOADING"
 	}
+
 	return "UNKNOWN"
 }
 
@@ -99,6 +101,7 @@ func newRootFiber(ctx *Context) *Fiber {
 		idleCh:    make(chan struct{}),
 	}
 	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
+
 	return f
 }
 
@@ -118,16 +121,20 @@ func newFiber(parent *Context, config any, base *pluginBase, rt *Runtime) *Fiber
 	for _, name := range base.inject {
 		f.inject[name] = struct{}{}
 	}
+
 	f.uid = f.core.nextUID()
 
 	ctx := parent.Extend()
+
 	ctx.fiber = f
 	if len(f.injectConfig) > 0 {
 		ctx.intercept = make(map[string]any, len(f.injectConfig))
 		maps.Copy(ctx.intercept, f.injectConfig)
 	}
+
 	f.ctx = ctx
 	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
+
 	return f
 }
 
@@ -139,6 +146,7 @@ func (f *Fiber) Context() *Context { return f.ctx }
 func (f *Fiber) Config() any {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	return f.config
 }
 
@@ -147,6 +155,7 @@ func (f *Fiber) Config() any {
 func (f *Fiber) UID() int {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	return f.uid
 }
 
@@ -154,6 +163,7 @@ func (f *Fiber) UID() int {
 func (f *Fiber) State() FiberState {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	return f.state
 }
 
@@ -163,6 +173,7 @@ func (f *Fiber) State() FiberState {
 func (f *Fiber) Err() error {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	return f.err
 }
 
@@ -173,12 +184,15 @@ func (f *Fiber) Name() string {
 	rt := f.runtime
 	parent := f.parent
 	f.core.mu.Unlock()
+
 	if rt != nil && rt.Name != "" {
 		return rt.Name
 	}
+
 	if parent != nil {
 		return parent.fiber.Name()
 	}
+
 	return "root"
 }
 
@@ -187,9 +201,11 @@ func (f *Fiber) Name() string {
 func (f *Fiber) assertActive() error {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	if f.disposed {
 		return ErrInactiveEffect
 	}
+
 	return nil
 }
 
@@ -198,12 +214,15 @@ func (f *Fiber) assertActive() error {
 func (f *Fiber) bag() *disposeBag {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	if f.disposed {
 		return nil
 	}
+
 	if f.state == StateActive || f.state == StateLoading {
 		return f.activeBag
 	}
+
 	return nil
 }
 
@@ -218,6 +237,7 @@ func (f *Fiber) bag() *disposeBag {
 func (f *Fiber) StdContext() context.Context {
 	f.core.mu.Lock()
 	defer f.core.mu.Unlock()
+
 	return f.stdCtx
 }
 
@@ -235,6 +255,7 @@ func (f *Fiber) renewStdLocked() {
 	if f.stdCancel != nil {
 		f.stdCancel(nil)
 	}
+
 	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
 }
 
@@ -254,6 +275,7 @@ func (f *Fiber) GetEffects() []EffectMeta {
 	if bag == nil {
 		return nil
 	}
+
 	return bag.meta()
 }
 
@@ -277,21 +299,26 @@ func (c *Context) Effect(fn func(ctx *Context) error, label ...string) (Disposer
 	if err := c.fiber.assertActive(); err != nil {
 		return nil, err
 	}
+
 	parent := c.collect
 	if parent == nil {
 		parent = c.fiber.bag()
 	}
+
 	if parent == nil {
 		return nil, ErrInactiveEffect
 	}
 
 	child := newDisposeBag(c.core)
 	item := parent.pushEffect(lbl, child)
+
 	err := runGuardedEffect(fn, c.withCollect(child))
 	if err != nil {
 		item.dispose(parent)
+
 		return nil, err
 	}
+
 	return func() { item.dispose(parent) }, nil
 }
 
@@ -301,6 +328,7 @@ func runGuardedEffect(fn func(*Context) error, ctx *Context) (err error) {
 			err = fmt.Errorf("effect panicked: %v", r)
 		}
 	}()
+
 	return fn(ctx)
 }
 
@@ -308,18 +336,23 @@ func runGuardedEffect(fn func(*Context) error, ctx *Context) (err error) {
 // in this fiber's realm. Check functions run without locks held.
 func (f *Fiber) resolveDeps() bool {
 	f.core.mu.Lock()
+
 	type candidate struct {
 		im *impl
 		st FiberState
 	}
+
 	candidates := make([]candidate, 0, len(f.inject))
 	for name := range f.inject {
 		key := f.ctx.isolateKeyLocked(f.core, name)
+
 		im := f.core.store[key]
 		if im == nil {
 			f.core.mu.Unlock()
+
 			return false
 		}
+
 		candidates = append(candidates, candidate{im: im, st: im.fiber.state})
 	}
 	f.core.mu.Unlock()
@@ -328,10 +361,12 @@ func (f *Fiber) resolveDeps() bool {
 		if cand.st != StateActive {
 			return false
 		}
+
 		if cand.im.check != nil && !cand.im.check() {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -343,8 +378,10 @@ func (f *Fiber) transition() {
 		c.mu.Lock()
 		if f.executing {
 			c.mu.Unlock()
+
 			return
 		}
+
 		restart := f.restartRequested
 		f.restartRequested = false
 		disposed := f.disposed
@@ -358,6 +395,7 @@ func (f *Fiber) transition() {
 		if f.executing || c.generation() != gen || disposed != f.disposed {
 			// The world changed while resolving dependencies; re-evaluate.
 			c.mu.Unlock()
+
 			continue
 		}
 
@@ -371,6 +409,7 @@ func (f *Fiber) transition() {
 			f.cancelStdLocked()
 			c.mu.Unlock()
 			f.settle()
+
 			return
 		case isActive && (restart || !wantActive):
 			f.executing = true
@@ -378,10 +417,13 @@ func (f *Fiber) transition() {
 			f.cancelStdLocked()
 			c.mu.Unlock()
 			f.unload()
+
 			if wantActive {
 				f.load()
 			}
+
 			c.mu.Lock()
+
 			f.executing = false
 			if f.disposed {
 				f.setStateLocked(StateDisposed)
@@ -396,12 +438,14 @@ func (f *Fiber) transition() {
 			}
 			c.mu.Unlock()
 			f.settle()
+
 			return
 		case !isActive && wantActive && state != StateDisposed:
 			f.executing = true
 			c.mu.Unlock()
 			f.load()
 			c.mu.Lock()
+
 			f.executing = false
 			if f.disposed {
 				f.setStateLocked(StateDisposed)
@@ -412,10 +456,12 @@ func (f *Fiber) transition() {
 			}
 			c.mu.Unlock()
 			f.settle()
+
 			return
 		default:
 			c.mu.Unlock()
 			f.settle()
+
 			return
 		}
 	}
@@ -430,9 +476,11 @@ func (f *Fiber) unload() {
 	f.activeBag = nil
 	f.cancelStdLocked()
 	c.mu.Unlock()
+
 	if bag == nil {
 		return
 	}
+
 	for _, item := range bag.take() {
 		item.execute(c)
 	}
@@ -461,15 +509,19 @@ func (f *Fiber) load() {
 		f.activeBag = nil
 		f.cancelStdLocked()
 		c.mu.Unlock()
+
 		for _, item := range bag.take() {
 			item.execute(c)
 		}
+
 		c.logError(name, err)
 		c.mu.Lock()
 		f.setStateLocked(StateFailed)
 		c.mu.Unlock()
+
 		return
 	}
+
 	f.err = nil
 	c.mu.Unlock()
 }
@@ -480,6 +532,7 @@ func runGuardedApply(fn func(*Context, any) error, ctx *Context, config any) (er
 			err = fmt.Errorf("plugin panicked: %v", r)
 		}
 	}()
+
 	return fn(ctx, config)
 }
 
@@ -491,6 +544,7 @@ func (f *Fiber) setStateLocked(state FiberState) {
 	if old == state {
 		return
 	}
+
 	f.state = state
 	f.core.pendingStatus = append(f.core.pendingStatus, statusChange{fiber: f, old: old})
 }
@@ -505,6 +559,7 @@ func (f *Fiber) settle() {
 	changes := c.pendingStatus
 	c.pendingStatus = nil
 	c.mu.Unlock()
+
 	for _, change := range changes {
 		change.fiber.ctx.Emit(EventStatus, change.fiber, change.old)
 	}
@@ -520,8 +575,10 @@ func (f *Fiber) Await() error {
 		if !f.queued && !f.executing {
 			err := f.err
 			c.mu.Unlock()
+
 			return err
 		}
+
 		ch := f.idleCh
 		c.mu.Unlock()
 		<-ch
@@ -539,16 +596,20 @@ func (f *Fiber) AwaitContext(parent context.Context) error {
 		if !f.queued && !f.executing {
 			err := f.err
 			c.mu.Unlock()
+
 			return err
 		}
+
 		ch := f.idleCh
 		c.mu.Unlock()
+
 		select {
 		case <-ch:
 		case <-parent.Done():
 			if err := parent.Err(); err != nil {
 				return err
 			}
+
 			return context.Canceled
 		}
 	}
@@ -560,6 +621,7 @@ func (f *Fiber) AwaitContext(parent context.Context) error {
 // upstream.
 func (f *Fiber) Dispose() {
 	c := f.core
+
 	c.enter()
 	defer c.leave()
 
@@ -567,15 +629,20 @@ func (f *Fiber) Dispose() {
 	if f.runtime == nil {
 		c.mu.Unlock()
 		f.restartRoot()
+
 		return
 	}
+
 	if f.disposed {
 		c.mu.Unlock()
+
 		return
 	}
+
 	f.disposed = true
 	rt := f.runtime
 	rt.removeFiberLocked(f)
+
 	if len(rt.fibers) == 0 {
 		delete(c.runtimes, rt.base)
 	}
@@ -584,6 +651,7 @@ func (f *Fiber) Dispose() {
 	if f.entry != nil {
 		f.entry.detach(f.entryBag)
 	}
+
 	f.ctx.Emit(EventPlugin, f)
 	c.queue(f)
 }
@@ -599,22 +667,27 @@ func (f *Fiber) disposeBody() {
 // the root fiber rolls back every root scope effect, mirroring upstream.
 func (f *Fiber) Restart() error {
 	c := f.core
+
 	c.enter()
 	defer c.leave()
 
 	if err := f.assertActive(); err != nil {
 		return err
 	}
+
 	c.mu.Lock()
 	if f.runtime == nil {
 		c.mu.Unlock()
 		f.restartRoot()
+
 		return nil
 	}
+
 	f.restartRequested = true
 	f.err = nil
 	c.mu.Unlock()
 	c.queue(f)
+
 	return nil
 }
 
@@ -639,20 +712,24 @@ func (f *Fiber) restartRoot() {
 // queue, so cascading dependency updates never observe torn states.
 func (f *Fiber) Update(config any) error {
 	c := f.core
+
 	c.enter()
 	defer c.leave()
 
 	if err := f.assertActive(); err != nil {
 		return err
 	}
+
 	if f.runtime == nil {
-		return fmt.Errorf("cordis: cannot update the root fiber")
+		return errors.New("cordis: cannot update the root fiber")
 	}
+
 	if validate := f.runtime.base.validate; validate != nil {
 		validated, err := validate(config)
 		if err != nil {
 			return err
 		}
+
 		config = validated
 	}
 
@@ -661,13 +738,16 @@ func (f *Fiber) Update(config any) error {
 		if len(args) > 1 {
 			f.config = args[1]
 		}
+
 		f.err = nil
 		f.restartRequested = true
 		c.mu.Unlock()
 		c.queue(f)
+
 		return nil
 	}
 	f.ctx.Waterfall(EventUpdate, next, f, config, false)
+
 	return nil
 }
 

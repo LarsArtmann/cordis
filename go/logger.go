@@ -37,6 +37,7 @@ func (l Level) String() string {
 	case LevelDebug:
 		return "debug"
 	}
+
 	return "unknown"
 }
 
@@ -95,6 +96,7 @@ func newLoggerService() *loggerService {
 		bufferSize: 1000,
 	}
 	s.AddExporter(ExporterFunc(s.bufferExport))
+
 	return s
 }
 
@@ -102,6 +104,7 @@ func newLoggerService() *loggerService {
 func (s *loggerService) bufferExport(m Message) {
 	s.bufferMu.Lock()
 	defer s.bufferMu.Unlock()
+
 	s.buffer = append(s.buffer, m)
 	if overflow := len(s.buffer) - s.bufferSize; overflow > 0 {
 		s.buffer = append([]Message(nil), s.buffer[overflow:]...)
@@ -112,6 +115,7 @@ func (s *loggerService) bufferExport(m Message) {
 func (s *loggerService) Buffer() []Message {
 	s.bufferMu.Lock()
 	defer s.bufferMu.Unlock()
+
 	return append([]Message(nil), s.buffer...)
 }
 
@@ -119,6 +123,7 @@ func (s *loggerService) Buffer() []Message {
 func (s *loggerService) SetBufferSize(size int) {
 	s.bufferMu.Lock()
 	defer s.bufferMu.Unlock()
+
 	s.bufferSize = size
 	if overflow := len(s.buffer) - size; overflow > 0 {
 		s.buffer = append([]Message(nil), s.buffer[overflow:]...)
@@ -131,16 +136,21 @@ func (s *loggerService) SetBufferSize(size int) {
 func (s *loggerService) AddExporter(e Exporter, levels ...map[string]Level) Disposer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.snExporter++
 	id := s.snExporter
+
 	entry := &exporterEntry{exporter: e}
 	if len(levels) > 0 {
 		entry.levels = levels[0]
 	}
+
 	s.exporters[id] = entry
+
 	return func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+
 		delete(s.exporters, id)
 	}
 }
@@ -149,6 +159,7 @@ func (s *loggerService) AddExporter(e Exporter, levels ...map[string]Level) Disp
 func (s *loggerService) ClearExporters() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.exporters = make(map[int]*exporterEntry)
 }
 
@@ -156,9 +167,11 @@ func (s *loggerService) dispatch(name string, level Level, args []any) {
 	s.mu.Lock()
 	s.snMessage++
 	sn := s.snMessage
+
 	entries := make([]*exporterEntry, 0, len(s.exporters))
 	for _, entry := range s.exporters {
 		target := LevelInfo
+
 		if entry.levels != nil {
 			if l, ok := entry.levels[name]; ok {
 				target = l
@@ -166,9 +179,11 @@ func (s *loggerService) dispatch(name string, level Level, args []any) {
 				target = l
 			}
 		}
+
 		if target < level {
 			continue
 		}
+
 		entries = append(entries, entry)
 	}
 	s.mu.Unlock()
@@ -176,6 +191,7 @@ func (s *loggerService) dispatch(name string, level Level, args []any) {
 	if len(entries) == 0 {
 		return
 	}
+
 	msg := Message{
 		SN:    sn,
 		Time:  time.Now(),
@@ -195,6 +211,7 @@ func (c *core) logError(name string, err error) {
 	if name == "" {
 		name = "root"
 	}
+
 	c.logger.dispatch(name, LevelError, []any{err})
 }
 
@@ -213,17 +230,21 @@ func (c *Context) Logger(names ...string) *Logger {
 	if len(names) > 0 && names[0] != "" {
 		l.name = names[0]
 	}
+
 	if intercept, ok := c.Intercepted("logger"); ok {
 		if li, ok := intercept.(LoggerIntercept); ok {
 			if l.name == "" {
 				l.name = li.Name
 			}
+
 			l.level = li.Level
 		}
 	}
+
 	if l.name == "" {
 		l.name = c.fiber.Name()
 	}
+
 	return l
 }
 
@@ -252,17 +273,22 @@ func (l *Logger) log(level Level, args []any) {
 				for _, inner := range joined.Unwrap() {
 					l.log(level, []any{inner})
 				}
+
 				return
 			}
+
 			if inner := errors.Unwrap(err); inner != nil {
 				l.log(level, []any{inner})
+
 				return
 			}
 		}
 	}
+
 	if l.level != LevelUnset && l.level < level {
 		return
 	}
+
 	l.service.dispatch(l.name, level, args)
 }
 
@@ -280,6 +306,7 @@ func FormatMessage(m Message) string {
 			args = append([]any{"%o"}, args...)
 		}
 	}
+
 	if len(args) == 0 {
 		return ""
 	}
@@ -288,25 +315,35 @@ func FormatMessage(m Message) string {
 	args = args[1:]
 
 	var b strings.Builder
+
 	argIndex := 0
+
 	for i := 0; i < len(format); i++ {
 		if format[i] != '%' || i+1 >= len(format) {
 			b.WriteByte(format[i])
+
 			continue
 		}
+
 		verb := format[i+1]
 		i++
+
 		if verb == '%' {
 			b.WriteByte('%')
+
 			continue
 		}
+
 		if argIndex >= len(args) {
 			b.WriteByte('%')
 			b.WriteByte(verb)
+
 			continue
 		}
+
 		value := args[argIndex]
 		argIndex++
+
 		switch verb {
 		case 's':
 			fmt.Fprint(&b, value)
@@ -323,14 +360,17 @@ func FormatMessage(m Message) string {
 			b.WriteByte(verb)
 		}
 	}
+
 	for ; argIndex < len(args); argIndex++ {
 		b.WriteByte(' ')
+
 		if err, ok := args[argIndex].(error); ok {
 			b.WriteString(err.Error())
 		} else {
 			fmt.Fprint(&b, args[argIndex])
 		}
 	}
+
 	return b.String()
 }
 
@@ -348,8 +388,10 @@ func truncateNumber(value any) string {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return strconv.FormatInt(int64(f), 10)
 		}
+
 		return "0"
 	}
+
 	return fmt.Sprint(value)
 }
 
@@ -364,6 +406,7 @@ func toFloat(value any) string {
 	case int64:
 		return strconv.FormatInt(v, 10)
 	}
+
 	return fmt.Sprint(value)
 }
 
@@ -372,6 +415,7 @@ func toJSON(value any) string {
 	if err != nil {
 		return fmt.Sprint(value)
 	}
+
 	return string(data)
 }
 
@@ -387,6 +431,7 @@ func NewConsoleExporter(w io.Writer) *ConsoleExporter {
 	if w == nil {
 		w = os.Stderr
 	}
+
 	return &ConsoleExporter{W: w}
 }
 

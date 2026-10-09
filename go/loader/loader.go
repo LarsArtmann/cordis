@@ -32,6 +32,7 @@ func New(ctx *cordis.Context, resolver *Resolver) *Loader {
 	if _, err := ctx.Provide("loader", l); err != nil {
 		slog.Error("loader: cannot provide service", "err", err)
 	}
+
 	return l
 }
 
@@ -43,7 +44,9 @@ func (l *Loader) Start(entries []EntryOptions) error {
 	if err := l.tree.Root().Update(entries); err != nil {
 		return err
 	}
+
 	l.tree.Await()
+
 	return nil
 }
 
