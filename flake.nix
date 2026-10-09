@@ -141,6 +141,11 @@
         in
         pkgs.writeShellApplication {
           name = "nixfmt";
+          meta = {
+            description = "Format Nix files (expands directories before invoking nixfmt)";
+            license = pkgs.lib.licenses.mit;
+            homepage = "https://github.com/LarsArtmann/cordis";
+          };
           runtimeInputs = [ pkgs.nixfmt ];
           text = ''
             for target in "$@"; do
@@ -188,7 +193,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           mkTest =
-            name: script:
+            name: desc: script:
             let
               app = pkgs.writeShellApplication {
                 inherit name;
@@ -209,28 +214,40 @@
             {
               type = "app";
               program = "${app}/bin/${name}";
+              meta = {
+                # desc, not `description = description;`: nixfmt would
+                # normalize that to `inherit description;`, which
+                # buildflow's flake-meta-checker cannot parse.
+                description = desc;
+                license = nixpkgs.lib.licenses.mit;
+                homepage = "https://github.com/LarsArtmann/cordis";
+              };
             };
         in
         {
-          test-go = mkTest "test-go" ''
+          test-go = mkTest "test-go" "Run the Go port test suite (go vet plus race-enabled tests)" ''
             export GOCACHE="''${GOCACHE_OVERRIDE:-$(mktemp -d)/go-build}"
             cd go && go vet ./... && go test -race -count=3 ./...
           '';
-          test-rust = mkTest "test-rust" ''
-            export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
-            mkdir -p "$CARGO_HOME"
-            cd rust && cargo clippy --all-targets && cargo clippy --all-targets --features thread-safe && cargo test
-          '';
-          test-zig = mkTest "test-zig" ''
+          test-rust =
+            mkTest "test-rust" "Run the Rust port test suite (clippy on both feature variants plus tests)"
+              ''
+                export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
+                mkdir -p "$CARGO_HOME"
+                cd rust && cargo clippy --all-targets && cargo clippy --all-targets --features thread-safe && cargo test
+              '';
+          test-zig = mkTest "test-zig" "Run the Zig port test suite (leak-checked)" ''
             cd zig && zig build test --summary all
           '';
-          test-markdown = mkTest "test-markdown" ''
+          test-markdown = mkTest "test-markdown" "Run markdownlint over the repository" ''
             markdownlint --config .markdownlint.jsonc --ignore-path .markdownlintignore .
           '';
-          test-panic-allowlist = mkTest "test-panic-allowlist" ''
-            bash scripts/panic-allowlist.sh
-          '';
-          test = mkTest "test" ''
+          test-panic-allowlist =
+            mkTest "test-panic-allowlist" "Verify the panic allowlist against all three ports"
+              ''
+                bash scripts/panic-allowlist.sh
+              '';
+          test = mkTest "test" "Run every port test suite: Go, Rust, Zig, markdown, panic allowlist" ''
             export GOCACHE="''${GOCACHE_OVERRIDE:-$(mktemp -d)/go-build}"
             export CARGO_HOME="''${CARGO_HOME_OVERRIDE:-$HOME/.cache/cordis/cargo}"
             mkdir -p "$CARGO_HOME"

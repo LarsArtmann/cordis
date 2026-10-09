@@ -13,5 +13,30 @@ exclude:
   - "**/dist"
   - rust/target
   - .zig-cache
+  - zig-out
+  - result
   - .turbo
   - .yarn
+
+# Skips are policy, not neglect — each names the owner that covers the gap:
+skip_steps:
+  # go-auto-upgrade suggests samber/lo (go.mod is deliberately zero-dependency)
+  # and encoding/json/v2 (GOEXPERIMENT-gated; its own finding warns the v2 swap
+  # has runtime-only failure modes). Port is parity-locked; see ROADMAP.md.
+  - go-auto-upgrade
+  # Upstream pins ESLint 8 + .eslintrc (no flat config); TS linting is owned by
+  # `yarn lint` in the packages/ workspace, which buildflow's v9-style tool
+  # cannot drive.
+  - eslint-fix
+  # Cargo tools run at the repo root, where there is no Cargo.toml (crate lives
+  # in rust/); buildflow has no per-step workdir. Rust quality is gated by the
+  # flake checks (clippy both features, tests) and ports.yml CI instead.
+  - cargo-update
+  - cargo-fmt
+  - cargo-check
+  - cargo-doc
+  - cargo-clippy-fix
+  # tsc runs at the repo root without the workspace node_modules
+  # (TS2688: @types/node unresolvable); TS checking is owned by the yarn
+  # workspace build (yarn build / dts).
+  - type-check

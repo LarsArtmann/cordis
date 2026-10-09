@@ -120,7 +120,7 @@ All three ports implement the same invariants:
 
 Details: [PORTS.md](PORTS.md).
 
-## Get started
+## Installation
 
 **Go** (flagship, module `github.com/LarsArtmann/cordis/go`):
 
