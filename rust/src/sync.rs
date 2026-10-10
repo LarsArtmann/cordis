@@ -46,8 +46,14 @@ pub trait BorrowExt<T> {
 
 #[cfg(not(feature = "thread-safe"))]
 impl<T> BorrowExt<T> for RefCell<T> {
-    type Guard<'a> = std::cell::Ref<'a, T> where T: 'a;
-    type GuardMut<'a> = std::cell::RefMut<'a, T> where T: 'a;
+    type Guard<'a>
+        = std::cell::Ref<'a, T>
+    where
+        T: 'a;
+    type GuardMut<'a>
+        = std::cell::RefMut<'a, T>
+    where
+        T: 'a;
 
     fn borrow(&self) -> Self::Guard<'_> {
         Self::borrow(self)
@@ -60,8 +66,14 @@ impl<T> BorrowExt<T> for RefCell<T> {
 
 #[cfg(feature = "thread-safe")]
 impl<T> BorrowExt<T> for RefCell<T> {
-    type Guard<'a> = std::sync::MutexGuard<'a, T> where T: 'a;
-    type GuardMut<'a> = std::sync::MutexGuard<'a, T> where T: 'a;
+    type Guard<'a>
+        = std::sync::MutexGuard<'a, T>
+    where
+        T: 'a;
+    type GuardMut<'a>
+        = std::sync::MutexGuard<'a, T>
+    where
+        T: 'a;
 
     fn borrow(&self) -> Self::Guard<'_> {
         match self.lock() {

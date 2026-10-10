@@ -74,14 +74,17 @@ func TestEmitOrder(t *testing.T) {
 	}
 	must(ctx.On("test", func(...any) any {
 		seq = append(seq, 1)
+
 		return nil
 	}))
 	must(ctx.On("test", func(...any) any {
 		seq = append(seq, 2)
+
 		return nil
 	}))
 	must(ctx.On("test", func(...any) any {
 		seq = append(seq, 0)
+
 		return nil
 	}, Prepend()))
 	ctx.Emit("test")
@@ -129,14 +132,17 @@ func TestSerialAndBail(t *testing.T) {
 
 	mustOn(t, ctx, "test", func(...any) any {
 		calls++
+
 		return nil
 	})
 	mustOn(t, ctx, "test", func(...any) any {
 		calls++
+
 		return "bailed"
 	})
 	mustOn(t, ctx, "test", func(...any) any {
 		calls++
+
 		return "unreachable"
 	})
 
@@ -220,6 +226,7 @@ func TestEventFilter(t *testing.T) {
 	listenerCtx := ctx.Intercept("flag", true)
 	mustOn(t, listenerCtx, "test", func(...any) any {
 		calls++
+
 		return nil
 	})
 
@@ -252,6 +259,7 @@ func TestEventFilter(t *testing.T) {
 	// Global listeners bypass filters.
 	mustOn(t, ctx, "global-test", func(...any) any {
 		calls++
+
 		return nil
 	}, Global())
 	rejecting.Emit("global-test")

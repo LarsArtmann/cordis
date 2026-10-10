@@ -1,11 +1,11 @@
 //! Shared mutable state of one context tree, the effect bag tree, and the
 //! drain queue that coalesces fiber state transitions.
 
-use crate::sync::RefCell;
-use std::collections::{HashMap, VecDeque};
-use crate::sync::Rc;
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::Rc;
+use crate::sync::RefCell;
+use std::collections::{HashMap, VecDeque};
 
 use crate::context::Context;
 use crate::events::{Hook, Value};
@@ -88,7 +88,11 @@ impl Bag {
         entry
     }
 
-    pub fn push_node(bag: &Rc<RefCell<Self>>, label: String, node: Rc<RefCell<Self>>) -> Rc<RefCell<Entry>> {
+    pub fn push_node(
+        bag: &Rc<RefCell<Self>>,
+        label: String,
+        node: Rc<RefCell<Self>>,
+    ) -> Rc<RefCell<Entry>> {
         let entry = Rc::new(RefCell::new(Entry {
             label,
             kind: EntryKind::Node(node),
@@ -101,7 +105,9 @@ impl Bag {
     /// Detach without executing, used when a fiber disposes itself.
     pub fn detach(bag: &Rc<RefCell<Self>>, entry: &Rc<RefCell<Entry>>) {
         entry.borrow_mut().done = true;
-        bag.borrow_mut().items.retain(|item| !Rc::ptr_eq(item, entry));
+        bag.borrow_mut()
+            .items
+            .retain(|item| !Rc::ptr_eq(item, entry));
     }
 
     /// Execute an entry (children first, then its own cleanup) exactly once.
@@ -125,14 +131,20 @@ impl Bag {
     }
 
     /// Detach and execute an entry.
-    pub fn dispose_entry(core: &Rc<RefCell<Core>>, bag: &Rc<RefCell<Self>>, entry: &Rc<RefCell<Entry>>) {
+    pub fn dispose_entry(
+        core: &Rc<RefCell<Core>>,
+        bag: &Rc<RefCell<Self>>,
+        entry: &Rc<RefCell<Entry>>,
+    ) {
         {
             let e = entry.borrow_mut();
             if e.done {
                 return;
             }
         }
-        bag.borrow_mut().items.retain(|item| !Rc::ptr_eq(item, entry));
+        bag.borrow_mut()
+            .items
+            .retain(|item| !Rc::ptr_eq(item, entry));
         Self::execute(core, entry);
     }
 
@@ -293,7 +305,12 @@ impl Core {
                 }
             };
             if let Some((fiber_override, name)) = target {
-                checks.push((index, fiber_override, from.find_isolate_override(&name), name));
+                checks.push((
+                    index,
+                    fiber_override,
+                    from.find_isolate_override(&name),
+                    name,
+                ));
             }
         }
         let mut targets = Vec::new();
@@ -308,7 +325,6 @@ impl Core {
             self.queue(id);
         }
     }
-
 }
 
 /// Enter a public API boundary.

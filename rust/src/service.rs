@@ -6,9 +6,9 @@
 //! ([`Context::provide_named`], [`Context::get_named`]) remain for dynamic
 //! names (loader and hmr ports) and cross realm contracts.
 
-use crate::sync::Rc;
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::Rc;
 
 use crate::context::{Context, Disposer};
 use crate::core::{self, Bag, Impl};
@@ -118,7 +118,9 @@ impl Context {
             }),
         );
 
-        self.core.borrow_mut().notify_dependents(self, &[name.to_string()]);
+        self.core
+            .borrow_mut()
+            .notify_dependents(self, &[name.to_string()]);
         Ok(Disposer::new({
             let core = Rc::clone(&self.core);
             move || Bag::dispose_entry(&core, &bag, &entry)
@@ -174,10 +176,14 @@ impl Context {
     pub fn get<T: crate::sync::Shared>(&self) -> crate::Result<Rc<T>> {
         let value = self
             .get_named(crate::events::service_name::<T>())
-            .ok_or_else(|| crate::Error::MissingService(crate::events::service_name::<T>().to_string()))?;
-        value.downcast::<T>().map_err(|_| crate::Error::TypeMismatch {
-            name: crate::events::service_name::<T>().to_string(),
-        })
+            .ok_or_else(|| {
+                crate::Error::MissingService(crate::events::service_name::<T>().to_string())
+            })?;
+        value
+            .downcast::<T>()
+            .map_err(|_| crate::Error::TypeMismatch {
+                name: crate::events::service_name::<T>().to_string(),
+            })
     }
 
     /// The service of type `T` when it is currently available, mirroring the

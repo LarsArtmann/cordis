@@ -14,8 +14,8 @@ flake.nix:217: meta block is missing the description attribute (error)
 
 `modules/flake-meta-checker` is regex-scanned:
 
-- `check_meta_attributes.go:178` — `descValueRe = regexp.MustCompile(`^\s*description\s*=\s*"([^"]*)"`)` requires a string **literal**; `description = desc;` (identifier) never matches.
-- `meta_block.go:65` — `metaAttrRe = `^\s*(\w+)\s*=`` can't see `inherit description;` either (no `=`).
+- `check_meta_attributes.go:178` — `descValueRe = regexp.MustCompile(`^\s_description\s_=\s*"([^"]*)"`)` requires a string **literal**; `description = desc;` (identifier) never matches.
+- `meta_block.go:65` — `metaAttrRe =`^\s*(\w+)\s*=`` can't see `inherit description;` either (no `=`).
 
 Reproduced 2026-10-09 on cordis (`flake.nix:217`), buildflow `1b99ae2`, file state at repo cdc3c4f. After renaming the binding to a literal the finding cleared; nixfmt converting `description = description;` back to `inherit description;` re-broke it — both shapes are idiomatic Nix.
 

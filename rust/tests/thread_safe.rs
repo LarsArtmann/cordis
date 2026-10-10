@@ -1,6 +1,12 @@
 // Tests legitimately assert via panic; the strict production
 // lints (unwrap/expect/indexing/arithmetic) are relaxed here.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic
+)]
 
 //! Stress tests for the `thread-safe` feature: multiple threads drive one
 //! context tree through the public API. The framework's drain queue keeps
@@ -8,10 +14,10 @@
 //! consistent without user-visible locks.
 #![cfg(feature = "thread-safe")]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use cordis::{plugin, start_fn, value, Context, EventOptions};
+use cordis::{Context, EventOptions, plugin, start_fn, value};
 
 #[test]
 fn threads_share_one_tree() {

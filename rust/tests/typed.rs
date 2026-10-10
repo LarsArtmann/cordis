@@ -1,18 +1,24 @@
 // Tests legitimately assert via panic; the strict production
 // lints (unwrap/expect/indexing/arithmetic) are relaxed here.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic
+)]
 
 //! Tests for the native API forms: typed services, typed events, RAII
 //! guards and the Plugin trait.
 
-use cordis::sync::RefCell;
 #[cfg(feature = "thread-safe")]
 use cordis::sync::BorrowExt as _;
 use cordis::sync::Rc;
+use cordis::sync::RefCell;
 
 use cordis::{
-    event_name, plugin, plugin_type_id, service_name, start, start_fn, Context, EventOptions,
-    FiberState, Guard, Plugin,
+    Context, EventOptions, FiberState, Guard, Plugin, event_name, plugin, plugin_type_id,
+    service_name, start, start_fn,
 };
 
 #[derive(Default)]
@@ -40,7 +46,9 @@ fn opts() -> EventOptions {
 #[test]
 fn typed_service_round_trip() {
     let ctx = Context::new();
-    let db = Database { dsn: "postgres://localhost".to_string() };
+    let db = Database {
+        dsn: "postgres://localhost".to_string(),
+    };
 
     assert!(ctx.try_get::<Database>().is_none());
     assert!(ctx.get::<Database>().is_err());
@@ -94,7 +102,9 @@ fn typed_service_isolation() {
 
     ctx.provide(Database { dsn: "root".into() }).unwrap();
     isolated
-        .provide(Database { dsn: "isolated".into() })
+        .provide(Database {
+            dsn: "isolated".into(),
+        })
         .unwrap();
 
     assert_eq!(ctx.get::<Database>().unwrap().dsn, "root");
@@ -129,7 +139,11 @@ fn typed_events_dispatch_by_type() {
 
     assert_eq!(
         *received.borrow(),
-        vec!["created 1".to_string(), "deleted 2".to_string(), "created 3".to_string()]
+        vec![
+            "created 1".to_string(),
+            "deleted 2".to_string(),
+            "created 3".to_string()
+        ]
     );
 }
 
@@ -202,7 +216,10 @@ impl Plugin for Worker {
     fn apply(&self, ctx: &Context, config: &WorkerConfig) -> cordis::Result<()> {
         let db = ctx.get::<Database>()?;
         if db.dsn != "live" {
-            return Err(cordis::Error::Validation(format!("expected live dsn, got {}", db.dsn)));
+            return Err(cordis::Error::Validation(format!(
+                "expected live dsn, got {}",
+                db.dsn
+            )));
         }
         let name = config.name.clone();
         ctx.attach(move || {
@@ -267,15 +284,26 @@ fn plugin_trait_update_restarts_with_new_config() {
     let fiber = start(
         &ctx,
         Recorder,
-        RecorderConfig { labels: Rc::clone(&labels) },
+        RecorderConfig {
+            labels: Rc::clone(&labels),
+        },
     )
     .unwrap();
     assert_eq!(*labels.borrow(), vec!["apply".to_string()]);
 
     fiber
-        .update(cordis::value(RecorderConfig { labels: Rc::clone(&labels) }))
+        .update(cordis::value(RecorderConfig {
+            labels: Rc::clone(&labels),
+        }))
         .unwrap();
-    assert_eq!(*labels.borrow(), vec!["apply".to_string(), "cleanup".to_string(), "apply".to_string()]);
+    assert_eq!(
+        *labels.borrow(),
+        vec![
+            "apply".to_string(),
+            "cleanup".to_string(),
+            "apply".to_string()
+        ]
+    );
     assert_eq!(fiber.state(), FiberState::Active);
 }
 
@@ -319,7 +347,7 @@ fn guard_explicit_dispose() {
 }
 
 mod intercept_validation {
-    use cordis::{plugin, start_fn, value, Context, Error};
+    use cordis::{Context, Error, plugin, start_fn, value};
 
     #[test]
     fn intercept_scopes_override_configs() {

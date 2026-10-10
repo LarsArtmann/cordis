@@ -6,12 +6,12 @@
 //! Both start through their `start` functions and share one runtime and
 //! registry per identity.
 
+#[cfg(feature = "thread-safe")]
+use crate::sync::BorrowExt as _;
+use crate::sync::Rc;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use crate::sync::Rc;
-#[cfg(feature = "thread-safe")]
-use crate::sync::BorrowExt as _;
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use crate::context::Context;
@@ -120,7 +120,11 @@ pub trait Plugin: crate::sync::Shared {
 /// Returns [`crate::Error::InactiveEffect`] if `ctx` has no active fiber or
 /// effect bag, [`crate::Error::Validation`] when a validator rejects the
 /// config, and plugin body failures after rolling the effect tree back.
-pub fn start<P: Plugin + 'static>(ctx: &Context, plugin: P, config: P::Config) -> crate::Result<Fiber> {
+pub fn start<P: Plugin + 'static>(
+    ctx: &Context,
+    plugin: P,
+    config: P::Config,
+) -> crate::Result<Fiber> {
     let name = plugin.name().to_string();
     let inject = plugin.inject();
     let plugin = Rc::new(plugin);
@@ -129,9 +133,11 @@ pub fn start<P: Plugin + 'static>(ctx: &Context, plugin: P, config: P::Config) -
         name,
         inject,
         apply: Rc::new(move |ctx, raw| {
-            let typed = raw.downcast::<P::Config>().map_err(|_| crate::Error::TypeMismatch {
-                name: plugin.name().to_string(),
-            })?;
+            let typed = raw
+                .downcast::<P::Config>()
+                .map_err(|_| crate::Error::TypeMismatch {
+                    name: plugin.name().to_string(),
+                })?;
             plugin.apply(ctx, &typed)
         }),
     });
@@ -175,7 +181,8 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
                 name: self.base.name.clone(),
             });
         };
-        base.inject.extend(deps.iter().map(std::string::ToString::to_string));
+        base.inject
+            .extend(deps.iter().map(std::string::ToString::to_string));
         Ok(self)
     }
 
@@ -191,8 +198,9 @@ impl<C: crate::sync::Shared> FnPlugin<C> {
     #[must_use]
     pub fn validate(
         mut self,
-        #[allow(clippy::redundant_closure)]
-        f: impl Fn(&C) -> Vec<String> + crate::sync::MaybeSendSync + 'static,
+        #[allow(clippy::redundant_closure)] f: impl Fn(&C) -> Vec<String>
+        + crate::sync::MaybeSendSync
+        + 'static,
     ) -> Self {
         self.validator = Some(Rc::new(f));
         self
@@ -232,9 +240,7 @@ where
                 move |ctx, config| {
                     let typed = config
                         .downcast::<C>()
-                        .map_err(|_| crate::Error::TypeMismatch {
-                            name: name.clone(),
-                        })?;
+                        .map_err(|_| crate::Error::TypeMismatch { name: name.clone() })?;
                     apply(ctx, &typed)
                 }
             }),
@@ -250,7 +256,11 @@ where
 ///
 /// Returns [`crate::Error::Validation`] when the plugin's validator reports
 /// issues, and the same errors as [`start`] for the shared start path.
-pub fn start_fn<C: crate::sync::Shared>(ctx: &Context, plugin: &FnPlugin<C>, config: C) -> crate::Result<Fiber> {
+pub fn start_fn<C: crate::sync::Shared>(
+    ctx: &Context,
+    plugin: &FnPlugin<C>,
+    config: C,
+) -> crate::Result<Fiber> {
     if let Some(validate) = &plugin.validator {
         let issues = validate(&config);
         if !issues.is_empty() {
@@ -267,7 +277,11 @@ impl Context {
     /// # Errors
     ///
     /// Returns the same errors as [`start_fn`] for the underlying plugin.
-    pub fn inject(&self, deps: &[&str], f: impl Fn(&Self) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static) -> crate::Result<Fiber> {
+    pub fn inject(
+        &self,
+        deps: &[&str],
+        f: impl Fn(&Self) -> crate::Result<()> + crate::sync::MaybeSendSync + 'static,
+    ) -> crate::Result<Fiber> {
         let p = plugin::<(), _>("anonymous", move |ctx: &Self, (): &()| f(ctx)).inject(deps)?;
         start_fn(self, &p, ())
     }
@@ -377,14 +391,22 @@ impl Registry {
 }
 
 /// Shared start path for both plugin forms.
-pub fn start_base(ctx: &Context, base: &Rc<PluginBase>, config: crate::events::Value) -> crate::Result<Fiber> {
+pub fn start_base(
+    ctx: &Context,
+    base: &Rc<PluginBase>,
+    config: crate::events::Value,
+) -> crate::Result<Fiber> {
     core::enter(&ctx.core);
     let result = start_inner(ctx, base, config);
     core::leave(&ctx.core);
     result
 }
 
-fn start_inner(ctx: &Context, base: &Rc<PluginBase>, config: crate::events::Value) -> crate::Result<Fiber> {
+fn start_inner(
+    ctx: &Context,
+    base: &Rc<PluginBase>,
+    config: crate::events::Value,
+) -> crate::Result<Fiber> {
     ctx.fiber().assert_active()?;
     let Some(parent_bag) = ctx.bag() else {
         return Err(crate::Error::InactiveEffect);
@@ -393,12 +415,14 @@ fn start_inner(ctx: &Context, base: &Rc<PluginBase>, config: crate::events::Valu
     let runtime_id = base.id;
     {
         let mut core = ctx.core.borrow_mut();
-        core.runtimes.entry(runtime_id).or_insert_with(|| RuntimeData {
-            name: base.name.clone(),
-            apply: Rc::clone(&base.apply),
-            fibers: Vec::new(),
-            base: Rc::clone(base),
-        });
+        core.runtimes
+            .entry(runtime_id)
+            .or_insert_with(|| RuntimeData {
+                name: base.name.clone(),
+                apply: Rc::clone(&base.apply),
+                fibers: Vec::new(),
+                base: Rc::clone(base),
+            });
     }
 
     let data = fiber::new_fiber(ctx, config, &base.inject, runtime_id);
@@ -435,9 +459,10 @@ fn start_inner(ctx: &Context, base: &Rc<PluginBase>, config: crate::events::Valu
     }
     // The plugin lifecycle event fires before the first transition, so
     // listeners observe the fiber still pending, mirroring upstream.
-    fiber
-        .context()
-        .emit_named(crate::fiber::EVENT_PLUGIN, &[crate::events::value(fiber.clone())]);
+    fiber.context().emit_named(
+        crate::fiber::EVENT_PLUGIN,
+        &[crate::events::value(fiber.clone())],
+    );
     ctx.core.borrow_mut().queue(id);
     Ok(fiber)
 }

@@ -145,10 +145,12 @@ func TestIsolatedEvents(t *testing.T) {
 
 	mustOn(t, ctx, "custom-event", func(...any) any {
 		rootCalls++
+
 		return nil
 	})
 	mustOn(t, isolated, "custom-event", func(...any) any {
 		isolatedCalls++
+
 		return nil
 	})
 

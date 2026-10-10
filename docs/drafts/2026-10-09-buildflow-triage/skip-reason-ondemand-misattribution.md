@@ -16,7 +16,7 @@ Reading that, you conclude full mode blocklists markdown-lint — it doesn't. Th
 
 Two code paths disagree:
 
-- `domain/config/build_mode.go:88-95` — `ShouldSkipOnDemand` (gitleaks, codespell, markdown-lint) and `SkipReasonForStep` (L129-132) already produces the precise reason: `"<step> is an on-demand tool: run with `buildflow -s <step>`"`.
+- `domain/config/build_mode.go:88-95` — `ShouldSkipOnDemand` (gitleaks, codespell, markdown-lint) and `SkipReasonForStep` (L129-132) already produces the precise reason: `"<step> is an on-demand tool: run with`buildflow -s <step>`"`.
 - `execution/filtered_tools_1.go:94` — `detectBuildModeSkips` hardcodes `reason := "skipped by build mode '" + string(mode) + "'"` for everything it reports, discarding the specific message.
 
 ## Suggested fix

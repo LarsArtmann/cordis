@@ -1,21 +1,30 @@
 // Tests legitimately assert via panic; the strict production
 // lints (unwrap/expect/indexing/arithmetic) are relaxed here.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic
+)]
 
 //! Cross-language golden scenario runners: executes ../golden/scenario*.txt
 //! and asserts the emitted traces match the ../golden/expected*.txt files
 //! exactly. The Go and Zig ports ship structurally identical runners; see
 //! golden/README.md.
 
+#[cfg(feature = "thread-safe")]
+use cordis::sync::BorrowExt as _;
+use cordis::sync::Rc;
 use cordis::sync::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-#[cfg(feature = "thread-safe")]
-use cordis::sync::BorrowExt as _;
-use cordis::sync::Rc;
 
-use cordis::{plugin, start_fn, value, Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Next, Value};
+use cordis::{
+    Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Next, Value, plugin, start_fn,
+    value,
+};
 
 type Trace = Rc<RefCell<Vec<String>>>;
 type FiberMap = Rc<RefCell<HashMap<String, Fiber>>>;
@@ -60,7 +69,11 @@ fn parse_params(tokens: &[String]) -> Params {
     let mut p = Params::default();
     for tok in tokens {
         if let Some(rest) = tok.strip_prefix("inject=") {
-            p.deps = rest.split(',').filter(|d| !d.is_empty()).map(String::from).collect();
+            p.deps = rest
+                .split(',')
+                .filter(|d| !d.is_empty())
+                .map(String::from)
+                .collect();
         } else if let Some(rest) = tok.strip_prefix("realm=") {
             p.realm = rest.to_string();
         } else if let Some(rest) = tok.strip_prefix("config=") {
@@ -121,7 +134,9 @@ fn make_plugin(
     let name = name.to_string();
     let plugin_name = name.clone();
     plugin(plugin_name.as_str(), move |ctx: &Context, config: &i32| {
-        trace.borrow_mut().push(format!("apply {name} config={config}"));
+        trace
+            .borrow_mut()
+            .push(format!("apply {name} config={config}"));
         let labels: Vec<String> = if lifo {
             (1..=3).map(|i| format!("{name}#{i}")).collect()
         } else {
@@ -172,7 +187,9 @@ impl Runner {
             p = p.inject(&deps).expect("plugin inject");
         }
         let p = Rc::new(p);
-        self.plugins.borrow_mut().insert(name.to_string(), Rc::clone(&p));
+        self.plugins
+            .borrow_mut()
+            .insert(name.to_string(), Rc::clone(&p));
         p
     }
 
@@ -191,13 +208,23 @@ impl Runner {
                 };
                 let provider = Self::provider_for(&args[0]);
                 let fiber = start_fn(&scope, &provider, 0).expect("start provider");
-                self.fibers.borrow_mut().insert(format!("provider:{}", args[0]), fiber);
-                self.trace.borrow_mut().push(format!("provided {}", args[0]));
+                self.fibers
+                    .borrow_mut()
+                    .insert(format!("provider:{}", args[0]), fiber);
+                self.trace
+                    .borrow_mut()
+                    .push(format!("provided {}", args[0]));
             }
             "withdraw" | "withdraw-in-realm" => {
-                let fiber = self.fibers.borrow_mut().remove(&format!("provider:{}", args[0])).expect("provider fiber");
+                let fiber = self
+                    .fibers
+                    .borrow_mut()
+                    .remove(&format!("provider:{}", args[0]))
+                    .expect("provider fiber");
                 fiber.dispose();
-                self.trace.borrow_mut().push(format!("withdrawn {}", args[0]));
+                self.trace
+                    .borrow_mut()
+                    .push(format!("withdrawn {}", args[0]));
             }
             "start" | "start-isolated" => {
                 let mut scope = self.ctx.clone();
@@ -212,7 +239,11 @@ impl Runner {
             }
             "spawn" => {
                 let parent = params.realm.clone(); // parent=<name> parsed as realm
-                let spawn = Spawn { name: args[0].clone(), deps: params.deps.clone(), config: params.config };
+                let spawn = Spawn {
+                    name: args[0].clone(),
+                    deps: params.deps.clone(),
+                    config: params.config,
+                };
                 self.children.entry(parent).or_default().push(spawn);
             }
             "delete" => {
@@ -224,7 +255,9 @@ impl Runner {
                 let want: usize = args[0].parse().expect("size int");
                 let got = self.ctx.registry().size();
                 assert_eq!(got, want, "expected registry size {want}, got {got}");
-                self.trace.borrow_mut().push(format!("registry-size {want}"));
+                self.trace
+                    .borrow_mut()
+                    .push(format!("registry-size {want}"));
             }
             "update" => {
                 let fiber = self.fibers.borrow().get(&args[0]).cloned().expect("fiber");
@@ -232,11 +265,24 @@ impl Runner {
                 fiber.update(value(config)).expect("update");
             }
             "restart" => {
-                self.fibers.borrow().get(&args[0]).cloned().expect("fiber").restart().expect("restart");
+                self.fibers
+                    .borrow()
+                    .get(&args[0])
+                    .cloned()
+                    .expect("fiber")
+                    .restart()
+                    .expect("restart");
             }
             "dispose" => {
-                self.fibers.borrow().get(&args[0]).cloned().expect("fiber").dispose();
-                self.trace.borrow_mut().push(format!("disposed {}", args[0]));
+                self.fibers
+                    .borrow()
+                    .get(&args[0])
+                    .cloned()
+                    .expect("fiber")
+                    .dispose();
+                self.trace
+                    .borrow_mut()
+                    .push(format!("disposed {}", args[0]));
             }
             "restart-root" => {
                 self.ctx.fiber().dispose();
@@ -246,13 +292,16 @@ impl Runner {
                 let fiber = self.fibers.borrow().get(&args[0]).cloned().expect("fiber");
                 let got = state_name(fiber.state());
                 assert_eq!(
-                    got, args[1],
+                    got,
+                    args[1],
                     "expected {} {}, trace:\n{}",
                     args[0],
                     args[1],
                     self.trace.borrow().join("\n")
                 );
-                self.trace.borrow_mut().push(format!("state {} {}", args[0], args[1]));
+                self.trace
+                    .borrow_mut()
+                    .push(format!("state {} {}", args[0], args[1]));
             }
             other => panic!("unknown op {other}"),
         }
@@ -260,10 +309,13 @@ impl Runner {
 
     fn provider_for(service: &str) -> FnPlugin<i32> {
         let service = service.to_string();
-        plugin(&format!("provider:{service}"), move |ctx: &Context, _: &i32| {
-            ctx.provide_named(&service, value(1i32))?;
-            Ok(())
-        })
+        plugin(
+            &format!("provider:{service}"),
+            move |ctx: &Context, _: &i32| {
+                ctx.provide_named(&service, value(1i32))?;
+                Ok(())
+            },
+        )
     }
 }
 
@@ -329,14 +381,21 @@ fn golden_scenario_events() {
                     (ctx.isolate_shared(event, &realm), format!("realm={realm}"))
                 };
                 scope
-                    .on_named(event, event_listener(&trace, event, &who), EventOptions::default())
+                    .on_named(
+                        event,
+                        event_listener(&trace, event, &who),
+                        EventOptions::default(),
+                    )
                     .expect("on");
             }
             "on-global" => {
                 ctx.on_named(
                     event,
                     event_listener(&trace, event, "global"),
-                    EventOptions { global: true, ..EventOptions::default() },
+                    EventOptions {
+                        global: true,
+                        ..EventOptions::default()
+                    },
                 )
                 .expect("on-global");
             }
@@ -356,7 +415,13 @@ fn golden_scenario_events() {
 
 #[test]
 fn golden_dsl_parse_params() {
-    let p = parse_params(&["inject=a,,b".to_string(), "realm=t".to_string(), "config=7".to_string(), "lifo".to_string(), "ignored".to_string()]);
+    let p = parse_params(&[
+        "inject=a,,b".to_string(),
+        "realm=t".to_string(),
+        "config=7".to_string(),
+        "lifo".to_string(),
+        "ignored".to_string(),
+    ]);
     assert_eq!(p.deps, vec!["a", "b"]);
     assert_eq!(p.realm, "t");
     assert_eq!(p.config, 7);
@@ -419,15 +484,18 @@ fn register_dispatch_listener(
             let line = Rc::clone(&trace2);
             match kind {
                 "plain" => {
-                    line.borrow_mut().push(format!("fire {event2} {name} payload={payload}"));
+                    line.borrow_mut()
+                        .push(format!("fire {event2} {name} payload={payload}"));
                     delta.map(|d| value(payload + d))
                 }
                 "cut" => {
-                    line.borrow_mut().push(format!("wf {event2} {name} payload={payload}"));
+                    line.borrow_mut()
+                        .push(format!("wf {event2} {name} payload={payload}"));
                     Some(value(payload + delta.unwrap()))
                 }
                 _ => {
-                    line.borrow_mut().push(format!("wf {event2} {name} payload={payload}"));
+                    line.borrow_mut()
+                        .push(format!("wf {event2} {name} payload={payload}"));
                     let next = args[1].clone().downcast::<Next>().unwrap();
                     next(&[value(payload + add)])
                 }
@@ -473,7 +541,8 @@ fn run_dispatch_op(
             let terminal: Next = Rc::new(move |args: &[Value]| {
                 let p = *args[0].clone().downcast::<i32>().unwrap();
                 let line = Rc::clone(&trace2);
-                line.borrow_mut().push(format!("wf-terminal {event2} payload={p}"));
+                line.borrow_mut()
+                    .push(format!("wf-terminal {event2} payload={p}"));
                 Some(value(p + 1000))
             });
             let line = ctx

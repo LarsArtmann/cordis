@@ -1,9 +1,9 @@
 //! Context tree: scopes carrying services, listeners and effects.
 
-use crate::sync::RefCell;
-use crate::sync::Rc;
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::Rc;
+use crate::sync::RefCell;
 
 use crate::core::{Bag, Core, IsolateKey};
 use crate::events::Value;
@@ -209,7 +209,11 @@ impl Context {
             .iter()
             .filter(|message| message.level == crate::logger::Level::Error)
             .map(|message| {
-                format!("<{}> {}", message.name, crate::logger::format_message(message))
+                format!(
+                    "<{}> {}",
+                    message.name,
+                    crate::logger::format_message(message)
+                )
             })
             .collect()
     }
@@ -309,7 +313,9 @@ impl Guard {
     /// Wrap a disposer.
     #[must_use]
     pub const fn new(disposer: Disposer) -> Self {
-        Self { inner: Some(disposer) }
+        Self {
+            inner: Some(disposer),
+        }
     }
 
     /// Keep the registration for the fiber's lifetime and consume the guard

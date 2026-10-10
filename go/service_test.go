@@ -182,18 +182,22 @@ func TestMultipleInjectsResolveOrderIndependently(t *testing.T) {
 	}{
 		{func() error {
 			_, err := Start(ctx, foo, struct{}{})
+
 			return err
 		}},
 		{func() error {
 			_, err := Start(ctx, bar, struct{}{})
+
 			return err
 		}},
 		{func() error {
 			_, err := Start(ctx, fooSvc, struct{}{})
+
 			return err
 		}},
 		{func() error {
 			_, err := Start(ctx, qux, struct{}{})
+
 			return err
 		}},
 	} {

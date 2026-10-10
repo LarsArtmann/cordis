@@ -112,6 +112,7 @@ func TestEventOptionsAndPanics(t *testing.T) {
 
 	if _, err := ctx.On("e", func(...any) any {
 		order = append(order, "first")
+
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -121,6 +122,7 @@ func TestEventOptionsAndPanics(t *testing.T) {
 		"e",
 		func(...any) any {
 			order = append(order, "prepended")
+
 			return nil
 		},
 		Prepend(),
@@ -206,6 +208,7 @@ func TestOnceAndDispose(t *testing.T) {
 
 	d, err := ctx.Once("once", func(args ...any) any {
 		calls++
+
 		return nil
 	})
 	if err != nil {

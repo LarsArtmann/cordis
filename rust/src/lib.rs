@@ -54,7 +54,6 @@
 
 mod context;
 
-pub mod sync;
 mod core;
 mod events;
 mod fiber;
@@ -62,15 +61,20 @@ mod logger;
 mod plugin;
 mod service;
 mod snapshot;
+pub mod sync;
 
 pub use context::{Context, Disposer, Filter, Guard};
 pub use events::{
-    event_name, service_name, value, DispatchArgs, EventOptions, GetError, GetResult, Listener,
-    ListenerRef, Next, SetOutcome, Value, EVENT_DISPATCH, EVENT_GET, EVENT_LISTENER, EVENT_SET,
+    DispatchArgs, EVENT_DISPATCH, EVENT_GET, EVENT_LISTENER, EVENT_SET, EventOptions, GetError,
+    GetResult, Listener, ListenerRef, Next, SetOutcome, Value, event_name, service_name, value,
 };
-pub use fiber::{EffectMeta, Fiber, FiberState, StatusChange, EVENT_PLUGIN, EVENT_STATUS, EVENT_UPDATE};
-pub use logger::{format_message, Arg, ConsoleExporter, Exporter, Level, Logger, LoggerIntercept, Message};
-pub use plugin::{plugin, plugin_type_id, start, start_fn, FnPlugin, Plugin, Registry, Runtime};
+pub use fiber::{
+    EVENT_PLUGIN, EVENT_STATUS, EVENT_UPDATE, EffectMeta, Fiber, FiberState, StatusChange,
+};
+pub use logger::{
+    Arg, ConsoleExporter, Exporter, Level, Logger, LoggerIntercept, Message, format_message,
+};
+pub use plugin::{FnPlugin, Plugin, Registry, Runtime, plugin, plugin_type_id, start, start_fn};
 pub use snapshot::{FiberSnapshot, RegistrySnapshot, RuntimeSnapshot};
 
 use std::error::Error as StdError;
@@ -120,7 +124,10 @@ impl fmt::Display for Error {
             Self::Validation(message) => write!(f, "invalid config: {message}"),
             Self::PluginFailed { name, source } => write!(f, "plugin <{name}> failed: {source}"),
             Self::MissingService(name) => {
-                write!(f, "cannot get required service {name:?} in inactive context")
+                write!(
+                    f,
+                    "cannot get required service {name:?} in inactive context"
+                )
             }
             Self::TypeMismatch { name } => write!(f, "service {name:?} has an unexpected type"),
             Self::RootUpdate => write!(f, "cannot update the root fiber"),

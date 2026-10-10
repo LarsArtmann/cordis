@@ -15,9 +15,9 @@ use std::time::SystemTime;
 
 use crate::context::{Context, Disposer};
 use crate::core::Core;
-use crate::sync::{Rc, RefCell};
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::{Rc, RefCell};
 
 /// A log severity. The variant order is the severity order, mirroring
 /// `LoggerLevel` upstream: a message is exported when the target level is
@@ -239,7 +239,12 @@ impl LoggerService {
     /// Assign the sequence number, append to the buffer and select the
     /// exporters whose level target admits the message. The callers run the
     /// selected exporters after every framework borrow is released.
-    fn prepare(&mut self, name: &str, level: Level, args: Vec<Arg>) -> (Message, Vec<Rc<dyn Exporter>>) {
+    fn prepare(
+        &mut self,
+        name: &str,
+        level: Level,
+        args: Vec<Arg>,
+    ) -> (Message, Vec<Rc<dyn Exporter>>) {
         self.sn_message = self.sn_message.wrapping_add(1);
         let message = Message {
             sn: self.sn_message,
@@ -260,7 +265,11 @@ impl LoggerService {
             .iter()
             .filter_map(|(_, entry)| {
                 let target = entry.levels.as_ref().map_or(Level::Info, |levels| {
-                    levels.get(name).or_else(|| levels.get("default")).copied().unwrap_or(Level::Info)
+                    levels
+                        .get(name)
+                        .or_else(|| levels.get("default"))
+                        .copied()
+                        .unwrap_or(Level::Info)
                 });
                 if target < level {
                     return None;
@@ -336,7 +345,12 @@ fn dispatch(core: &Rc<RefCell<Core>>, name: &str, level: Level, args: Vec<Arg>) 
 /// upstream. A missing name falls back to `"root"`.
 pub fn log_error(core: &Rc<RefCell<Core>>, name: &str, message: &str) {
     let name = if name.is_empty() { "root" } else { name };
-    dispatch(core, name, Level::Error, vec![Arg::Error(message.to_string())]);
+    dispatch(
+        core,
+        name,
+        Level::Error,
+        vec![Arg::Error(message.to_string())],
+    );
 }
 
 /// Render a message to a single string, mirroring the format pipeline
@@ -453,7 +467,9 @@ impl<W: std::io::Write + crate::sync::Shared> ConsoleExporter<W> {
     /// Wrap a writer. [`ConsoleExporter::stderr`] is the common choice.
     #[must_use]
     pub const fn new(out: W) -> Self {
-        Self { out: RefCell::new(out) }
+        Self {
+            out: RefCell::new(out),
+        }
     }
 }
 
@@ -467,7 +483,12 @@ impl ConsoleExporter<std::io::Stderr> {
 
 impl<W: std::io::Write + crate::sync::Shared> Exporter for ConsoleExporter<W> {
     fn export(&self, message: &Message) {
-        let line = format!("[{}] {}: {}\n", message.kind, message.name, format_message(message));
+        let line = format!(
+            "[{}] {}: {}\n",
+            message.kind,
+            message.name,
+            format_message(message)
+        );
         // Deliberate discard: a logger cannot report its own write failure
         // through logging.
         let _ = self.out.borrow_mut().write_all(line.as_bytes());
@@ -481,7 +502,9 @@ impl Context {
     /// the name of the fiber owning the context.
     #[must_use]
     pub fn logger(&self, name: Option<&str>) -> Logger {
-        let resolved = name.filter(|n| !n.is_empty()).map(std::string::ToString::to_string);
+        let resolved = name
+            .filter(|n| !n.is_empty())
+            .map(std::string::ToString::to_string);
         let (resolved, level) = if let Some(intercept) = self.intercepted("logger")
             && let Some(li) = intercept.downcast_ref::<LoggerIntercept>()
         {

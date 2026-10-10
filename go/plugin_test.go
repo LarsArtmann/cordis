@@ -58,6 +58,7 @@ func TestNestedPlugins(t *testing.T) {
 	calls := 0
 	listener := func(...any) any {
 		calls++
+
 		return nil
 	}
 	mustOn(t, ctx, "custom-event", listener)
@@ -123,6 +124,7 @@ func TestRegistryDeleteRestoresSnapshot(t *testing.T) {
 	plugin := NewPlugin("p", func(ctx *Context, _ struct{}) error {
 		_, err := ctx.On("custom-event", func(...any) any {
 			calls++
+
 			return nil
 		})
 
@@ -219,6 +221,7 @@ func TestPluginError(t *testing.T) {
 	faulty := NewPlugin("faulty", func(ctx *Context, _ struct{}) error {
 		if _, err := ctx.On("custom-event", func(...any) any {
 			calls++
+
 			return nil
 		}); err != nil {
 			return err
@@ -229,6 +232,7 @@ func TestPluginError(t *testing.T) {
 	healthy := NewPlugin("healthy", func(ctx *Context, _ struct{}) error {
 		_, err := ctx.On("custom-event", func(...any) any {
 			calls++
+
 			return nil
 		})
 

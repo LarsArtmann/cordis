@@ -4,7 +4,7 @@ TL;DR: every cargo provider triggers on any-depth `**/Cargo.toml` but executes `
 
 Observed on cordis (Go + Rust ports in one repo, crate at `rust/`), buildflow `1b99ae2`, 2026-10-09:
 
-- `cargo-update`: `error: could not find `Cargo.toml` in `/home/lars/forks/cordis` or any parent directory` — 6 consecutive identical failures (buildflow's own loop detector flagged it).
+- `cargo-update`: `error: could not find`Cargo.toml`in`/home/lars/forks/cordis`or any parent directory` — 6 consecutive identical failures (buildflow's own loop detector flagged it).
 - Same root-run failure for `cargo-fmt`, `cargo-clippy-fix`, `cargo-check`, `cargo-doc`.
 
 ## Root cause
@@ -20,7 +20,7 @@ This is the cargo sibling of gotcha #55 (Go tools running `go ./...` at the root
 
 Either:
 
-1. Manifest discovery: walk down from root for the nearest `Cargo.toml` (mirror `findGoModDirs` in the oxlint/gomod discovery pattern) and set the spawn dir — `--manifest-path` is NOT equivalent for all subcommands (workspace-relative output paths differ), so prefer running *in* the discovered dir; or
+1. Manifest discovery: walk down from root for the nearest `Cargo.toml` (mirror `findGoModDirs` in the oxlint/gomod discovery pattern) and set the spawn dir — `--manifest-path` is NOT equivalent for all subcommands (workspace-relative output paths differ), so prefer running _in_ the discovered dir; or
 2. A rust analogue of Go's `ModuleFanOut` / `moduleScopedGoToolSpecs`: one execution per Cargo.toml, WorkDir set per manifest.
 
 Option 1 is probably right for single-crate-per-dir repos; option 2 for multi-crate workspaces. Would love `skip_steps` to not be the documented answer in consumer repos.

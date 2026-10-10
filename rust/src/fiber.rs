@@ -1,13 +1,13 @@
 //! Fibers: effect scopes with a lifecycle, and the transition state machine.
 
-use crate::sync::RefCell;
-use std::collections::HashSet;
-use crate::sync::Rc;
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::Rc;
+use crate::sync::RefCell;
+use std::collections::HashSet;
 
 use crate::context::{Context, ContextData, Disposer};
-use crate::core::{Bag, Core, ApplyFn};
+use crate::core::{ApplyFn, Bag, Core};
 
 /// The canonical name of the status event, mirroring `internal/status`
 /// upstream. It fires on every fiber state change.
@@ -373,7 +373,11 @@ impl Context {
     ///
     /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed or
     /// there is no effect bag to attach to.
-    pub fn attach_labeled(&self, label: &str, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
+    pub fn attach_labeled(
+        &self,
+        label: &str,
+        cleanup: impl FnMut() + crate::sync::MaybeSend + 'static,
+    ) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = (|| {
             self.fiber().assert_active()?;
@@ -398,7 +402,10 @@ impl Context {
     ///
     /// Returns [`crate::Error::InactiveEffect`] if the fiber is disposed or
     /// there is no effect bag to attach to.
-    pub fn attach(&self, cleanup: impl FnMut() + crate::sync::MaybeSend + 'static) -> crate::Result<Disposer> {
+    pub fn attach(
+        &self,
+        cleanup: impl FnMut() + crate::sync::MaybeSend + 'static,
+    ) -> crate::Result<Disposer> {
         self.attach_labeled("ctx.attach()", cleanup)
     }
 
@@ -413,14 +420,22 @@ impl Context {
     /// there is no enclosing effect bag, and the error returned by `f` (or
     /// [`crate::Error::PluginFailed`] if `f` panicked) after rolling the
     /// effect back.
-    pub fn effect(&self, label: &str, f: impl FnOnce(&Self) -> crate::Result<()>) -> crate::Result<Disposer> {
+    pub fn effect(
+        &self,
+        label: &str,
+        f: impl FnOnce(&Self) -> crate::Result<()>,
+    ) -> crate::Result<Disposer> {
         crate::core::enter(&self.core);
         let result = self.effect_inner(label, f);
         crate::core::leave(&self.core);
         result
     }
 
-    fn effect_inner(&self, label: &str, f: impl FnOnce(&Self) -> crate::Result<()>) -> crate::Result<Disposer> {
+    fn effect_inner(
+        &self,
+        label: &str,
+        f: impl FnOnce(&Self) -> crate::Result<()>,
+    ) -> crate::Result<Disposer> {
         self.fiber().assert_active()?;
         let Some(parent) = self.bag() else {
             return Err(crate::Error::InactiveEffect);
@@ -739,7 +754,7 @@ fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
                     f.uid = -1;
                     Outcome::Dead
                 }
-            },
+            }
         }
     };
     let (ctx, config, apply, name) = match outcome {
@@ -747,7 +762,12 @@ fn load(core: &Rc<RefCell<Core>>, id: FiberId) {
             settle_state(core, id, FiberState::Loading);
             return;
         }
-        Outcome::Ready { ctx, config, apply, name } => (ctx, config, apply, name),
+        Outcome::Ready {
+            ctx,
+            config,
+            apply,
+            name,
+        } => (ctx, config, apply, name),
     };
 
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| apply(&ctx, config)));

@@ -4,9 +4,9 @@
 
 use crate::core::{Core, RuntimeData};
 use crate::fiber::{Fiber, FiberState};
-use crate::sync::{Rc, RefCell};
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::{Rc, RefCell};
 
 /// One live fiber as seen by a snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]

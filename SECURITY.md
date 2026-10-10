@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-| Version          | Supported   |
-| ---------------- | ----------- |
-| v4.0.0-rc.9      | ✅ Current  |
+| Version     | Supported  |
+| ----------- | ---------- |
+| v4.0.0-rc.9 | ✅ Current |
 
 Only the latest release receives security fixes. Please update to the latest
 version before reporting issues found in older releases.

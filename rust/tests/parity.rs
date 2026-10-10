@@ -1,16 +1,24 @@
 // Tests legitimately assert via panic; the strict production
 // lints (unwrap/expect/indexing/arithmetic) are relaxed here.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::panic, clippy::too_many_lines, clippy::as_conversions)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic,
+    clippy::too_many_lines,
+    clippy::as_conversions
+)]
 
 //! Parity tests mirroring the Go port's suite, which mirrors the TypeScript
 //! core test suite.
 
-use cordis::sync::RefCell;
 #[cfg(feature = "thread-safe")]
 use cordis::sync::BorrowExt as _;
 use cordis::sync::Rc;
+use cordis::sync::RefCell;
 
-use cordis::{plugin, start_fn, value, Context, Error, EventOptions, FiberState, Next, Value};
+use cordis::{Context, Error, EventOptions, FiberState, Next, Value, plugin, start_fn, value};
 
 fn opts() -> EventOptions {
     EventOptions::default()
@@ -31,7 +39,9 @@ fn counting_listener(calls: &Counter) -> TestListener {
 fn on_emit_dispose() {
     let ctx = Context::new();
     let calls = Rc::new(RefCell::new(0));
-    let disposer = ctx.on_named("test", counting_listener(&calls), opts()).unwrap();
+    let disposer = ctx
+        .on_named("test", counting_listener(&calls), opts())
+        .unwrap();
     ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
     disposer.dispose();
@@ -43,7 +53,9 @@ fn on_emit_dispose() {
 fn once_fires_exactly_once() {
     let ctx = Context::new();
     let calls = Rc::new(RefCell::new(0));
-    let _once = ctx.once_named("test", counting_listener(&calls), opts()).unwrap();
+    let _once = ctx
+        .once_named("test", counting_listener(&calls), opts())
+        .unwrap();
     ctx.emit_named("test", &[]);
     ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
@@ -118,10 +130,18 @@ fn waterfall_composes_and_short_circuits() {
 #[test]
 fn parallel_aggregates_errors() {
     let ctx = Context::new();
-    ctx.on_named("test", Rc::new(|_| Some(value("err-one".to_string()))), opts())
-        .unwrap();
-    ctx.on_named("test", Rc::new(|_| Some(value("err-two".to_string()))), opts())
-        .unwrap();
+    ctx.on_named(
+        "test",
+        Rc::new(|_| Some(value("err-one".to_string()))),
+        opts(),
+    )
+    .unwrap();
+    ctx.on_named(
+        "test",
+        Rc::new(|_| Some(value("err-two".to_string()))),
+        opts(),
+    )
+    .unwrap();
     let err = ctx.parallel("test", &[]).unwrap_err();
     let text = err.to_string();
     assert!(text.contains("err-one"), "missing err-one in {text}");
@@ -132,7 +152,8 @@ fn parallel_aggregates_errors() {
 fn event_filter() {
     let ctx = Context::new();
     let calls = Rc::new(RefCell::new(0));
-    ctx.on_named("test", counting_listener(&calls), opts()).unwrap();
+    ctx.on_named("test", counting_listener(&calls), opts())
+        .unwrap();
     ctx.emit_named("test", &[]);
     assert_eq!(*calls.borrow(), 1);
 
@@ -353,7 +374,10 @@ fn update_reinvokes_with_new_config() {
     });
     let fiber = start_fn(&ctx, &p, "hello".to_string()).unwrap();
     fiber.update(value("world".to_string())).unwrap();
-    assert_eq!(*msgs.borrow(), vec!["hello".to_string(), "world".to_string()]);
+    assert_eq!(
+        *msgs.borrow(),
+        vec!["hello".to_string(), "world".to_string()]
+    );
     assert_eq!(fiber.state(), FiberState::Active);
 }
 
@@ -415,7 +439,10 @@ fn provide_get_and_duplicate_detection() {
     let ctx = Context::new();
     assert!(ctx.get_named("foo").is_none());
     let disposer = ctx.provide_named("foo", value(42)).unwrap();
-    assert_eq!(*ctx.get_named("foo").unwrap().downcast::<i32>().unwrap(), 42);
+    assert_eq!(
+        *ctx.get_named("foo").unwrap().downcast::<i32>().unwrap(),
+        42
+    );
     assert!(ctx.provide_named("foo", value(43)).is_err());
     disposer.dispose();
     assert!(ctx.get_named("foo").is_none());
@@ -447,7 +474,10 @@ fn isolation_realms() {
     iso1.provide_named("foo", value(200)).unwrap();
     assert_eq!(*calls.borrow(), 2);
     assert!(iso2.get_named("foo").is_none());
-    assert_eq!(*ctx.get_named("foo").unwrap().downcast::<i32>().unwrap(), 100);
+    assert_eq!(
+        *ctx.get_named("foo").unwrap().downcast::<i32>().unwrap(),
+        100
+    );
 }
 
 #[test]
@@ -471,7 +501,10 @@ fn isolation_shared_label() {
 
     let disposer = iso1.provide_named("foo", value(200)).unwrap();
     assert_eq!(*calls.borrow(), 2);
-    assert_eq!(*iso2.get_named("foo").unwrap().downcast::<i32>().unwrap(), 200);
+    assert_eq!(
+        *iso2.get_named("foo").unwrap().downcast::<i32>().unwrap(),
+        200
+    );
 
     disposer.dispose();
     assert!(iso1.get_named("foo").is_none());
@@ -487,11 +520,17 @@ fn isolation_shared_labels_are_collision_free() {
     let b = ctx.isolate_shared("foo", "bar\0baz");
 
     a.provide_named("foo", value(1)).unwrap();
-    assert!(b.get_named("foo").is_none(), "distinct (name, label) pairs must denote distinct realms");
+    assert!(
+        b.get_named("foo").is_none(),
+        "distinct (name, label) pairs must denote distinct realms"
+    );
 
     // Equal pairs still share one realm.
     let a2 = ctx.isolate_shared("foo\0bar", "baz");
-    assert!(a2.get_named("foo").is_some(), "equal pairs must share the realm");
+    assert!(
+        a2.get_named("foo").is_some(),
+        "equal pairs must share the realm"
+    );
 }
 
 #[test]
@@ -518,7 +557,7 @@ fn realm_filtered_events() {
 
 #[test]
 fn status_events_emission_order() {
-    use cordis::{FiberState as FS, StatusChange, EVENT_STATUS};
+    use cordis::{EVENT_STATUS, FiberState as FS, StatusChange};
 
     let ctx = Context::new();
     let seq: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
@@ -624,7 +663,8 @@ fn plugin_events_fire_on_create_and_dispose() {
             EVENT_PLUGIN,
             Rc::new(move |args: &[Value]| {
                 let fiber = args.first().and_then(|v| v.downcast_ref::<Fiber>())?;
-                seen.borrow_mut().push((fiber.name(), fiber.state(), fiber.uid()));
+                seen.borrow_mut()
+                    .push((fiber.name(), fiber.state(), fiber.uid()));
                 None
             }),
             opts(),
@@ -666,9 +706,14 @@ fn update_waterfall_rewrites_config() {
             Rc::new(move |args: &[Value]| {
                 let fiber = args.first().and_then(|v| v.downcast_ref::<Fiber>())?;
                 let config = args.get(1).and_then(|v| v.downcast_ref::<i32>()).copied()?;
-                let no_save = args.get(2).and_then(|v| v.downcast_ref::<bool>()).copied()?;
+                let no_save = args
+                    .get(2)
+                    .and_then(|v| v.downcast_ref::<bool>())
+                    .copied()?;
                 observed.borrow_mut().push((fiber.name(), config, no_save));
-                let next = args.get(3).and_then(|v| v.clone().downcast::<Next>().ok())?;
+                let next = args
+                    .get(3)
+                    .and_then(|v| v.clone().downcast::<Next>().ok())?;
                 next(&[args.first().cloned()?, value(config * 10), value(no_save)])
             }),
             opts(),
@@ -783,7 +828,7 @@ fn root_dispose_emits_no_plugin_event() {
 
 #[test]
 fn root_restart_drains_root_scoped_listeners() {
-    use cordis::{StatusChange, EVENT_STATUS};
+    use cordis::{EVENT_STATUS, StatusChange};
 
     let ctx = Context::new();
     let disposed_seen = Rc::new(RefCell::new(0));
@@ -830,7 +875,7 @@ fn root_restart_drains_root_scoped_listeners() {
 
 #[test]
 fn root_fiber_birth_emits_no_status() {
-    use cordis::{StatusChange, EVENT_STATUS};
+    use cordis::{EVENT_STATUS, StatusChange};
 
     let ctx = Context::new();
     let seen: Rc<RefCell<Vec<StatusChange>>> = Rc::new(RefCell::new(Vec::new()));
@@ -865,7 +910,9 @@ fn root_fiber_birth_emits_no_status() {
 
 #[test]
 fn interception_events() {
-    use cordis::{GetResult, ListenerRef, SetOutcome, EVENT_DISPATCH, EVENT_GET, EVENT_LISTENER, EVENT_SET};
+    use cordis::{
+        EVENT_DISPATCH, EVENT_GET, EVENT_LISTENER, EVENT_SET, GetResult, ListenerRef, SetOutcome,
+    };
 
     let ctx = Context::new();
 
@@ -933,11 +980,7 @@ fn interception_events() {
         ctx.on_named(EVENT_LISTENER, listener, opts()).unwrap();
     }
     let replaced = ctx
-        .on_named(
-            "hooked",
-            Rc::new(|_: &[Value]| None),
-            opts(),
-        )
+        .on_named("hooked", Rc::new(|_: &[Value]| None), opts())
         .unwrap();
     replaced.dispose(); // the replacement disposer, idempotent
 
@@ -990,7 +1033,8 @@ fn interception_events() {
         });
         ctx.on_named(EVENT_LISTENER, listener, opts()).unwrap();
     }
-    ctx.on_named("probe", Rc::new(|_: &[Value]| None), opts()).unwrap();
+    ctx.on_named("probe", Rc::new(|_: &[Value]| None), opts())
+        .unwrap();
     assert!(*got_listener.borrow());
 }
 
@@ -1003,7 +1047,9 @@ fn logger_buffer_exporters_and_levels() {
     }
     impl Exporter for Collector {
         fn export(&self, message: &Message) {
-            self.lines.borrow_mut().push(cordis::format_message(message));
+            self.lines
+                .borrow_mut()
+                .push(cordis::format_message(message));
         }
     }
 
@@ -1020,12 +1066,16 @@ fn logger_buffer_exporters_and_levels() {
         .collect();
     assert_eq!(texts, vec!["two".to_string(), "three".to_string()]);
 
-    let collector = Rc::new(Collector { lines: RefCell::new(Vec::new()) });
+    let collector = Rc::new(Collector {
+        lines: RefCell::new(Vec::new()),
+    });
     let remove = ctx.add_exporter(Rc::clone(&collector) as Rc<dyn Exporter>, None);
     let mut levels = std::collections::HashMap::new();
     levels.insert("quiet".to_string(), Level::Error);
     let quiet_only = ctx.add_exporter(
-        Rc::new(Collector { lines: RefCell::new(Vec::new()) }) as Rc<dyn Exporter>,
+        Rc::new(Collector {
+            lines: RefCell::new(Vec::new()),
+        }) as Rc<dyn Exporter>,
         Some(levels),
     );
     quiet_only.dispose();
@@ -1074,7 +1124,7 @@ fn logger_name_resolution_and_intercept_level() {
 
 #[test]
 fn logger_format_pipeline() {
-    use cordis::{format_message, Arg, Level, Message};
+    use cordis::{Arg, Level, Message, format_message};
 
     let render = |args: Vec<Arg>| {
         format_message(&Message {

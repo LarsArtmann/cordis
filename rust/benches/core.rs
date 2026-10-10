@@ -12,7 +12,7 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use cordis::sync::Rc;
-use cordis::{plugin, start_fn, value, Context, EventOptions, Next, Value};
+use cordis::{Context, EventOptions, Next, Value, plugin, start_fn, value};
 
 struct BenchEvent {
     seq: u64,

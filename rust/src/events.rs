@@ -1,11 +1,11 @@
 //! Event dispatch: listeners, registration scopes and the five dispatch
 //! modes (emit, parallel, serial, bail, waterfall).
 
-use std::any::Any;
-use crate::sync::RefCell;
-use crate::sync::Rc;
 #[cfg(feature = "thread-safe")]
 use crate::sync::BorrowExt as _;
+use crate::sync::Rc;
+use crate::sync::RefCell;
+use std::any::Any;
 
 use crate::context::{Context, Disposer};
 use crate::core::{self, Bag, Core};
@@ -152,14 +152,24 @@ impl Context {
     ///
     /// Returns [`crate::Error::InactiveEffect`] if this context's fiber is
     /// not active or has no effect bag to attach the subscription to.
-    pub fn on_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn on_named(
+        &self,
+        name: &str,
+        listener: Listener,
+        options: EventOptions,
+    ) -> crate::Result<Disposer> {
         core::enter(&self.core);
         let result = self.on_inner(name, listener, options);
         core::leave(&self.core);
         result
     }
 
-    fn on_inner(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
+    fn on_inner(
+        &self,
+        name: &str,
+        listener: Listener,
+        options: EventOptions,
+    ) -> crate::Result<Disposer> {
         self.fiber().assert_active()?;
 
         // The EVENT_LISTENER interception can replace the registration
@@ -239,7 +249,12 @@ impl Context {
     ///
     /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
     /// [`Context::on_named`].
-    pub fn once_named(&self, name: &str, listener: Listener, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn once_named(
+        &self,
+        name: &str,
+        listener: Listener,
+        options: EventOptions,
+    ) -> crate::Result<Disposer> {
         let holder: Rc<RefCell<Option<Disposer>>> = Rc::new(RefCell::new(None));
         let fired = Rc::new(std::sync::atomic::AtomicBool::new(false));
         let disposer = self.on_named(
@@ -307,7 +322,8 @@ impl Context {
         self.notify_dispatch("parallel", name, args);
         let mut errors = Vec::new();
         for hook in self.resolve_hooks(name) {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.listener)(args)));
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.listener)(args)));
             match result {
                 Ok(Some(v)) => {
                     if let Some(err) = v.downcast::<String>().ok().map(|e| e.to_string()) {
@@ -348,7 +364,9 @@ impl Context {
     pub(crate) fn intercept_get(&self, name: &str) -> Option<Value> {
         let has_listeners = {
             let core = self.core.borrow();
-            core.hooks.get(EVENT_GET).is_some_and(|hooks| !hooks.is_empty())
+            core.hooks
+                .get(EVENT_GET)
+                .is_some_and(|hooks| !hooks.is_empty())
         };
         if !has_listeners {
             return None;
@@ -481,7 +499,11 @@ impl Context {
     ///
     /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
     /// [`Context::on_named`].
-    pub fn on<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn on<E: crate::sync::Shared>(
+        &self,
+        listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static,
+        options: EventOptions,
+    ) -> crate::Result<Disposer> {
         self.on_named(event_name::<E>(), typed_listener(listener), options)
     }
 
@@ -492,7 +514,11 @@ impl Context {
     ///
     /// Returns [`crate::Error::InactiveEffect`] under the same conditions as
     /// [`Context::on`].
-    pub fn once<E: crate::sync::Shared>(&self, listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static, options: EventOptions) -> crate::Result<Disposer> {
+    pub fn once<E: crate::sync::Shared>(
+        &self,
+        listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static,
+        options: EventOptions,
+    ) -> crate::Result<Disposer> {
         self.once_named(event_name::<E>(), typed_listener(listener), options)
     }
 
@@ -551,11 +577,16 @@ fn remove_hook(core: &mut Core, name: &str, hook: &Rc<Hook>) {
 // A typed/untyped mix on one event name is a programmer error; the
 // framework's own dispatch always passes exactly one payload of `E`.
 #[allow(clippy::panic)]
-fn typed_listener<E: crate::sync::Shared>(listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static) -> Listener {
+fn typed_listener<E: crate::sync::Shared>(
+    listener: impl Fn(&E) + crate::sync::MaybeSendSync + 'static,
+) -> Listener {
     Rc::new(move |args: &[Value]| {
-        let first = args
-            .first()
-            .unwrap_or_else(|| panic!("cordis: typed event {} expects one argument", event_name::<E>()));
+        let first = args.first().unwrap_or_else(|| {
+            panic!(
+                "cordis: typed event {} expects one argument",
+                event_name::<E>()
+            )
+        });
         let typed = first.clone().downcast::<E>().unwrap_or_else(|_| {
             panic!(
                 "cordis: typed event {} received an argument of another type",
