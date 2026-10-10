@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-| Version          | Supported  |
-| ---------------- | ---------- |
-| v4.0.0-rc.9 | ✅ Current |
+| Version          | Supported   |
+| ---------------- | ----------- |
+| v4.0.0-rc.9      | ✅ Current  |
 
 Only the latest release receives security fixes. Please update to the latest
 version before reporting issues found in older releases.
@@ -12,7 +12,8 @@ version before reporting issues found in older releases.
 ## Reporting a Vulnerability
 
 Please do **not** open public issues for security problems. Report privately instead:
-- **GitHub Security Advisory**: https://github.com/LarsArtmann/cordis/security/advisories/new
+
+- **GitHub Security Advisory**: <https://github.com/LarsArtmann/cordis/security/advisories/new>
 
 ### What to include
 

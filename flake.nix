@@ -193,7 +193,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           mkTest =
-            name: desc: script:
+            name: description: script:
             let
               app = pkgs.writeShellApplication {
                 inherit name;
@@ -215,10 +215,7 @@
               type = "app";
               program = "${app}/bin/${name}";
               meta = {
-                # desc, not `description = description;`: nixfmt would
-                # normalize that to `inherit description;`, which
-                # buildflow's flake-meta-checker cannot parse.
-                description = desc;
+                inherit description;
                 license = nixpkgs.lib.licenses.mit;
                 homepage = "https://github.com/LarsArtmann/cordis";
               };

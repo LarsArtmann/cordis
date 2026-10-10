@@ -1,0 +1,10 @@
+# go-structure-linter repo-local policy (honored by the tool when buildflow
+# runs it here). Default ruleset applies otherwise.
+suppressions:
+  - rule: agent-config
+    reason: >-
+      AGENTS.md deliberately stays the single comprehensive agent guide
+      (~376 lines: TS/Zig/Go gotchas, port architecture, upstream facts)
+      until its long-tail sections move to docs/; the synced 220-line budget
+      stays enforced in every other repo.
+    expires: "2027-01-06"

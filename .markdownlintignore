@@ -2,6 +2,9 @@
 docs/status/
 docs/planning/
 
+# Issue/PR working drafts: verbatim evidence of what was filed, never re-linted.
+docs/drafts/
+
 # Upstream-owned: everything under packages/ must stay byte-identical to
 # upstream (non-TS files are CI-guarded by the upstream-parity check), so it
 # is never re-linted or reflowed.

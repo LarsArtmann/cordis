@@ -295,18 +295,18 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
   skip module discovery and run every Go step at the repo root ("cannot
   find main module"). No per-step workdir knob exists (verified against
   `buildflow config init`) — the root Go module stub exists for this.
-  Known limitation: nix steps enumerate every `.#checks.<system>.*` via
-  `nix flake show`, so `nix-build` + `nix-hash-fix` fail with "platform
-  mismatch" here for the aarch64-darwin checks (pure eval forbids
-  `builtins.currentSystem`; emptying `checks` would gut `nix flake
-  check`). Fix belongs in buildflow; `nix flake check` is the port gate.
+  Nix steps system-filter enumerated checks, so the old aarch64-darwin
+  "platform mismatch" cascade is fixed upstream; `nix flake check` is
+  the port gate. `.go-structure-linter.yaml` suppresses `agent-config`
+  (deliberate ~376-line AGENTS.md; expires 2027-01-06).
 - skip_steps policy (rationale lives in `.buildflow.yml`):
   `go-auto-upgrade` (wants samber/lo — go.mod is deliberately
   zero-dependency — and GOEXPERIMENT-gated json/v2 whose own finding
   warns of runtime-only failure; port is parity-locked); `eslint-fix`
   (upstream pins ESLint 8 + `.eslintrc`, no flat config; TS linting is
-  `yarn lint`); cargo `update`/`fmt`/`check`/`doc` (no root Cargo.toml —
-  crate in `rust/`; flake + ports.yml gate Rust); `exclude` adds
+  `yarn lint`); `type-check` (root tsc lacks the workspace
+  node_modules; `yarn build` owns dts); cargo steps re-enabled 2026-10-10
+  (buildflow now routes them to the `rust/` manifest); `exclude` adds
   `zig-out` + `result` (generated read-only files crash formatters —
   oxfmt Permission denied). `markdown-lint` is skipped in `full` mode,
   so the flake `markdown` check is the only markdownlint gate — and it

@@ -28,14 +28,6 @@ skip_steps:
   # `yarn lint` in the packages/ workspace, which buildflow's v9-style tool
   # cannot drive.
   - eslint-fix
-  # Cargo tools run at the repo root, where there is no Cargo.toml (crate lives
-  # in rust/); buildflow has no per-step workdir. Rust quality is gated by the
-  # flake checks (clippy both features, tests) and ports.yml CI instead.
-  - cargo-update
-  - cargo-fmt
-  - cargo-check
-  - cargo-doc
-  - cargo-clippy-fix
   # tsc runs at the repo root without the workspace node_modules
   # (TS2688: @types/node unresolvable); TS checking is owned by the yarn
   # workspace build (yarn build / dts).

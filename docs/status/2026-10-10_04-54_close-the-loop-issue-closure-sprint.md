@@ -1,0 +1,147 @@
+# Status: Close-the-Loop Sprint — 10 Issues Verified & Closed, gsl Fixed, cordis Green
+
+**Session:** 2026-10-10, ~02:20–04:54 CEST · **Repos:** cordis (`~/forks/cordis`), BuildFlow, go-structure-linter, SKILLS · **Branches:** cordis `main`, BuildFlow `master`, gsl `master`, SKILLS `docs-health-verify-legs` · **Commits:** auto-commit daemon everywhere; I committed nothing by hand (harness rule)
+
+**Task:** "READ, UNDERSTAND, RESEARCH, REFLECT. Break this down into multiple actionable steps... Execute and Verify them one step at the time. Repeat until done. Keep going until everything works." (sent twice)
+
+**Situation discovered at start:** the 2026-10-09 open-issue-sweep session (20:30–22:35) had already fixed all seven BuildFlow issues #37–#43, and the 2026-10-10 follow-through session (00:15–02:20) had resolved the exit-code contract, repaired the integration suite, and done the BuildFlow docs. What was NOT done: issue closure (explicitly left "NOT STARTED", owner decision), consumer-repo verification (cordis was "not found" — they looked in `~/projects`, it lives in `~/forks`), gsl #5/#6 (recent gsl commits were dep churn only), SKILLS #2, and the root.go wrap-once tail (their §b5). This session executed exactly that remainder.
+
+---
+
+## a) FULLY DONE
+
+| Work | What | Evidence |
+|---|---|---|
+| **gsl #5 fixed** (trigger/cache mismatch) | `pkg/provider/provider.go`: Trigger now declares the detector's real read set — `["**/*.go", "AGENTS.md", "README.md", "LICENSE", ".gitignore", ".env", ".go-structure-linter.yaml", ".go-structure-linter.yml", ".structure-linter.yaml", ".structure-linter.yml"]` — replacing `OnGoModule()`'s `**/*.go`-only Files. Language stays `go`, Requires stays `**/go.mod`+`**/go.work`, so activation in Go repos is unchanged; BuildFlow's result cache now keys on the content hash of those files, so AGENTS.md edits invalidate. Directory-only changes stay unkeyed (residual stated in a source comment) | New `TestTriggerFilesDeclareReadSet` pins the contract; `go test -race ./internal/rules/ ./pkg/provider/` green; FULL `-race ./...` green (14 packages); `golangci-lint run` on both changed packages = 0 issues |
+| **gsl #6 fixed** (377 vs 220 budget drift) | `internal/rules/agent_config_rule.go`: `maxAgentsMdLines` 377 → 220 with a comment pointing at BuildFlow's `discovery/doctor/checks/agents_md.go` ratchet (377→220 on 2026-10-06). Blame proved 377 was stale-from-April, not a deliberate looser budget. Consumer policy: the two repos that deliberately keep ~376-line AGENTS.md files (gsl itself, cordis) now suppress `agent-config` via `.go-structure-linter.yaml` with a REQUIRED reason + expiry `2027-01-06` that forces re-review — dogfooding gsl's own suppression feature instead of pinning a divergent constant | New Ginkgo pin: a 221-line AGENTS.md must report `maximum: 220` (fails on the old constant, passes on the new). gsl dogfood on its own repo: `total=0` with the 376-line AGENTS.md in place (suppression proven live — without it the 376-line file is a critical) |
+| **SKILLS #2 implemented** (close-the-loop MUST) | `buildflow/SKILL.md` "The standard loop" now ends with step 7: **"Close the loop — file or fix, never absorb"** — every problem ends (a) fixed in the owning repo, (b) filed with source-level verification per verify-before-filing + open+closed duplicate search, or (c) recorded as a deliberate non-fix with rationale. Plus: re-verify documented limitations against the current binary before re-documenting workarounds. Mirrored in "Failure triage" | The re-verify clause is the issue's item 5 turned policy — the "platform mismatch" limitation sat documented as open in cordis for a month after `ParseFlakeShowJSONForSystem` fixed it upstream. Fan-out symlinks at the repo checkout, so the live skill updated in place |
+| **BuildFlow root.go wrap-once fix** (the §b5 tail) | The 3 remaining `WrapInfrastructuref` boundary sites (initSharedDI call site, RegisterLocalCommandFlags loop, RegisterAllServices inside initSharedDI) → `errorfamily.WrapOncef(err, Infrastructure, ...)`: already-classified errors pass through with family + chain intact; only unclassified ones take the default. `failCLIStartup` keeps its force-wrap deliberately (renders before returning — documented in gotcha #235) | `go build` + `internal/cli` unit tests green; erraudit 0 violations exit 0; golangci clean on root.go; `go test ./audit/` ratchets green; `docs --check` "no drift"; `nix build .` OK; integration-tagged cli suite green (22.8s) |
+| **Gotcha #235 + report annotation** | Gotcha #235 appended to `docs/GOTCHAS.md` (wrap-once boundary rule: full scenario, fix, evidence, RULE). The 2026-10-09 sweep report got an inline OUTCOME header (§b2 resolved → follow-through report; §b5 done this session; issues closed) so the next reader doesn't re-investigate | Numbering gap-free (235 entries, audit test green) |
+| **cordis consumer verification** (the sweep's §f4, impossible for them) | Built fresh binary (`6f45c74` + local gsl via BuildFlow's `replace => /home/lars/projects/go-structure-linter`). Re-enabled the five cargo steps `cargo-update/-fmt/-check/-doc/-clippy-fix` in `.buildflow.yml` — the skips were the #42 workaround, comment deleted. Restored `flake.nix` to natural `inherit description;` (nixfmt-normalized form) — the `desc` workaround for #41 is gone with its stale comment. Full pipeline: **exit 0, `90 success, 0 failed, 0 skipped (+6 via config)`** | Live in the run: cargo steps execute against `rust/` (cargo-doc wrote `rust/target/doc/cordis/index.html`); `⊘ markdown-lint (markdown-lint is an on-demand tool: run with buildflow -s markdown-lint)` and `⊘ type-check (skipped via skip_steps config)` = #43/#37 reasons live; `nix targets: 0 package(s), 5 check(s) on x86_64-linux` = system filter live (old aarch64 cascade gone); zero flake-meta findings on `inherit description;` = #41 live; `go-structure-linter:detect ✔` with suppression active = #5/#6 live; `nix-build ✔ 16.1s`, `nix-flake-check ✔ 18.3s` |
+| **10 issues closed with evidence** | BuildFlow #37, #38, #39, #40, #41, #42, #43 + gsl #5, #6 + SKILLS #2 — each with a structured fix/tests/live-evidence comment. First-hand verification before closing: all four affected BuildFlow test suites re-run by me (`internal/cli`, `modules/gomod-checker`, `tools/providers`, `execution` — all ok); #37's contract independently probed (`-s pnpm-audit` on cordis legitimately RUNS, so its closure rests on the integration specs + the other repos' live runs, cited as such) | All 10 `gh issue comment` + `gh issue close` verified in output; comments drafted as preserved files in `docs/drafts/2026-10-10-issue-closure/*.md`, all 10 pass `check-draft.py --kind body-issue --ai-drafted` (0 FAIL, 0 WARN) |
+| **cordis repo hygiene** | `SECURITY.md` (foreign, securitymd-generated, markdownlint-dirty: MD060 table alignment ×2, MD032, MD034) fixed forward — `markdownlint --fix` handled MD032/MD034, the table was hand-aligned, `nix build .#checks.x86_64-linux.markdown` real-exit 0. `docs/drafts/` added to `.markdownlintignore` (same class as `docs/status/` + `docs/planning/`: verbatim internal records). AGENTS.md stale "KNOWN buildflow limitation" paragraph replaced (system-filter fix verified in `modules/nix-checker/flake_packages.go` FIRST), cargo-skip mention → type-check + re-enabled-cargo note, gsl suppression pointer added. **wc = 376 ≤ 376 budget** (one over-compressed sentence when a first edit landed at 377) | `.markdownlint.jsonc` lint on SECURITY.md exit 0; markdown drv REAL_EXIT=0; AGENTS.md wc verified after every edit |
+
+## b) PARTIALLY DONE
+
+1. **gsl propagation to pinned builds:** the fixes are live through BuildFlow's LOCAL replace (verified in the cordis pipeline), but no tag exists, nothing is pushed, and BuildFlow's flake input + go.mod requires still pin the old gsl — flake/sandbox builds of BuildFlow still embed the pre-fix gsl. The full #46 protocol (push tag → repin input to the same generation → bump requires in root/tools/execution → `nix build` → sibling contract tests) awaits a push decision. gsl CHANGELOG + version bump not written.
+2. **cargo-fmt on cordis:** re-enabling the cargo steps exposed **~996 rustfmt diff findings (warning severity)** — the port is clippy-clean but not rustfmt-clean. Deliberately NOT auto-applied: it would rewrite ~every rust/ file in a parity-locked port; one command (`buildflow -s cargo-fmt --fix`) + `nix run .#test-rust` when you want it.
+3. **The three standing questions from the previous sprint:** Q1 (fix vs triage) answered by execution. Q2 (zero-dependency invariant for `go/`) untouched — the `go-auto-upgrade` skip stands exactly as before. Q3 (AGENTS.md 220 vs 377) resolved PRAGMATICALLY: suppression-with-reason-and-expiry keeps cordis at 376 lines with the policy visible and a forced re-review date; the real externalization-to-≤220 remains available and is now a one-suppression-removal away.
+4. **SKILLS branch topology:** the SKILL.md edit is staged on `docs-health-verify-legs` (a foreign session's feature branch, daemon commit pending). The content is orthogonal to that branch's work but merges with it unless you want it cherry-picked to master.
+5. **art-dupl gate in gsl is RED:** 18 actionable groups — pre-existing foreign findings, NONE in my changed files (grepped the full findings list for `provider`/`agent_config`: zero hits). Did not touch them (not mine, unknown disposition intent).
+6. **BuildFlow `internal/cli` golangci:** 7 pre-existing `ineffassign` findings in files I did not touch (`doctor_only.go`, `language_cmd_json.go`, `list_cmd_json.go`, `live_dashboard_smoke_test.go`, `skip_audit_cmd_1.go`, `workflow_summary_output.go`). root.go itself is clean. Foreign drift, reported not repaired.
+7. **Daemon commit state at report time:** cordis changes staged but not yet daemon-committed (M `.buildflow.yml`, A `.go-structure-linter.yaml`, M `.markdownlintignore`, M `AGENTS.md`, M `SECURITY.md`, A drafts); SKILLS SKILL.md staged, commit pending; gsl + BuildFlow already committed by daemon (`2ddb745d`, `0e1893b95`).
+
+## c) NOT STARTED
+
+1. **Tags/pushes/repins:** nothing pushed anywhere (harness rule: no push without explicit ask). No git tags created.
+2. **TODO_LIST harvest (docs-health):** both prior status reports' §f lists AND this report's §f remain unharvested into `TODO_LIST.md`/`ROADMAP.md` — still awaiting your go-ahead (third report now in the queue).
+3. **OS1** (file-and-image-renamer): templ-generate double-run stability proof + removal of its `disable: [templ-generate]` workaround — foreign repo, owner go-ahead needed (unchanged from the follow-through report).
+4. **FindBuildFlowBinary absolute-path unit test** (follow-through next-task 10) — not mine, not done.
+5. **Shared integration fixture builder** (next-task 44) — not done.
+6. **Generic type aliases for `wire_nodes_1.go`** (awaiting your go-ahead since the sweep session) — not done.
+7. **gsl coverage gate** (`nix run .#coverage`, 60% floor) — not run this session (only the full -race suite).
+8. **`.buildflow.yml` shrink for cordis** (drop `build_mode: full` restating the default + 5 stale excludes; `config lint` found these last session) — offered, unanswered, untouched.
+9. **SKILLS fan-out guard re-run** (`bash scripts/check-skill-fanout.sh`) after the SKILL.md edit lands — not run (edit is in the owning repo; guard runs at session start anyway).
+10. **Fleet sweep for obsolete workarounds:** other repos likely still carry the #42 cargo-skip block, `description = desc;` flake workarounds, and `BUILDFLOW_NO_RESULT_CACHE=1`/agents-md notes that #5/#6 obsoleted — none swept.
+
+## d) TOTALLY FUCKED UP
+
+Nothing shipped broken — every gate I claim is green and re-runnable — but six self-inflicted stumbles, two of them repeat offenses of documented gotchas:
+
+1. **I violated gotcha #221 TWICE in one session.** `nix build ... | tail -2; echo EXIT=$?` reported tail's exit 0 while the drv had FAILED (first the SECURITY.md markdown drv, then again the same class on the markdown check rerun). The 2026-10-10 BuildFlow session documented this exact disease 2.5 hours before I committed it — and their d.4 is the same mistake again. The second one I only caught because the error text was visible in the tail output. Adopted discipline (too late): redirect to a file and echo `$?` in the same command, no pipe to a filter before reading the exit.
+2. **Planned the sprint against stale ground truth.** I built a 10-step todo plan to fix BuildFlow #41–#43 myself without FIRST checking issue state + sibling-repo logs — parallel sessions had fixed all seven while I slept. ~half the initial plan was obsolete within three tool calls. The repo-state snapshot (issues `--json state`, `git log --since`) must come BEFORE the todo list, not after.
+3. **`git add -A` again** (the follow-through session's risk #3, repeat offense): I bulk-staged in cordis twice with a live daemon and foreign commits landing in adjacent hours. It happened to be all my content, but `git add -A` with concurrent sessions is a loaded gun — explicit paths only.
+4. **Edit-tool failures from skipping View-before-Edit** (`agent_config_rule.go` constant, `.markdownlintignore`) plus one multiedit where I wrote `old_string` from a `sed` rendering without View-verifying indentation — it matched, but that is luck, not verification. Two wasted round trips and one gamble.
+5. **CLI flailing on gsl:** three attempts to invoke the binary I had just built (`--help` unread; `lint .` → "accepts at most 1 arg"). One `--help` read would have saved two.
+6. **I poisoned my own first pipeline run.** `git add -A` staged my lint-dirty issue drafts into the flake's markdown gate → `nix-build` step failed → full ~5-minute run wasted. I understood the drafts were markdownlint-dirty (I wrote them) and staged them anyway without checking the gate's blast radius. The structural fix is good (`docs/drafts/` ignored), but the sequencing was careless.
+
+## e) WHAT WE SHOULD IMPROVE
+
+1. **Exit-code reading is a hard rule, not a habit to grow into:** never `$?` after a pipeline whose head matters — `cmd > file 2>&1; echo $?` or `PIPESTATUS[0]`. Two sessions, four incidents, one gotcha. Consider a pre-commit-visible checklist line in AGENTS.md templates.
+2. **Remote-state-first planning:** issue states + `git log --since` on every sibling repo are part of "READ" before any multi-step plan. This session's mandate arrived while three other sessions were landing work; the plan survives only if it's built on the CURRENT map.
+3. **Stage by explicit path, always** — `-A` is for the daemon's heuristic world, not for engineers sharing a tree with concurrent sessions.
+4. **The suppression-with-expiry pattern worked exactly as designed** (policy visible, reason required, re-review forced). Use it as the default shape for every future "deliberate exception" instead of inline skip comments where a structured mechanism exists.
+5. **Consumer verification belongs in the closure comment, not in a status report.** Closing #41/#42 with "live in cordis: inherit description passes, cargo steps green against rust/" is what made the closures auditable. Make it the standard: no close without at least one consumer-repo or live-binary evidence line.
+6. **Local `replace` is a superpower for cross-repo verification** (BuildFlow picked up my uncommitted gsl fixes instantly) but it silently splits "what I tested" from "what a fresh clone builds". Every such verification should state the replace caveat in its evidence (this report does; the issue comments do).
+7. **Read `--help` before the first invocation of any binary, even ones you just built.**
+8. **View-before-Edit is not optional even when bash already showed the lines** — the View tool is what the edit gate checks AND what catches sed's rendering lies.
+
+## f) 50 THINGS WE SHOULD GET DONE NEXT (priority-ordered, P1 = next session)
+
+**Propagation & gates (P1)**
+
+1. Decide + execute the gsl release: version bump, CHANGELOG (trigger widening + 220 sync + suppression dogfood), tag, push — then BuildFlow repin protocol (#46): flake input to the same generation, requires in root/tools/execution go.mods, `nix build`, sibling API contract tests (`TestTriggerFromSDK_FieldForFieldParity` already exercises the shape).
+2. Re-run cordis full buildflow AFTER the daemon commits land (clean-tree confirmation; current green ran on staged-but-uncommitted tree state).
+3. Run BuildFlow's full `nix run .#test` 34-module workspace gate (this session ran package-level + integration + audit ratchets only — the quiescent-tree full gate is still owed on the root.go change).
+4. gsl: run the coverage gate (`nix run .#coverage`, 60% floor) on the #5/#6 changes.
+5. Mark OS2 done in BuildFlow TODO_LIST (the follow-through session harvested OS1–OS9; OS2 = the root.go wrap sites — work shipped this session, TODO item not ticked).
+6. Close the loop on the 18 pre-existing gsl art-dupl groups (gate is RED — classify harmful-extractable vs intentional, `// art-dupl:accept` or extract; its own pre-commit is presumably noisy).
+7. Fix the 7 pre-existing `ineffassign` findings in BuildFlow `internal/cli` (foreign drift, cheap, unblocks clean package lint).
+8. Push/build a fresh fleet-visible BuildFlow binary decision: cordis verified against `/tmp/buildflow-dev` (unversioned); decide install path (`~/go/bin`, flake profile) so consumer runs stop depending on a /tmp artifact.
+9. SKILLS: run `bash scripts/check-skill-fanout.sh` from the crush-config repo after the SKILL.md daemon commit lands.
+10. SKILLS: merge or cherry-pick `docs-health-verify-legs` once its owning session is done (my SKILL.md edit rides that branch).
+
+**cordis (P1)**
+
+11. cargo-fmt decision: run `buildflow -s cargo-fmt --fix` (~996 diffs, mechanical) + `nix run .#test-rust` + clippy both features, or formally skip cargo-fmt with rationale in `.buildflow.yml`.
+12. cargo-deny: install the binary in the flake devShell/tools (step currently warns "no such command") or skip with rationale.
+13. `.buildflow.yml` shrink: drop `build_mode: full` (restates default) + the 5 stale excludes `config lint` flagged — pending your OK from last session.
+14. AGENTS.md externalization decision (Q3 real resolution): if yes, move long-tail sections (TS/Zig gotchas, upstream facts) to `docs/`, target ≤220, drop both agent-config suppressions; if no, let the 2027-01-06 expiry be the re-review date.
+15. Zero-dependency invariant (Q2): document `go/`'s zero-dep policy in ROADMAP.md (or AGENTS.md if it fits the 376 budget) so the `go-auto-upgrade` skip reads as invariant, not neglect.
+16. docs-health HARVEST: fold §f of THIS report + the two prior reports into `TODO_LIST.md`/`ROADMAP.md` (three reports now entombed).
+17. Verify daemon picked up all staged cordis files (`git status` next session; my staging was explicit except the two `-A` slips).
+18. Add cordis TODO_LIST entries: suppression-expiry re-review date (2027-01-06), doctor-220 WARN stays-visible-by-design note.
+
+**Fleet hygiene (P2)**
+
+19. Fleet sweep: grep sibling repos for `description = desc;` / `inherit`-avoidance flake workarounds obsoleted by #41 — undo each like cordis's.
+20. Fleet sweep: grep for the #42 cargo-skip block (`buildflow has no per-step workdir` comment shape) in other repos' `.buildflow.yml` — re-enable cargo steps where present.
+21. Fleet sweep: grep for `BUILDFLOW_NO_RESULT_CACHE=1` and stale agents-md-budget notes obsoleted by #5/#6 — replace with the propagation caveat (pinned builds until repin).
+22. Sweep for other repos with >220-line AGENTS.md files: they'll trip gsl@220 at the next repin — decide suppress-with-reason vs trim per repo BEFORE the repin lands fleet-wide.
+23. gsl: pin the suppression-file-through-SDK path with a regression test in `pkg/sdk` (it worked live in cordis; nothing pins it in gsl's own suite).
+24. gsl: apply BuildFlow's gotcha-register split to its own 376-line AGENTS.md (move long tail to `docs/GOTCHAS.md`-style register, target ≤220, drop its suppression) — the exact medicine it now enforces.
+
+**BuildFlow tails (P2)**
+
+25. OS1: file-and-image-renamer templ double-run proof + remove `disable: [templ-generate]` (owner go-ahead).
+26. FindBuildFlowBinary absolute-path unit test (tmp-dir + fake binary + chdir matrix).
+27. Shared integration fixture builder (the two copy-pasted skip lists in gate/format fixtures).
+28. Generic type aliases for `wire_nodes_1.go` step maps (proposal exists; awaiting go-ahead).
+29. Exit-code integration specs for the newly-wrapped DI-init paths (fault-injection test that a Rejection inside `RegisterAllServices`/`initSharedDI` still exits 1).
+30. Consider `findingToolNamesByStep`-style guard coverage for the new gotcha (#235): an AST/audit test that flags force-wraps (`WrapInfrastructuref` etc.) at the three boundary files (root.go, pipeline.go, root_error.go) so the rule is ratcheted, not remembered.
+31. CHANGELOG annotation chain: the 2026-10-10 follow-through report's §c8 asked for the sweep-report annotation — done this session; verify its own report needs no reciprocal header.
+32. buildflow docs --check: confirm gotcha #235's anchors survive the next registry change (ran green once; it's a freshness gate).
+
+**Design questions parked (P3)**
+
+33. Doctor 220 vs suppression symmetry: should BuildFlow's doctor agents-md-size honor a repo-local budget override the way gsl honors suppressions? (cordis will WARN at 220 forever otherwise — visible pressure is the current design.)
+34. Result-cache key: directory-structure residual from #5 — consider a cheap dir-signature component (sorted rel-dirs hash) in `computeInputContentHash` for tools that declare `DirectoryReads: true`.
+35. `findingToolNamesByStep` long-term shape: normalize finding IDs to step names at the report layer (fleet-wide contract change, sweep session's §e5).
+36. gsl: per-rule option surface (e.g. `rule_options: agent-config: max_lines:`) as the third way beyond suppress-or-sync — only if a third distinct budget shows up.
+37. pnpm-audit eslint-8 deprecation finding in cordis: upstream decision item (documented; recurs every run as a warning).
+38. vulnix `direct` re-run after the next nixpkgs bump (standing cadence).
+39. ports.yml/build.yml CI: no drift needed this session (verified in run) — keep the parity guards untouched.
+40. cordis golden scenarios: untouched, no action — recorded so a future session doesn't re-check.
+
+**Small & quick (P3)**
+
+41. gsl: `--help` screenshot/text of the Trigger files into its README (the read-set contract is user-visible behavior now).
+42. cordis README: nothing changed for end users this session — confirm no INSTALL section drift (readme-install-section check stayed green in the pipeline).
+43. gsl stashes: two old WIP stashes (`go-finding v1.1.0 bump blocked by missing lockutil`) — resolve or drop with rationale.
+44. Rename `/tmp/buildflow-dev` + `/tmp/gsl-dev` habit: build artifacts in /tmp die on reboot; if kept, move under a stable path with a version stamp.
+45. Issue-comment drafts dir convention worked (`docs/drafts/2026-10-10-issue-closure/`) — promote to the github-voice skill as the canonical closing-comment workflow.
+46. `check-draft.py --kind body-issue` rejected missing attribution on CLOSING comments too — confirm that's intended (comments vs bodies may want different kinds).
+47. cordis `.go-structure-linter.yaml` + gsl's: the two suppression reasons nearly duplicate — acceptable (per-repo policy files), noted to prevent a future "split brain" flag.
+48. AGENTS.md 376-line budget has zero headroom — next cordis edit MUST net-zero or negative (standing constraint, now also true for the fleet's 220 target).
+49. Consider pinning the fresh binary into cordis's flake (input to BuildFlow) so `nix run` consumers get the fixed cargo routing without /tmp builds — ties into task 8.
+50. Celebrate-scan: no remaining OPEN issues across all three repos — keep it that way by closing issues within the session that verify them (SKILLS #2 step 7 is now policy; follow it).
+
+## g) THREE QUESTIONS I CANNOT FIGURE OUT MYSELF
+
+1. **Push/repin authorization:** may I tag + push gsl (e.g. v0.12.0 with the trigger + budget fixes) and execute BuildFlow's #46 repin protocol (flake input + requires + contract tests) — or do you handle all pushes yourself? Until then, pinned/flake builds everywhere still embed the pre-fix gsl, and every fleet repo with a >220-line AGENTS.md will start erroring the moment someone repins without the suppressions.
+2. **cargo-fmt on cordis:** apply the mechanical rustfmt reformat now (~996 diffs across `rust/`, verified by `nix run .#test-rust` + clippy both features), or keep the port's current style and skip cargo-fmt with a rationale comment? The port is clippy-clean; this is purely style canonicalization of a parity-locked port.
+3. **AGENTS.md end state (Q3 closure):** keep cordis's AGENTS.md at ~376 lines under suppression-with-expiry (current state, cheapest, context stays auto-loaded), or do the real externalization to ≤220 (gotcha-register split into `docs/`, suppressions dropped, fleet-uniform 220)? The first preserves session context density; the second kills the two WARNs (doctor + expiry) and makes cordis match the policy it now enforces on others.
+
+---
+
+*Report: 2026-10-10 04:54 CEST · Verification state at writing: cordis pipeline exit 0 (90/0/0), BuildFlow nix build + integration + audit + docs-check green, gsl full -race suite + lint green, 10/10 issues closed with evidence. WAITING FOR INSTRUCTIONS.*
