@@ -65,7 +65,6 @@ linters:
     - intrange
     - iotamixing
     - ireturn
-    - lll
     - loggercheck
     - maintidx
     - makezero
@@ -230,6 +229,7 @@ linters:
         - filepath\.
         - compress/gzip
         - \(context\.Context\)\.Err
+        - github\.com/larsartmann/([^/]+/pkg/errors|go-error-family)\.
       ignore-sigs:
         - .Errorf(
         - errors.New(
@@ -281,5 +281,5 @@ formatters:
     paths:
       - _templ\.go$
 issues:
-  max-issues-per-linter: 50
-  max-same-issues: 10
+  max-issues-per-linter: 0
+  max-same-issues: 0

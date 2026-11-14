@@ -428,7 +428,7 @@ fn golden_dsl_parse_params() {
     assert!(p.lifo);
 
     let empty = parse_params(&[]);
-    assert!(empty.deps.is_empty());
+    assert_eq!(empty.deps, [] as [std::string::String; 0]);
     assert_eq!(empty.config, 0);
     assert!(!empty.lifo);
 
