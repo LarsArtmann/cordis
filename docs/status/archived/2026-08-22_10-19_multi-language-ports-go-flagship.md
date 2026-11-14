@@ -225,7 +225,7 @@ Native-max redesign (Go flagship first, then propagate):
 25. ~~Go: benchmarks (emit, provide+notify storm, start/dispose cycle).~~ done at `df35fc4`
 26. ~~Go: fuzz/property tests for the drain/transition state machine.~~ done (randomized LIFO property test + -race canaries (df35fc4))
 27. ~~Go: race stress test — provide/unprovide storms vs inject consumers.~~ done (rapid-swap and inject-reactivity tests under -race -count=3)
-28. Go: coverage gate in CI (≥85%).
+28. ~~Go: coverage gate in CI (≥85%).~~ superseded — governed by the Coverage and bench policy standing decision (ROADMAP.md L229, user-gated); measured Go coverage 91.4% (AGENTS.md, 2026-09-10)
 29. Go: example tests per feature (events, inject, isolate, batch, update).
 30. Go: godoc polish pass (every exported symbol has an example-quality
     comment).

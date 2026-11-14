@@ -274,7 +274,7 @@ second backlog._
    semantics. _(ROADMAP Go §1)_
 5. ~~Golden scenario #4: bail/serial/waterfall dispatch parity across all
    three runners.~~ done at `72e1505`
-6. Logger golden scenario. _(ROADMAP Go §3)_
+6. ~~Logger golden scenario. (ROADMAP Go §3)~~ done — tracked: ROADMAP.md Go §3 (L166) and the TODO_LIST Quality backlog row (added 2026-11-14)
 7. ~~Golden scenario candidate: loader watch/reload trace.~~ done at `72e1505` (Go-only watch transcript, `go/loader/testdata/watch-golden.txt`)
 
 **Go quality:**
@@ -351,12 +351,12 @@ second backlog._
 
 **Machine (outside the repo, listed for completeness):**
 
-46. Fix the dangling `~/.cache/go-build` home-manager symlink.
-47. Fix/mask the `/mnt/buildcache/go-build` default.
+46. ~~Fix the dangling `~/.cache/go-build` home-manager symlink.~~ done — `~/.cache/go-build` is a real populated cache directory now (verified 2026-11-14)
+47. ~~Fix/mask the `/mnt/buildcache/go-build` default.~~ done — GOCACHE default healthy at machine level (see 05-27 §f39; verified 2026-11-14)
 48. buildflow: filter enumerated nix checks to the running system.
 49. Wire gopls/golangci-lint LSP to Go 1.27.
-50. Provision govalid/erraudit via nixpkgs/home-manager instead of
-    hand-rebuilt `~/go/bin` copies.
+50. ~~Provision govalid/erraudit via nixpkgs/home-manager instead of
+    hand-rebuilt `~/go/bin` copies.~~ done — govalid/erraudit provisioned in the NixOS system profile (go1.27.3 builds); hand-rebuilt `~/go/bin/govalid` removed (verified 2026-11-14)
 
 ## g) Questions I cannot figure out myself
 

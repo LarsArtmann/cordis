@@ -1,0 +1,5 @@
+# cargo-deny config for the Rust port.
+# The crate is deliberately dependency-free (parity-locked port; see
+# AGENTS.md), so the only licensed artifact is cordis itself.
+[licenses]
+allow = ["MIT"]

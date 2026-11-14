@@ -78,7 +78,7 @@ Nothing in the repository was damaged: no edits, no commits, no reverts.
 9. ~~Composition root wrapper returning a cleanup function (DO-2).~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
 10. ~~`do.ProvideValue` for config/logger/DB (eager foundation).~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
 11. ~~Lifecycle guards: `var _ do.ShutdownerWithError = (*MyService)(nil)`.~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
-12. ~~Wire `samber-do-auditlog` via `Add*Hook`s.~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
+12. ~~Wire `samber-do-auditlog` via `Add*Hook` methods.~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
 13. ~~`ShutdownOnSignals` for daemon mode.~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
 14. ~~Write the ~50-line broadcaster for `internal/webui/hub.go` instead of adopting `ro`.~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**
 15. ~~`goroutineleak` CI profile after `Shutdown()` in tests.~~ **Won't implement — go-taskqueue repo — out of scope for cordis.**

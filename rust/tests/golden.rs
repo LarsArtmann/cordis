@@ -200,6 +200,22 @@ impl Runner {
         let params = parse_params(&args[1.min(args.len())..]);
 
         match op.as_str() {
+            "provide" | "provide-in-realm" | "withdraw" | "withdraw-in-realm" | "delete" => {
+                self.service_op(&op, &args, &params);
+            }
+            "start" | "start-isolated" | "spawn" | "update" | "restart" | "dispose"
+            | "restart-root" => {
+                self.lifecycle_op(&op, &args, &params);
+            }
+            "expect-registry-size" | "expect-state" => {
+                self.expectation_op(&op, &args, &params);
+            }
+            other => panic!("unknown op {other}"),
+        }
+    }
+
+    fn service_op(&self, op: &str, args: &[String], params: &Params) {
+        match op {
             "provide" | "provide-in-realm" => {
                 let scope = if op == "provide-in-realm" {
                     self.ctx.isolate_shared(&args[0], &params.realm)
@@ -226,6 +242,17 @@ impl Runner {
                     .borrow_mut()
                     .push(format!("withdrawn {}", args[0]));
             }
+            "delete" => {
+                let p = self.plugin(&args[0], &Params::default());
+                self.ctx.registry().delete(&p);
+                self.trace.borrow_mut().push(format!("deleted {}", args[0]));
+            }
+            _ => panic!("op {op} is dispatched by run"),
+        }
+    }
+
+    fn lifecycle_op(&mut self, op: &str, args: &[String], params: &Params) {
+        match op {
             "start" | "start-isolated" => {
                 let mut scope = self.ctx.clone();
                 if op == "start-isolated" {
@@ -233,7 +260,7 @@ impl Runner {
                         scope = scope.isolate_shared(dep, &params.realm);
                     }
                 }
-                let p = self.plugin(&args[0], &params);
+                let p = self.plugin(&args[0], params);
                 let fiber = start_fn(&scope, &p, params.config).expect("start");
                 self.fibers.borrow_mut().insert(args[0].clone(), fiber);
             }
@@ -245,19 +272,6 @@ impl Runner {
                     config: params.config,
                 };
                 self.children.entry(parent).or_default().push(spawn);
-            }
-            "delete" => {
-                let p = self.plugin(&args[0], &Params::default());
-                self.ctx.registry().delete(&p);
-                self.trace.borrow_mut().push(format!("deleted {}", args[0]));
-            }
-            "expect-registry-size" => {
-                let want: usize = args[0].parse().expect("size int");
-                let got = self.ctx.registry().size();
-                assert_eq!(got, want, "expected registry size {want}, got {got}");
-                self.trace
-                    .borrow_mut()
-                    .push(format!("registry-size {want}"));
             }
             "update" => {
                 let fiber = self.fibers.borrow().get(&args[0]).cloned().expect("fiber");
@@ -288,6 +302,20 @@ impl Runner {
                 self.ctx.fiber().dispose();
                 self.trace.borrow_mut().push("root-restarted".to_string());
             }
+            _ => panic!("op {op} is dispatched by run"),
+        }
+    }
+
+    fn expectation_op(&self, op: &str, args: &[String], _params: &Params) {
+        match op {
+            "expect-registry-size" => {
+                let want: usize = args[0].parse().expect("size int");
+                let got = self.ctx.registry().size();
+                assert_eq!(got, want, "expected registry size {want}, got {got}");
+                self.trace
+                    .borrow_mut()
+                    .push(format!("registry-size {want}"));
+            }
             "expect-state" => {
                 let fiber = self.fibers.borrow().get(&args[0]).cloned().expect("fiber");
                 let got = state_name(fiber.state());
@@ -303,7 +331,7 @@ impl Runner {
                     .borrow_mut()
                     .push(format!("state {} {}", args[0], args[1]));
             }
-            other => panic!("unknown op {other}"),
+            _ => panic!("op {op} is dispatched by run"),
         }
     }
 
@@ -428,7 +456,7 @@ fn golden_dsl_parse_params() {
     assert!(p.lifo);
 
     let empty = parse_params(&[]);
-    assert_eq!(empty.deps, [] as [std::string::String; 0]);
+    assert!(empty.deps.is_empty(), "default deps must be empty");
     assert_eq!(empty.config, 0);
     assert!(!empty.lifo);
 

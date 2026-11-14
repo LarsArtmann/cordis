@@ -136,7 +136,7 @@
 
 **P3 — Rust / Zig (untouched this session; noted state only)**
 40. Verify the thread-safe Rust deadlock regression test for nested-borrow (`Fiber::name` case) exists and is named.
-41. Review/coordinate the foreign unstaged `rust/src/*` modifications before they get committed.
+41. ~~Review/coordinate the foreign unstaged `rust/src/*` modifications before they get committed.~~ done — landed as `75fb408`/`fa45896`, spot-reviewed 2026-09-08 (15-43 §f2#3)
 42. Zig ROADMAP items remain open (registry view, serial/waterfall/parallel dispatch, RAII disposers, batch, effect labels).
 43. Rust ROADMAP items remain open (parallel dispatch, Batch API `Context::batch`, config validation).
 44. ~~Re-run `nix build .#checks.*.rust` and `.#checks.*.zig` after the index resolves (they were not run this session).~~ done (`nix flake check` green across sessions on 2026-09-08)

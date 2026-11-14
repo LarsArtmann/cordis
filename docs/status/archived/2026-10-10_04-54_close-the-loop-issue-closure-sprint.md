@@ -103,7 +103,7 @@ Nothing shipped broken — every gate I claim is green and re-runnable — but s
 
 **BuildFlow tails (P2)**
 
-25. OS1: file-and-image-renamer templ double-run proof + remove `disable: [templ-generate]` (owner go-ahead).
+25. ~~OS1: file-and-image-renamer templ double-run proof + remove `disable: [templ-generate]` (owner go-ahead).~~ done — templ-generate re-enabled in file-and-image-renamer (commit `9a53d1be` there, 2026-10-14; verified 2026-11-14)
 26. FindBuildFlowBinary absolute-path unit test (tmp-dir + fake binary + chdir matrix).
 27. Shared integration fixture builder (the two copy-pasted skip lists in gate/format fixtures).
 28. Generic type aliases for `wire_nodes_1.go` step maps (proposal exists; awaiting go-ahead).

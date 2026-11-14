@@ -92,11 +92,16 @@
                 cp -r ${source} cordis
                 chmod -R u+w cordis
                 cd cordis/zig
+                # zig 0.17 needs writable cache dirs even for `zig fmt
+                # --check`; HOME is read-only (/homeless-shelter) in the
+                # sandbox, so point both caches at $TMPDIR.
+                export ZIG_LOCAL_CACHE_DIR="$TMPDIR/zig-cache"
+                export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/zig-global-cache"
                 zig fmt --check build.zig src tests
-                zig build test --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
+                zig build test --summary all --cache-dir "$TMPDIR/zig-cache"
                 # Doc emission gate: fails on code the compiler rejects; the
                 # library compile walks every public decl.
-                zig build docs --summary all --cache-dir "$TMPDIR/zig-cache" --global-cache-dir "$TMPDIR/zig-global-cache"
+                zig build docs --summary all --cache-dir "$TMPDIR/zig-cache"
                 touch $out
               '';
 

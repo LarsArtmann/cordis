@@ -244,10 +244,10 @@
 future Rust loader).
 15. Rust logger service (levels, exporters, buffer).
 16. Effect-introspection parity (nested labels on more registration kinds).
-17. Zig: snapshot/restore + status events (Rust parity).
+17. ~~Zig: snapshot/restore + status events (Rust parity).~~ done at `75b75c3`
 18. Zig: plugin/update interception events (currently PLANNED everywhere).
 19. Zig: accessor/mixin derived services (Go parity).
-20. Zig: logger service.
+20. ~~Zig: logger service.~~ done at `75b75c3`
 21. Zig: loader/hmr equivalents — blocked on the module-layout decision.
 
 **Repo / CI**
@@ -309,7 +309,7 @@ the bench target; it currently only compiles under local `cargo bench`).
 47. Add the allocator micro-bench (`/tmp/goalloc-bench`) to the repo as a documented
 one-file repro for the ROADMAP claim, or let it die — right now it exists only
 in /tmp and a report paragraph.
-48. Decide whether `EVENT_PLUGIN` listeners should be excluded from `Filter`s by
+48. Decide whether `EVENT_PLUGIN` listeners should be excluded from `Filter` scopes by
 default (Go's loader uses `Global()`; Rust parity note for the future loader).
 49. Sweep the fork for other "verified-in-source, unverified-in-context" claims the
 04:04 report warned about (the allocator claim was one of at least two).

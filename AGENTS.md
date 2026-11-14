@@ -43,17 +43,19 @@ Flake apps: `nix run .#test` (everything), `.#test-go`, `.#test-rust`,
 
 ### Environment gotcha (this machine)
 
-`GOCACHE` defaults to `/mnt/buildcache/go-build`; `~/.cache/go-build` is a
-dangling home-manager symlink — both broken, always run Go with
-`export GOCACHE=/tmp/gocache` (flake apps do this). System `go` is 1.26.x
+`GOCACHE` is healthy again: it defaults to `~/.cache/go-build`, a real
+populated directory (the old broken `/mnt/buildcache` default and dangling
+home-manager symlink are gone, verified 2026-11-14; `go-fix`-style steps
+need no `GOCACHE` override in plain shells). System `go` is 1.26.x
 with `GOTOOLCHAIN=local`, refusing the module's `go 1.27` directive: use
 the flake devShell (pins `go_1_27`) or `nix shell nixpkgs#go_1_27 -c sh -c
-'export GOCACHE=/tmp/gocache; cd go && go test ./...'`. Zig is not global
+'cd go && go test ./...'`. Zig is not global
 (`nix run nixpkgs#zig` or the devShell, which also ships `gcc` for
 `go test -race`/cgo and resolves `GOCACHE` via `shellHook` — an attr using
-`builtins.getEnv "HOME"` breaks under pure eval). `~/go/bin/govalid` is
-rebuilt with Go 1.27; the system-profile copy is Go 1.26 and warns about
-x/tools skew.
+`builtins.getEnv "HOME"` breaks under pure eval). `govalid` and `erraudit`
+are provisioned in the NixOS system profile as Go 1.27.3 builds (verified
+2026-11-14); the hand-rebuilt `~/go/bin/govalid` shadow copy was removed
+that day — do not resurrect `~/go/bin` tool copies.
 
 ## TS workspace gotchas (learned in the 2026-09-07 upstream rebase)
 
@@ -117,7 +119,23 @@ x/tools skew.
   are string-coupled to specs — reformat them and every reload test times
   out.
 
-## Zig 0.16 std gotchas (all verified against 0.16.0 on 2026-09-08)
+## Zig gotchas (0.16 notes verified 2026-09-08; 0.17 notes 2026-11-14)
+
+Nixpkgs (2026-11-09 snapshot) ships zig 0.17.1; the flake zig check runs
+that version. 0.17 notes:
+
+- **`zig fmt` migrated `@intFromEnum` → `@backingInt`** (2 sites in
+  `src/cordis.zig`); a newer zig's `fmt --check` can fail the flake check
+  purely on formatting drift after a nixpkgs bump — run the devShell's
+  `zig fmt` and commit.
+- **`zig build --global-cache-dir` is gone** (0.17 removed the flag;
+  `--cache-dir` remains). Use the `ZIG_GLOBAL_CACHE_DIR` env var instead.
+- **`zig fmt --check` needs writable cache dirs** even for a pure format
+  check; in the nix sandbox HOME is read-only, so the flake check exports
+  `ZIG_LOCAL_CACHE_DIR`/`ZIG_GLOBAL_CACHE_DIR` into `$TMPDIR` before
+  invoking zig at all.
+
+0.16 notes (kept for history, all verified against 0.16.0 on 2026-09-08):
 
 - **`std.fs.Dir` is gone; it is `std.Io.Dir` now.** The filesystem API
   moved into `std.Io` (`std.Io.Dir`, `std.Io.File`); `std.fs` keeps only
@@ -316,10 +334,20 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
   2026-10-08 for buildflow's go-structure-linter; golangci-lint discovers
   config in parent dirs, so it also governs `go/` (`golangci-lint run`
   clean there: 0 issues, 2026-10-08).
-- erraudit (per-module, ~/go/bin, go 1.27 build) is green. Deliberate
+- erraudit (per-module, NixOS system profile since 2026-11-14, Go 1.27.3
+  build) is green. Deliberate
   discards use `//nolint:erraudit // reason` (verified: suppresses);
   genuine findings get real fixes (`%w` wrapping, reporting close/rollback
   errors).
+- golangci-lint findings (311 warnings as of the 2026-11-09 nixpkgs bump)
+  are pre-existing style findings that the cap removal unmasked: commit
+  `e72e743` raised `max-issues-per-linter`/`max-same-issues` to 0
+  (unlimited) and the bumped binary reports the full list. They are
+  warnings, below the gate; the recurring classes are deliberate port
+  architecture (`Fiber` holding a `context.Context` field is the port's
+  stdlib-context design), cyclomatic complexity on the DSL/logger
+  dispatchers, and blank-identifier count in table tests. Not a
+  regression; do not "fix" by weakening the parity-locked port.
 
 ## Repo hygiene facts
 

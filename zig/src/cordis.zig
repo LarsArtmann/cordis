@@ -1895,7 +1895,7 @@ const LoggerService = struct {
                 if (levels.get("default")) |l| break :target_level l;
                 break :target_level .info;
             };
-            if (@intFromEnum(target) < @intFromEnum(level)) continue;
+            if (@backingInt(target) < @backingInt(level)) continue;
             if (entry.exporter) |exporter| {
                 selected.append(self.gpa, exporter) catch return error.OutOfMemory;
             }
@@ -1958,7 +1958,7 @@ pub const Logger = struct {
     /// Dispatch at `level` unless the handle's level intercept rejects it.
     pub fn log(self: Logger, level: Level, args: []const []const u8) void {
         if (self.level) |l| {
-            if (@intFromEnum(l) < @intFromEnum(level)) return;
+            if (@backingInt(l) < @backingInt(level)) return;
         }
         self.core.logger.dispatch(self.core, self.name, level, args) catch return;
     }

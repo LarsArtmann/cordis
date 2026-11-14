@@ -213,7 +213,7 @@ noticed, not researched, this session._
 15. Go parity reassessment: 3-stage reload (#111), include journal (#121),
     bare-specifier resolution (#123), `hmr.watch()` (#128) vs
     `go/loader`/`go/hmr` — port or document divergence.
-16. Logger golden scenario for Go.
+16. ~~Logger golden scenario for Go.~~ done — same item: TODO_LIST Quality backlog row (2026-11-14); ROADMAP.md Go §3 (L166)
 17. Rust: effect introspection expansion, logger service,
     `internal/get|set|listener|dispatch` interception events.
 18. Zig: snapshot/restore + status events, accessor/mixin services,

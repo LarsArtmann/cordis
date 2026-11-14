@@ -113,7 +113,7 @@ diagnosed and repaired here: a reintroduction of the fatal `typescript
    no long-running or CI-scheduled fuzz campaign yet.
 5. **`docs/status/2026-09-08_21-11_rust-todo-sweep….md`** (concurrent
    session) is still **untracked** — invisible to `nix flake check` per the
-   AGENTS gotcha; nobody has `git add`ed it yet.
+   AGENTS gotcha; nobody has `git add`-ed it yet.
 
 ## c) NOT STARTED
 
@@ -250,7 +250,7 @@ error sink (deliberate today — re-justify or fix; 05-27 f33).~~ done at `72e15
 31. Verify llvm-cov numbers landed and are visible in CI artifacts.
 32. ~~Bench numbers for the "up to 30% faster" ROADMAP claim, or hedge the
 claim.~~ done at `25ff5fb`
-33. Zig interception events parity check (M13 set).
+33. ~~Zig interception events parity check (M13 set).~~ superseded — Zig deliberately has no get/set/listener/dispatch events; status/plugin/update only (ROADMAP.md; gated on the loader/hmr decision)
 34. Zig `zig build docs` output review pass (doc comment quality).
 35. Re-run thread-safe clippy gate after next rustc bump (nursery lints
 historically reappear; 05-27 f36 pattern).
@@ -271,8 +271,7 @@ edit from the other session may already cover it — verify).~~ done (second doc
 system (still open, blocks fully green buildflow).
 42. buildflow per-step workdir knob (would obsolete the root go.mod stub).
 43. `nix run .#test-ts` flake app wrapping the documented yarn incantation.
-44. ~~vulnix/cargo-audit/cargo-deny/lychee/codespell availability in devShell
-(05-27 f9 noise).~~ see 05-27 §f9 (still open, tool-side)
+44. ~~vulnix/cargo-audit/cargo-deny/lychee/codespell availability in devShell (05-27 f9 noise).~~ Won't implement — buildflow's nix-run fallback covers these tools (05-27 §f9); devShell stays minimal
 45. Pin the flake's zig version explicitly (nixpkgs drift risk, 05-27 f19).
 
 **Strategy:**

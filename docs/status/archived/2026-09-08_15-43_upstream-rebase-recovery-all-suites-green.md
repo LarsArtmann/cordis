@@ -167,7 +167,7 @@ failure: I raced a concurrent crush session for the whole session.
 **Immediate (this repair's loose ends):**
 
 1. ~~Commit the 24-file repair batch as one clean, well-described commit.~~ done at `b4650df`
-2. Decide/coordinate concurrent sessions before any further work (see Q1).
+2. ~~Decide/coordinate concurrent sessions before any further work (see Q1).~~ superseded — codified as the one-session-per-worktree standing decision (ROADMAP.md → Open decisions)
 3. ~~Review the concurrent agent's 4 commits (`51cddf2`…`eb831a7`) for~~ done (spot-reviewed via git show; end state verified green by this pass)
    ~~correctness beyond "tests green".~~
 4. ~~Run `nix flake check` (runs go vet+race, cargo clippy+test, zig).~~ done (nix flake check green on 2026-09-08 (all checks passed))
@@ -242,7 +242,7 @@ node_modules && install && build && test) to prove install-from-scratch.~~ done 
 41. Adopt "one session per worktree" rule in AGENTS.md + CONTRIBUTING.md.
 42. ~~Document the rebase resolution policy ("upstream semantics + fork
 formatting, prettier-100") in CONTRIBUTING.md for humans too.~~ done at `fa45896` (CONTRIBUTING rewritten with the sync/pin policy)
-43. Kill or park the idle crush processes from this box (user-level).
+43. ~~Kill or park the idle crush processes from this box (user-level).~~ Won't implement — user-level machine action over transient session processes; not repo work
 44. Consider `git town` sync config to skip rather than auto-rebase huge
 stacks when conflicts are expected (this rebase had 12-file conflicts
 mid-stack).

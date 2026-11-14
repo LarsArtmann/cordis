@@ -191,7 +191,7 @@ the loader's error sink (design question, currently deliberate).~~ done at `72e1
 
 **Environment / machine:**
 38. Fix the dangling `~/.cache/go-build` home-manager symlink (root cause of the GOCACHE dance).
-39. Fix or mask the broken `/mnt/buildcache/go-build` default on this machine.
+39. ~~Fix or mask the broken `/mnt/buildcache/go-build` default on this machine.~~ done — fixed at machine level: GOCACHE defaults to a working `~/.cache/go-build` (verified 2026-11-14)
 40. Consider a repo-level `.envrc`/flake app that exports `GOCACHE=/tmp/gocache` for bare-shell use.
 41. Wire gopls/golangci-lint LSP to Go 1.27 (kills the 8 recurring diagnostic errors in every edit).
 42. Clean `/tmp/buildflow*.log`, `/tmp/cfgtest`, `/tmp/upstream-core-readme.md` scratch files.

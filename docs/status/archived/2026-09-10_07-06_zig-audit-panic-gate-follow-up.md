@@ -158,7 +158,7 @@ trip):
   nix's. The AGENTS.md lesson ("verify the raw exit, not the filtered
   tail") existed and was still hit. Caught on the bare re-run.
 - **Untracked-file gotcha (also documented, also hit):** the gate script
-  was not `git add`ed when the flake check first built, so the store copy
+  was not `git add`-ed when the flake check first built, so the store copy
   lacked it ("scripts/panic-allowlist.sh: No such file or directory").
   Staging fixed it; the reflex should be at file-creation time.
 - **Read-before-edit refusals ×2** on the Zig test files (tool enforced

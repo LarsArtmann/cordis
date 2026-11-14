@@ -4,7 +4,7 @@ TL;DR: every cargo provider triggers on any-depth `**/Cargo.toml` but executes `
 
 Observed on cordis (Go + Rust ports in one repo, crate at `rust/`), buildflow `1b99ae2`, 2026-10-09:
 
-- `cargo-update`: `error: could not find`Cargo.toml`in`/home/lars/forks/cordis`or any parent directory` — 6 consecutive identical failures (buildflow's own loop detector flagged it).
+- `cargo-update`: `error: could not find Cargo.toml in /home/lars/forks/cordis or any parent directory` — 6 consecutive identical failures (buildflow's own loop detector flagged it).
 - Same root-run failure for `cargo-fmt`, `cargo-clippy-fix`, `cargo-check`, `cargo-doc`.
 
 ## Root cause

@@ -264,7 +264,7 @@ clippy pay-down → release tags.
     derivation.
 13. ~~Fix the `IntervalFunc` goroutine lifetime (a slow callback can leak
     the pump goroutine past disposal) or document the constraint.~~ done at `72e1505` (pump-goroutine owns dispatch, re-checks stop signal)
-14. Zig: snapshot/restore + status events (Rust parity) — ROADMAP item.
+14. ~~Zig: snapshot/restore + status events (Rust parity) — ROADMAP item.~~ done at `75b75c3`
 15. Zig: accessor/mixin equivalents — ROADMAP item.
 16. ~~Zig: build.zig `-femit-docs` option so the docs pass runs.~~ done at `75fb408` (`zig build docs` gate)
 17. ~~Zig std-gotchas section in AGENTS.md (unchecked half of the split

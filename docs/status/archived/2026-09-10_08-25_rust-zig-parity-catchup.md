@@ -229,7 +229,7 @@ Impact-ordered; ★ = directly caused by this session.
     parity decision first).
 14. Golden scenario v2: status/plugin events (byte-identical across
     ports).
-15. Golden scenario v2: snapshot/restore ops.
+15. ~~Golden scenario v2: snapshot/restore ops.~~ done — tracked: TODO_LIST Quality backlog row (Golden scenario v2, added 2026-11-14)
 16. Parallel session's unload-guard: port settlePending semantics to Rust
     and Zig (their plan doc claims all three ports diverge).
 17. Watch Ports CI after the daemon commits this session's tree.

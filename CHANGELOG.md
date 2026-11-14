@@ -18,7 +18,7 @@ in `packages/` track upstream and are not released from this fork.
   ownership-carrying `SetOutcome` cell where Go hands a `Disposer`
   through `any`.
 - **Rust port: logger service** — `Context::logger` (explicit name >
-  `LoggerIntercept` > fiber name), `Level`, typed `Arg`s, the
+  `LoggerIntercept` > fiber name), `Level`, typed `Arg` values, the
   `Exporter` trait, `Context::add_exporter`/`clear_exporters`/
   `logger_buffer`/`set_logger_buffer_size`, `format_message` with the
   upstream printf verbs and a `ConsoleExporter`. The framework error
@@ -111,6 +111,31 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Fixed
 
+- **Zig 0.17.1 gate repair** — the 2026-11-09 nixpkgs bump moved zig from
+  0.16 to 0.17: `zig fmt` migrated `@intFromEnum` to `@backingInt` (2
+  sites in `src/cordis.zig`), removed `zig build --global-cache-dir`, and
+  made `zig fmt --check` require writable cache dirs; the flake zig check
+  now exports `ZIG_LOCAL_CACHE_DIR`/`ZIG_GLOBAL_CACHE_DIR` into `$TMPDIR`.
+- **Rust golden-test clippy** — newer clippy denies `as_conversions`;
+  the golden DSL parser test's `[] as [String; 0]` assert became
+  `is_empty()`, and the 110-line `run` interpreter was split into
+  `service_op`/`lifecycle_op`/`expectation_op` under the 100-line cap
+  (`clippy::too_many_lines`, pedantic).
+- **cargo-deny licenses** — `rust/deny.toml` allows MIT for the
+  dependency-free crate (cargo-deny rejected the crate's own license by
+  default).
+- **docs-health battery green** — the docs-gates battery (freshness,
+  annotate, routing, cadence, audit-all) passes: 13 annotate findings
+  repaired (inline-code spacing, verdict markers, two pipe-mangled struck
+  table rows rebuilt from git history), 34 unharvested historical items
+  dispositioned (struck with evidence or harvested into TODO_LIST), 26
+  fully-resolved status reports archived to `docs/status/archived/`, and
+  stale parity rows in FEATURES.md (Rust/Zig logger, interception,
+  snapshot/restore, config validation) corrected against the code.
+- **Machine/provisioning truths** — GOCACHE is healthy again
+  (`~/.cache/go-build`); govalid/erraudit come from the NixOS system
+  profile (Go 1.27.3 builds) and the shadowing `~/go/bin/govalid` copy is
+  gone; AGENTS.md's environment-gotcha paragraph refreshed to match.
 - Go port: the unload guard was missing — a service withdrawal notified
   dependent fibers but did not settle them before the provider's remaining
   cleanups ran, so in the canonical pool idiom (one effect owning a pool
