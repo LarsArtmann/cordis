@@ -111,6 +111,13 @@ func (m *Manager) Swap(name string, reg loader.Registration) (Report, error) {
 		return Report{}, err
 	}
 
+	// The rollback restores the previous registration only when there was
+	// one; a nil pointer keeps that fact out of a second bool argument.
+	var restore *loader.Registration
+	if found {
+		restore = &previous
+	}
+
 	m.gens[name]++
 	report := Report{Module: name, Generation: m.gens[name]}
 	affected := m.reach(name)
@@ -131,13 +138,13 @@ func (m *Manager) Swap(name string, reg loader.Registration) (Report, error) {
 
 		touched = append(touched, id)
 		if err := m.tree.Refresh(id); err != nil {
-			return Report{Module: name}, m.rollback(name, previous, found, touched, err)
+			return Report{Module: name}, m.rollback(name, restore, touched, err)
 		}
 		// Apply errors do not cross the framework boundary: a plugin
 		// whose apply failed leaves its fiber in StateFailed with the
 		// error available through Fiber.Err.
 		if f := e.Fiber(); f != nil && f.State() == cordis.StateFailed {
-			return Report{Module: name}, m.rollback(name, previous, found, touched,
+			return Report{Module: name}, m.rollback(name, restore, touched,
 				fmt.Errorf("hmr: entry %s failed under the new implementation: %w", id, f.Err()))
 		}
 	}
@@ -156,21 +163,21 @@ func SwapType[C any](m *Manager, name string, apply func(ctx *cordis.Context, co
 	return m.Swap(name, loader.TypedRegistration(name, apply))
 }
 
-// rollback restores the previous registration and relinks every entry the
-// swap already touched back onto it, mirroring the upstream rollback of
-// failed re-imports. The generation does not count the failed swap.
+// rollback restores the previous registration (when there was one) and
+// relinks every entry the swap already touched back onto it, mirroring the
+// upstream rollback of failed re-imports. The generation does not count the
+// failed swap.
 func (m *Manager) rollback(
 	name string,
-	previous loader.Registration,
-	found bool,
+	previous *loader.Registration,
 	reloaded []string,
 	cause error,
 ) error {
 	var restoreErr error
 
 	m.mu.Lock()
-	if found {
-		_, _, restoreErr = m.resolver.Replace(name, previous)
+	if previous != nil {
+		_, _, restoreErr = m.resolver.Replace(name, *previous)
 	}
 
 	m.gens[name]--

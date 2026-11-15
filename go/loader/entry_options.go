@@ -35,7 +35,7 @@ type EntryOptions struct {
 // isolate key precisely and leaves the entry untouched. nil and bool labels
 // select a fresh local realm and carry no identity, mirroring the
 // buildContext switch.
-func validateIsolateLabels(entry string, isolate map[string]any) error {
+func validateIsolateLabels(entryName string, isolate map[string]any) error {
 	for _, name := range slices.Sorted(maps.Keys(isolate)) {
 		switch label := isolate[name].(type) {
 		case nil, bool:
@@ -44,7 +44,7 @@ func validateIsolateLabels(entry string, isolate map[string]any) error {
 			if !reflect.TypeOf(label).Comparable() {
 				return fmt.Errorf(
 					"loader: entry %q: isolate[%q]: label of type %T is not comparable",
-					entry,
+					entryName,
 					name,
 					label,
 				)

@@ -106,7 +106,7 @@ func newRootFiber(ctx *Context) *Fiber {
 
 // newFiber creates a plugin fiber in StatePending. Activation is deferred to
 // the drain queue.
-func newFiber(parent *Context, config any, base *pluginBase, rt *Runtime) *Fiber {
+func newFiber(parent *Context, config any, base *pluginIdentity, rt *Runtime) *Fiber {
 	f := &Fiber{
 		core:         parent.core,
 		parent:       parent,
@@ -287,9 +287,9 @@ func (c *Context) Effect(fn func(ctx *Context) error, label ...string) (Disposer
 	c.core.enter()
 	defer c.core.leave()
 
-	lbl := "anonymous"
+	effectLabel := "anonymous"
 	if len(label) > 0 {
-		lbl = label[0]
+		effectLabel = label[0]
 	}
 
 	if err := c.fiber.assertActive(); err != nil {
@@ -306,7 +306,7 @@ func (c *Context) Effect(fn func(ctx *Context) error, label ...string) (Disposer
 	}
 
 	child := newDisposeBag(c.core)
-	item := parent.pushEffect(lbl, child)
+	item := parent.pushEffect(effectLabel, child)
 
 	err := runGuardedEffect(fn, c.withCollect(child))
 	if err != nil {

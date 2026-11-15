@@ -107,20 +107,20 @@ func (c *Context) realmKey(name string, label []any) (isolateKey, error) {
 			return key, nil
 		}
 
-		lbl := label[0]
-		if !reflect.TypeOf(lbl).Comparable() {
-			return 0, fmt.Errorf("cordis: isolate label of type %T is not comparable", lbl)
+		isolateLabel := label[0]
+		if !reflect.TypeOf(isolateLabel).Comparable() {
+			return 0, fmt.Errorf("cordis: isolate label of type %T is not comparable", isolateLabel)
 		}
 
 		c.core.mu.Lock()
 		defer c.core.mu.Unlock()
 
-		if key, ok := c.core.labels[lbl]; ok {
+		if key, ok := c.core.labels[isolateLabel]; ok {
 			return key, nil
 		}
 
 		c.core.lastKey++
-		c.core.labels[lbl] = c.core.lastKey
+		c.core.labels[isolateLabel] = c.core.lastKey
 
 		return c.core.lastKey, nil
 	}

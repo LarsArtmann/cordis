@@ -217,7 +217,7 @@ func (t *Tree) Update(id string, opts EntryOptions) error {
 		return err
 	}
 
-	if err := e.update(opts, false, false); err != nil {
+	if err := e.update(opts, updateMerge); err != nil {
 		return err
 	}
 
@@ -247,7 +247,7 @@ func (t *Tree) Replace(id string, opts EntryOptions) error {
 	}
 
 	opts.ID = id
-	if err := e.update(opts, true, true); err != nil {
+	if err := e.update(opts, updateReplace); err != nil {
 		return err
 	}
 
@@ -265,7 +265,7 @@ func (t *Tree) SetConfig(id string, config any) error {
 		return err
 	}
 
-	return e.update(EntryOptions{Config: config}, false, true)
+	return e.update(EntryOptions{Config: config}, updateMergeForced)
 }
 
 // Move relocates an entry into another group without restarting it.

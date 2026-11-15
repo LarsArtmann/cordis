@@ -89,7 +89,7 @@ func (g *EntryGroup) createEntry(opts EntryOptions, id string) error {
 	entry.parent = g
 	t.mu.Unlock()
 
-	return entry.update(opts, true, true)
+	return entry.update(opts, updateReplace)
 }
 
 // Remove disposes the entry with the given id and deletes it from the
@@ -164,7 +164,7 @@ func (g *EntryGroup) Update(config []EntryOptions) error {
 		id := opts.ID
 		if id != "" && oldIDs[id] {
 			if e := t.lookupEntry(id); e != nil && e.parent == g {
-				if err := e.update(opts, true, true); err != nil {
+				if err := e.update(opts, updateReplace); err != nil {
 					errs = append(errs, err)
 				}
 

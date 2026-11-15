@@ -178,7 +178,9 @@ func DecodeInto[C any](raw any) (C, error) {
 	var out C
 	if raw != nil {
 		if rt := reflect.TypeOf(raw); rt.AssignableTo(reflect.TypeOf(&out).Elem()) {
-			return raw.(C), nil
+			if typed, ok := raw.(C); ok {
+				return typed, nil
+			}
 		}
 	}
 

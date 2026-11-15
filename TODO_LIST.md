@@ -166,6 +166,23 @@ the same day; no wrapper needed.
 - [ ] (repo: crush-config) Propose fleet default `.oxfmtrc.json`
       ignoring strict-JSON `*.jsonc` (report
       2026-10-09_20-25 §41). — Medium / S
+- [ ] (repo: LarsArtmann/BuildFlow) `type-check` resolves only the FIRST
+      tsconfig dir (`tools/providers/tsconfig_check.go:25` via
+      `firstMatchDir`), so this 16-package workspace gets one package
+      checked and a false green; verified 2026-11-15 by re-enabling the
+      step (it runs in `packages/cli-cordis` only). Ask for per-module
+      tsc fan-out, the shape #42 gave cargo. — Medium / S
+- [ ] (repo: LarsArtmann/BuildFlow) `vitest-test` runs bare
+      `vitest run` (`tools/providers/js_providers.go:116`) with no way to
+      select the repo's test script or package manager; verified
+      2026-11-15: 13 failures (5x yarn-not-in-PATH, 7 hmr waitFor
+      timeouts, one lib/-vs-src stack) where `yarn test` is green. —
+      Medium / M
+- [ ] (repo: LarsArtmann/BuildFlow) Low priority: tools removed by
+      `skip_steps` are also listed as "language mismatch (project: …)"
+      in the not-applicable summary (`execution/filtered_tools.go:246`),
+      contradicting the skip line next to them; same class as closed
+      #43/#37. — Low / S
 
 ## User-gated
 

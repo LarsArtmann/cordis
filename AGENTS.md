@@ -347,13 +347,22 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
   "platform mismatch" cascade is fixed upstream; `nix flake check` is
   the port gate. `.go-structure-linter.yaml` suppresses `agent-config`
   (deliberate ~376-line AGENTS.md; expires 2027-01-06).
-- skip_steps policy (rationale lives in `.buildflow.yml`):
-  `go-auto-upgrade` (wants samber/lo — go.mod is deliberately
-  zero-dependency — and GOEXPERIMENT-gated json/v2 whose own finding
-  warns of runtime-only failure; port is parity-locked); `eslint-fix`
-  (upstream pins ESLint 8 + `.eslintrc`, no flat config; TS linting is
-  `yarn lint`); `type-check` (root tsc lacks the workspace
-  node_modules; `yarn build` owns dts); cargo steps re-enabled 2026-10-10
+- skip_steps policy (rationale lives in `.buildflow.yml`; every entry was
+  re-tested against buildflow 1d474a0 on 2026-11-15 by re-enabling it):
+  `go-auto-upgrade` (12 findings, all policy conflicts: samber/lo for a
+  deliberately zero-dependency go.mod, and GOEXPERIMENT-gated json/v2 whose
+  own finding warns of runtime-only failure; port is parity-locked);
+  `type-check` (the old root TS2688 failure is gone, but BuildFlow resolves
+  only the FIRST tsconfig dir, `packages/cli-cordis`, so the other 15
+  workspace packages would stay unchecked; `yarn build` owns full workspace
+  type checking); `vitest-test` (bare `vitest run` failed 13 tests: 5x "yarn
+  is not found in PATH" in package-manager specs, 7 hmr waitFor timeouts,
+  include location spec matching built lib/ frames; `yarn test` owns the
+  suite). `file-size-check` is NOT skipped: `max_file_size: 800` keeps the
+  check for new code (12 Go files exceed 350, go/fiber.go is the 760-line
+  max). `eslint-fix` skip removed: there is no eslint config, and BuildFlow
+  DOES run an oxlint step in every mode (same 14 `curly` warnings as the
+  repo's own oxlint). cargo steps re-enabled 2026-10-10
   (buildflow now routes them to the `rust/` manifest); `exclude` adds
   `zig-out` + `result` (generated read-only files crash formatters —
   oxfmt Permission denied). `markdown-lint` is skipped in `full` mode,

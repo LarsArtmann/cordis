@@ -122,14 +122,14 @@ func cordisLevel(level slog.Level) Level {
 	}
 }
 
-// appendAttr renders a slog.Attr as "key=value", joining group prefixes and
-// flattening group attrs. Empty group keys inline their members, mirroring
-// slog.
-func appendAttr(dst []string, prefix string, a slog.Attr) []string {
+// appendAttr renders a slog.Attr as "key=value", joining the enclosing
+// group prefix and flattening group attrs. Empty group keys inline their
+// members, mirroring slog.
+func appendAttr(dst []string, group string, a slog.Attr) []string {
 	if a.Value.Kind() == slog.KindGroup {
-		group := a.Value.Group()
+		members := a.Value.Group()
 
-		next := prefix
+		next := group
 		if a.Key != "" {
 			if next == "" {
 				next = a.Key
@@ -138,7 +138,7 @@ func appendAttr(dst []string, prefix string, a slog.Attr) []string {
 			}
 		}
 
-		for _, member := range group {
+		for _, member := range members {
 			dst = appendAttr(dst, next, member)
 		}
 
@@ -146,8 +146,8 @@ func appendAttr(dst []string, prefix string, a slog.Attr) []string {
 	}
 
 	key := a.Key
-	if prefix != "" {
-		key = prefix + "." + key
+	if group != "" {
+		key = group + "." + key
 	}
 
 	var b strings.Builder

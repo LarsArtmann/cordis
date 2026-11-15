@@ -17,11 +17,11 @@ import (
 // every fiber of the plugin at once, mirroring the callback keyed runtime
 // map upstream.
 type Plugin[C any] struct {
-	base *pluginBase
+	base *pluginIdentity
 }
 
-// pluginBase is the type erased runtime identity of a Plugin.
-type pluginBase struct {
+// pluginIdentity is the type erased runtime identity of a Plugin.
+type pluginIdentity struct {
 	name         string
 	inject       []string
 	injectConfig map[string]any
@@ -32,10 +32,10 @@ type pluginBase struct {
 // PluginHandle addresses a plugin at the registry without its type
 // parameter. Every Plugin implements it.
 type PluginHandle interface {
-	handle() *pluginBase
+	handle() *pluginIdentity
 }
 
-func (p *Plugin[C]) handle() *pluginBase { return p.base }
+func (p *Plugin[C]) handle() *pluginIdentity { return p.base }
 
 // NewPlugin creates a plugin with the given name and apply function. The
 // apply function receives the fiber's context and the statically typed
@@ -46,7 +46,7 @@ func (p *Plugin[C]) handle() *pluginBase { return p.base }
 // An empty name is replaced by the name of the apply function, mirroring the
 // function name fallback upstream.
 func NewPlugin[C any](name string, apply func(ctx *Context, config C) error) *Plugin[C] {
-	base := &pluginBase{
+	base := &pluginIdentity{
 		name: name,
 		apply: func(ctx *Context, config any) error {
 			typed, ok := config.(C)
@@ -185,7 +185,7 @@ func InjectSpec(plugin PluginHandle, spec map[string]any) {
 // the dependency set becomes complete again after losing a dependency. It
 // returns the new fiber, or the error that prevented it from starting.
 func (c *Context) Inject(deps []string, fn func(ctx *Context) error) (*Fiber, error) {
-	base := &pluginBase{
+	base := &pluginIdentity{
 		name:   funcName(fn),
 		inject: deps,
 		apply: func(ctx *Context, _ any) error {
@@ -196,7 +196,7 @@ func (c *Context) Inject(deps []string, fn func(ctx *Context) error) (*Fiber, er
 	return startPlugin(c, base, nil)
 }
 
-func startPlugin(ctx *Context, base *pluginBase, config any) (*Fiber, error) {
+func startPlugin(ctx *Context, base *pluginIdentity, config any) (*Fiber, error) {
 	c := ctx.core
 
 	c.enter()
@@ -268,7 +268,7 @@ type Runtime struct {
 	Name string
 
 	core   *core
-	base   *pluginBase
+	base   *pluginIdentity
 	fibers []*Fiber
 }
 

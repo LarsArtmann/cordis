@@ -9,13 +9,35 @@ import (
 	cordis "github.com/LarsArtmann/cordis/go"
 )
 
-// update applies opts to the entry. With create the options are replaced
-// wholesale; otherwise non-zero fields are merged over the current options.
-// force skips the no-difference early return. It starts, restarts or
-// disposes the entry's fiber as the new options require. Uncomparable
-// isolate labels are rejected before any option is stored or fiber is
-// touched, so a rejected update leaves the entry exactly as it was.
-func (e *Entry) update(opts EntryOptions, create, force bool) error {
+// updateMode selects how an entry update treats the stored options and the
+// no-difference short circuit. The named modes replace the create/force bool
+// pair whose call sites read as update(opts, true, true) and forced callers
+// to memorize argument position.
+type updateMode int
+
+const (
+	// updateMerge overlays the non-zero fields of the new options over the
+	// stored ones and skips the reconcile when nothing changed.
+	updateMerge updateMode = iota
+
+	// updateMergeForced overlays the non-zero fields and always reconciles,
+	// for option mutations the field diff cannot see (SetConfig).
+	updateMergeForced
+
+	// updateReplace swaps the stored options wholesale and starts the entry.
+	updateReplace
+)
+
+// update applies opts to the entry. With updateReplace the options are
+// replaced wholesale; otherwise non-zero fields are merged over the current
+// options. updateMergeForced skips the no-difference early return. It starts,
+// restarts or disposes the entry's fiber as the new options require.
+// Uncomparable isolate labels are rejected before any option is stored or
+// fiber is touched, so a rejected update leaves the entry exactly as it was.
+func (e *Entry) update(opts EntryOptions, mode updateMode) error {
+	create := mode == updateReplace
+	force := mode != updateMerge
+
 	t := e.parent.tree
 	t.mu.Lock()
 

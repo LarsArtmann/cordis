@@ -45,7 +45,7 @@ type core struct {
 	keys     map[string]isolateKey
 	labels   map[any]isolateKey
 	hooks    map[string][]*hook
-	runtimes map[*pluginBase]*Runtime
+	runtimes map[*pluginIdentity]*Runtime
 	store    map[isolateKey]*impl
 	props    map[string]propType
 
@@ -67,7 +67,7 @@ func newCore() *core {
 		keys:     make(map[string]isolateKey),
 		labels:   make(map[any]isolateKey),
 		hooks:    make(map[string][]*hook),
-		runtimes: make(map[*pluginBase]*Runtime),
+		runtimes: make(map[*pluginIdentity]*Runtime),
 		store:    make(map[isolateKey]*impl),
 		props:    make(map[string]propType),
 	}
