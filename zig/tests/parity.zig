@@ -72,6 +72,179 @@ test "bail returns first non-null result" {
     try std.testing.expectEqual(2, s.calls); // third listener never ran
 }
 
+// Mid-dispatch disposal (upstream #242 parity, mirroring the Go suite): a
+// listener disposed by an earlier listener of the same dispatch must not
+// fire. Disposal splices the hook from the store, but every dispatch
+// iterates a snapshot of hook pointers, so the removed tombstone is what
+// the loops honor. Registration order is invocation order: the disposer
+// registers first, the victim second.
+
+const Disposal = struct {
+    victim: ?cordis.Disposer = null,
+    victim_called: bool = false,
+
+    fn disposer(self: *@This(), args: []const Value) ?Value {
+        _ = args;
+        if (self.victim) |v| v.dispose();
+        return null;
+    }
+
+    fn onVictim(self: *@This(), args: []const Value) ?Value {
+        _ = args;
+        self.victim_called = true;
+        return null;
+    }
+
+    fn onVictimBail(self: *@This(), args: []const Value) ?Value {
+        _ = args;
+        self.victim_called = true;
+        return cordis.value(self);
+    }
+};
+
+test "emit skips a listener disposed mid-dispatch" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var s = Disposal{};
+    _ = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.disposer));
+    s.victim = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.onVictim));
+
+    ctx.emitNamed("test", &.{});
+
+    try std.testing.expect(!s.victim_called);
+}
+
+test "parallel skips a listener disposed mid-dispatch" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var s = Disposal{};
+    _ = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.disposer));
+    s.victim = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.onVictim));
+
+    ctx.parallel("test", &.{});
+
+    try std.testing.expect(!s.victim_called);
+}
+
+test "serial skips a listener disposed mid-dispatch" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var s = Disposal{};
+    _ = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.disposer));
+    s.victim = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.onVictimBail));
+
+    try std.testing.expect(ctx.serial("test", &.{}) == null);
+    try std.testing.expect(!s.victim_called);
+}
+
+test "bail skips a listener disposed mid-dispatch" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var s = Disposal{};
+    _ = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.disposer));
+    s.victim = try ctx.onNamed("test", Listener.bind(Disposal, &s, Disposal.onVictimBail));
+
+    try std.testing.expect(ctx.bail("test", &.{}) == null);
+    try std.testing.expect(!s.victim_called);
+}
+
+const WaterfallDisposal = struct {
+    ctx: *Context,
+    victim: ?cordis.Disposer = null,
+    victim_called: bool = false,
+
+    fn nextArg(args: []const Value) *cordis.Context.Next {
+        return @ptrCast(@alignCast(@constCast(args[args.len - 1])));
+    }
+
+    fn disposer(self: *@This(), args: []const Value) ?Value {
+        if (self.victim) |v| v.dispose();
+        return nextArg(args).invoke(args[0 .. args.len - 1]);
+    }
+
+    fn onVictim(self: *@This(), args: []const Value) ?Value {
+        _ = args;
+        self.victim_called = true;
+        return null;
+    }
+
+    fn third(self: *@This(), args: []const Value) ?Value {
+        const next = nextArg(args);
+        // Arena allocated: the pointer flows out through the terminal
+        // return, so it must outlive this listener's frame.
+        const out = self.ctx.core.a().create(i32) catch return null;
+        out.* = 3;
+        return next.invoke(&.{cordis.value(out)});
+    }
+};
+
+fn terminalFirstArg(args: []const Value) ?Value {
+    if (args.len == 0) return null;
+    return args[0];
+}
+
+test "waterfall continues past a listener disposed mid-dispatch" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var s = WaterfallDisposal{ .ctx = ctx };
+    _ = try ctx.onNamed("test", Listener.bind(WaterfallDisposal, &s, WaterfallDisposal.disposer));
+    s.victim = try ctx.onNamed("test", Listener.bind(WaterfallDisposal, &s, WaterfallDisposal.onVictim));
+    _ = try ctx.onNamed("test", Listener.bind(WaterfallDisposal, &s, WaterfallDisposal.third));
+
+    const result = ctx.waterfall("test", &.{}, &terminalFirstArg);
+
+    try std.testing.expect(result != null);
+    try std.testing.expectEqual(@as(i32, 3), @as(*const i32, @ptrCast(@alignCast(result.?))).*);
+    try std.testing.expect(!s.victim_called);
+}
+
+test "waterfall reaches the terminal when every listener was disposed mid-dispatch" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var s = WaterfallDisposal{ .ctx = ctx };
+    _ = try ctx.onNamed("test", Listener.bind(WaterfallDisposal, &s, WaterfallDisposal.disposer));
+    s.victim = try ctx.onNamed("test", Listener.bind(WaterfallDisposal, &s, WaterfallDisposal.onVictim));
+
+    const Terminal = struct {
+        fn run(_: []const Value) ?Value {
+            return cordis.value(&reached);
+        }
+
+        var reached: u8 = 7;
+    };
+
+    const result = ctx.waterfall("test", &.{}, &Terminal.run);
+
+    try std.testing.expect(result != null);
+    try std.testing.expect(!s.victim_called);
+}
+
+// Pins the mechanism itself: disposal tombstones the hook before splicing,
+// so an already-captured dispatch snapshot observes it through the shared
+// pointer.
+test "disposal sets the removed tombstone on the hook" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var counter = Counter{};
+    const d = try ctx.onNamed("test", Listener.bind(Counter, &counter, Counter.listener));
+    const hooks = ctx.core.hooks.getPtr("test").?.items;
+    try std.testing.expectEqual(@as(usize, 1), hooks.len);
+    const hook = hooks[0];
+    try std.testing.expect(!hook.removed);
+
+    d.dispose();
+
+    try std.testing.expect(hook.removed);
+    try std.testing.expectEqual(@as(usize, 0), ctx.core.hooks.getPtr("test").?.items.len);
+}
+
 test "plugin lifecycle: apply, restart, dispose" {
     const ctx = try Context.init(std.testing.allocator);
     defer ctx.deinit();
@@ -729,4 +902,249 @@ test "registration labels carry their names" {
     try std.testing.expectEqualStrings("ctx.on(custom-event)", effects[0].label);
     try std.testing.expectEqualStrings("ctx.provide(port)", effects[1].label);
     try std.testing.expectEqualStrings("my-cleanup", effects[2].label);
+}
+
+// ---------------------------------------------------------------------------
+// Parity battery for the upstream rc.13 core fixes, mirroring the Go suite's
+// parity_battery_test.go. Each test pins an upstream spec scenario against
+// this port; a red result means the port drifted and the port gets fixed,
+// not the test.
+//
+// Upstream #205 (Parallel labels its aggregate error with the failing event
+// name) has no Zig counterpart to pin: `Context.parallel` returns void and
+// Zig listeners (`Listener.call`) have no error channel, so the port never
+// constructs a joined listener error whose message could carry the label —
+// and the dispatch surface is shared by all five modes, so an error
+// reporting parallel would be a listener ABI redesign, not a parity fix.
+
+// #56 (7d0a90d): internal/update hooks must be disposed with the fiber, so
+// reloads never accumulate them. Upstream leaked them because the hooks
+// lived in a per-fiber list outside the effect scope; this port routes
+// event_update through the ordinary on machinery, which should make the
+// leak impossible. This pins it: every update fires exactly one hook.
+test "event update hooks do not accumulate across reloads (#56)" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    const Hooks = struct {
+        calls: [8]i32 = undefined,
+        len: usize = 0,
+
+        // The update waterfall delivers [fiber, config, no_save] plus a
+        // *Next; the listener records the config and passes it through.
+        fn listener(self: *@This(), args: []const Value) ?Value {
+            const config: *const i32 = @ptrCast(@alignCast(args[1]));
+            self.calls[self.len] = config.*;
+            self.len += 1;
+            const next: *Context.Next = @ptrCast(@alignCast(@constCast(args[3])));
+            return next.invoke(args[0..3]);
+        }
+
+        fn apply(_: *const Plugin, c: *Context, _: ?Value) cordis.Error!void {
+            const self: *@This() = @ptrCast(@alignCast(registry));
+            _ = try c.onNamed(cordis.event_update, Listener.bind(@This(), self, listener));
+        }
+
+        var registry: *@This() = undefined;
+    };
+    var hooks = Hooks{};
+    Hooks.registry = &hooks;
+
+    const p = Plugin{ .name = "p", .apply = Hooks.apply };
+    const fiber = try p.start(ctx, null);
+
+    for ([_]i32{ 1, 2, 3 }) |n| {
+        const config = try ctx.core.a().create(i32);
+        config.* = n;
+        try fiber.update(cordis.value(config));
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), hooks.len);
+    try std.testing.expectEqualSlices(i32, &.{ 1, 2, 3 }, hooks.calls[0..hooks.len]);
+}
+
+// #133 (5dac695): a pending fiber that is disposed must settle to DISPOSED,
+// not linger in PENDING.
+test "disposed pending fiber settles DISPOSED (#133)" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    const Body = struct {
+        var ran: bool = false;
+        fn apply(_: *const Plugin, _: *Context, _: ?Value) cordis.Error!void {
+            ran = true;
+        }
+    };
+    const deps = [_][]const u8{"never-provided"};
+    const fiber = try ctx.injectPlugin("pending", &deps, Body.apply);
+
+    try std.testing.expectEqual(cordis.FiberState.pending, fiber.state());
+
+    fiber.dispose();
+
+    try std.testing.expectEqual(cordis.FiberState.disposed, fiber.state());
+    try std.testing.expect(!Body.ran); // the body must never run
+}
+
+// #209 (bc9a344), scenario 1: an isolated child scope must not inherit the
+// injected service view across the isolation boundary. A plain child plugin
+// still resolves the outer realm; an isolated child must not — the fresh
+// realm for the name stops the lookup walk at the boundary.
+test "isolation boundary stops the injected view (#209)" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var outer: []const u8 = "outer";
+    _ = try ctx.provideNamed("foo", cordis.value(&outer));
+
+    const S = struct {
+        results: [2][]const u8 = undefined,
+        len: usize = 0,
+
+        fn record(self: *@This(), value: []const u8) void {
+            self.results[self.len] = value;
+            self.len += 1;
+        }
+
+        fn lookUp(self: *@This(), c: *Context) void {
+            const v = c.getNamed("foo") orelse {
+                self.record("cannot get property \"foo\" without inject");
+                return;
+            };
+            const value: *const []const u8 = @ptrCast(@alignCast(v));
+            self.record(value.*);
+        }
+
+        fn lookupApply(_: *const Plugin, c: *Context, _: ?Value) cordis.Error!void {
+            const self: *@This() = @ptrCast(@alignCast(registry));
+            self.lookUp(c);
+        }
+
+        fn injectBody(_: *const Plugin, c: *Context, _: ?Value) cordis.Error!void {
+            // A plain child plugin still resolves the outer realm.
+            const child = try c.core.a().create(Plugin);
+            child.* = .{ .name = "child", .apply = lookupApply };
+            _ = try child.start(c, null);
+
+            // An isolated child must not.
+            const iso = try c.isolate("foo");
+            const isolated = try c.core.a().create(Plugin);
+            isolated.* = .{ .name = "isolated", .apply = lookupApply };
+            _ = try isolated.start(iso, null);
+        }
+
+        var registry: *@This() = undefined;
+    };
+    var s = S{};
+    S.registry = &s;
+
+    const deps = [_][]const u8{"foo"};
+    const fiber = try ctx.injectPlugin("inject", &deps, S.injectBody);
+    try std.testing.expectEqual(cordis.FiberState.active, fiber.state());
+
+    try std.testing.expectEqual(@as(usize, 2), s.len);
+    try std.testing.expectEqualStrings("outer", s.results[0]);
+    try std.testing.expectEqualStrings("cannot get property \"foo\" without inject", s.results[1]);
+}
+
+// #191 (147e4f2): after an isolated provider unloads, providing the same
+// service in the same isolated scope again must succeed — no stale impl
+// left behind by the isolate move.
+test "re-provide after isolated provider unload succeeds (#191)" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    const iso = try ctx.isolate("svc");
+
+    const S = struct {
+        fn apply(_: *const Plugin, c: *Context, _: ?Value) cordis.Error!void {
+            const stored = try c.core.a().create([]const u8);
+            stored.* = "value";
+            _ = try c.provideNamed("svc", cordis.value(stored));
+        }
+    };
+    const provider = try ctx.core.a().create(Plugin);
+    provider.* = .{ .name = "provider", .apply = S.apply };
+
+    const first = try provider.start(iso, null);
+    first.dispose();
+
+    try std.testing.expect(iso.getNamed("svc") == null);
+
+    const second = try provider.start(iso, null); // must not DuplicateService
+
+    const v = second.context().getNamed("svc") orelse return error.TestUnexpectedResult;
+    const value: *const []const u8 = @ptrCast(@alignCast(v));
+    try std.testing.expectEqualStrings("value", value.*);
+}
+
+// #196 (9cad5e8): a provider's earlier effects (the resources backing a
+// service) are released only after its dependents have unloaded — the
+// dependent's teardown observes a working service value. This port
+// implements it inside the provide cleanup: withdrawal first notifies and
+// settles dependents (Core.settlePending), then the provider's LIFO
+// cleanups continue.
+test "provider resources outlive dependent teardown (#196)" {
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    const S = struct {
+        cell: []const u8 = "value",
+        order: [4][]const u8 = undefined,
+        len: usize = 0,
+        observed: ?*const []const u8 = null,
+        ok: bool = true,
+
+        fn record(self: *@This(), line: []const u8) void {
+            self.order[self.len] = line;
+            self.len += 1;
+        }
+
+        fn releaseResource(self: *@This()) void {
+            self.record("resource-released");
+            self.cell = "";
+        }
+
+        fn teardownDependent(self: *@This()) void {
+            self.record("dependent-teardown");
+            const captured = self.observed orelse {
+                self.ok = false;
+                return;
+            };
+            if (!std.mem.eql(u8, captured.*, "value")) self.ok = false;
+        }
+
+        fn providerApply(_: *const Plugin, c: *Context, _: ?Value) cordis.Error!void {
+            const self: *@This() = @ptrCast(@alignCast(registry));
+            try c.attachLabeled("resource", self, releaseResource);
+            _ = try c.provideNamed("svc", cordis.value(&self.cell));
+        }
+
+        fn dependentApply(_: *const Plugin, c: *Context, _: ?Value) cordis.Error!void {
+            const self: *@This() = @ptrCast(@alignCast(registry));
+            const v = c.getNamed("svc") orelse return cordis.Error.MissingService;
+            self.observed = @ptrCast(@alignCast(v));
+            try c.attachLabeled("dependent", self, teardownDependent);
+        }
+
+        var registry: *@This() = undefined;
+    };
+    var s = S{};
+    S.registry = &s;
+
+    const provider = Plugin{ .name = "provider", .apply = S.providerApply };
+    const provider_fiber = try provider.start(ctx, null);
+
+    const deps = [_][]const u8{"svc"};
+    const dependent = try ctx.injectPlugin("dependent", &deps, S.dependentApply);
+    try std.testing.expectEqual(cordis.FiberState.active, dependent.state());
+    try std.testing.expect(s.observed != null);
+
+    provider_fiber.dispose();
+
+    try std.testing.expectEqual(@as(usize, 2), s.len);
+    try std.testing.expectEqualStrings("dependent-teardown", s.order[0]);
+    try std.testing.expectEqualStrings("resource-released", s.order[1]);
+    try std.testing.expect(s.ok); // the service value still worked at teardown
+    try std.testing.expect(ctx.getNamed("svc") == null);
 }

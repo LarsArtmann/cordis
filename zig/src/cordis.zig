@@ -212,7 +212,28 @@ const Hook = struct {
     owner: *Context,
     listener: Listener,
     global: bool,
+    /// Tombstone set at disposal, mirroring upstream fix #242: removal
+    /// splices the hook from the store, but every dispatch iterates a
+    /// snapshot of hook pointers, so a running dispatch that already
+    /// captured this hook honors the flag, not the splice. The hooks are
+    /// arena allocated and the lists store pointers, so a snapshot shares
+    /// the pointee and observes the flip.
+    removed: bool = false,
 };
+
+/// Remove `hook` from `list`, mirroring upstream unregister (fix #242):
+/// tombstone the hook first — unconditionally, so an already-captured
+/// dispatch snapshot skips it even if the hook is not (or no longer) in
+/// the list — then splice it out by identity.
+fn removeHook(list: *std.ArrayList(*Hook), hook: *Hook) void {
+    hook.removed = true;
+    for (list.items, 0..) |h, i| {
+        if (h == hook) {
+            _ = list.orderedRemove(i);
+            return;
+        }
+    }
+}
 
 /// A plugin body. It receives the plugin it runs on, the fiber's context
 /// and the raw config value; comptime constructed plugins unwrap the config
@@ -625,7 +646,10 @@ pub const Fiber = struct {
 pub const Core = struct {
     gpa: Allocator,
     arena: std.heap.ArenaAllocator,
-    hooks: std.StringHashMap(std.ArrayList(Hook)),
+    /// Event store: one list of arena-allocated hooks per event name. The
+    /// entries are pointers so dispatch snapshots share the pointee and a
+    /// disposal tombstone (Hook.removed) is visible mid-dispatch (#242).
+    hooks: std.StringHashMap(std.ArrayList(*Hook)),
     store: std.AutoHashMap(u64, Impl),
     keys: std.StringHashMap(u64),
     labels: std.HashMap(PairKey, u64, PairContext, 80),
@@ -677,6 +701,19 @@ pub const Core = struct {
         if (self.depth != 0 or self.draining) return;
         self.draining = true;
         defer self.draining = false;
+        self.settlePending();
+    }
+
+    /// Drain the queue of scheduled fiber transitions to completion.
+    /// `leave` calls it once the outermost framework call returns; the
+    /// provide cleanup calls it directly so the dependents notified by a
+    /// service withdrawal settle before the provider's remaining cleanups
+    /// run. That is the synchronous counterpart of the `await
+    /// Promise.allSettled` in the TypeScript provide disposer, and the
+    /// unload guard of the calculus (#196): a dependent's teardown
+    /// completes while the resource it hands back to the provider still
+    /// exists.
+    fn settlePending(self: *Core) void {
         while (self.dirty.items.len > 0) {
             const id = self.dirty.orderedRemove(0);
             const f = self.fibers.items[id].?;
@@ -960,7 +997,7 @@ pub const Context = struct {
         core.* = .{
             .gpa = gpa,
             .arena = std.heap.ArenaAllocator.init(gpa),
-            .hooks = std.StringHashMap(std.ArrayList(Hook)).init(gpa),
+            .hooks = std.StringHashMap(std.ArrayList(*Hook)).init(gpa),
             .store = std.AutoHashMap(u64, Core.Impl).init(gpa),
             .keys = std.StringHashMap(u64).init(gpa),
             .labels = std.HashMap(Core.PairKey, u64, Core.PairContext, 80).init(gpa),
@@ -1164,22 +1201,19 @@ pub const Context = struct {
             }
             break :blk result.value_ptr;
         };
-        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = false }) catch return error.OutOfMemory;
+        const hook = self.core.a().create(Hook) catch return error.OutOfMemory;
+        hook.* = .{ .owner = self, .listener = listener, .global = false };
+        list.append(self.core.gpa, hook) catch return error.OutOfMemory;
 
         const removal = self.core.a().create(struct {
-            list: *std.ArrayList(Hook),
-            listener: Listener,
+            list: *std.ArrayList(*Hook),
+            hook: *Hook,
         }) catch return error.OutOfMemory;
         const Removal = @TypeOf(removal.*);
-        removal.* = .{ .list = list, .listener = listener };
+        removal.* = .{ .list = list, .hook = hook };
         const cleanup = try self.core.bindCleanup(Removal, removal, struct {
             fn run(r: *Removal) void {
-                for (r.list.items, 0..) |h, i| {
-                    if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
-                        _ = r.list.orderedRemove(i);
-                        return;
-                    }
-                }
+                removeHook(r.list, r.hook);
             }
         }.run);
         const label = std.fmt.allocPrint(self.core.a(), "ctx.on({s})", .{name}) catch return error.OutOfMemory;
@@ -1207,22 +1241,19 @@ pub const Context = struct {
             }
             break :blk result.value_ptr;
         };
-        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = true }) catch return error.OutOfMemory;
+        const hook = self.core.a().create(Hook) catch return error.OutOfMemory;
+        hook.* = .{ .owner = self, .listener = listener, .global = true };
+        list.append(self.core.gpa, hook) catch return error.OutOfMemory;
 
         const removal = self.core.a().create(struct {
-            list: *std.ArrayList(Hook),
-            listener: Listener,
+            list: *std.ArrayList(*Hook),
+            hook: *Hook,
         }) catch return error.OutOfMemory;
         const Removal = @TypeOf(removal.*);
-        removal.* = .{ .list = list, .listener = listener };
+        removal.* = .{ .list = list, .hook = hook };
         const cleanup = try self.core.bindCleanup(Removal, removal, struct {
             fn run(r: *Removal) void {
-                for (r.list.items, 0..) |h, i| {
-                    if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
-                        _ = r.list.orderedRemove(i);
-                        return;
-                    }
-                }
+                removeHook(r.list, r.hook);
             }
         }.run);
         const label = std.fmt.allocPrint(self.core.a(), "ctx.on({s})", .{name}) catch return error.OutOfMemory;
@@ -1230,7 +1261,7 @@ pub const Context = struct {
         return .{ .cleanup = cleanup, .core = self.core };
     }
 
-    fn visible(self: *Context, hook: Hook) bool {
+    fn visible(self: *Context, hook: *const Hook) bool {
         if (hook.global) return true;
         const filter = self.filter orelse return true;
         return filter.call(filter.ctx, self, hook.owner);
@@ -1307,8 +1338,8 @@ pub const Context = struct {
         if (@typeInfo(Data) != .pointer) @compileError("cordis.onceTyped expects a pointer to the listener data, got " ++ @typeName(Data));
 
         const Holder = struct {
-            list: *std.ArrayList(Hook),
-            listener: Listener,
+            list: *std.ArrayList(*Hook),
+            hook: *Hook,
             data: Data,
             fired: bool = false,
 
@@ -1316,12 +1347,7 @@ pub const Context = struct {
                 const h: *@This() = @ptrCast(@alignCast(raw));
                 if (h.fired) return null;
                 h.fired = true;
-                for (h.list.items, 0..) |hook, i| {
-                    if (hook.listener.ctx == h.listener.ctx and hook.listener.call == h.listener.call) {
-                        _ = h.list.orderedRemove(i);
-                        break;
-                    }
-                }
+                removeHook(h.list, h.hook);
                 const event: *const E = @ptrCast(@alignCast(args[0]));
                 f(h.data, event.*);
                 return null;
@@ -1343,26 +1369,23 @@ pub const Context = struct {
         };
         const holder = self.core.a().create(Holder) catch return error.OutOfMemory;
         const listener = Listener{ .ctx = @ptrCast(holder), .call = &Holder.call };
-        holder.* = .{ .list = list, .listener = listener, .data = data };
-        list.append(self.core.gpa, .{ .owner = self, .listener = listener, .global = false }) catch return error.OutOfMemory;
+        const hook = self.core.a().create(Hook) catch return error.OutOfMemory;
+        hook.* = .{ .owner = self, .listener = listener, .global = false };
+        holder.* = .{ .list = list, .hook = hook, .data = data };
+        list.append(self.core.gpa, hook) catch return error.OutOfMemory;
 
         const removal = self.core.a().create(struct {
-            list: *std.ArrayList(Hook),
-            listener: Listener,
+            list: *std.ArrayList(*Hook),
+            hook: *Hook,
         }) catch return error.OutOfMemory;
         const Removal = @TypeOf(removal.*);
-        removal.* = .{ .list = list, .listener = listener };
+        removal.* = .{ .list = list, .hook = hook };
         const once_label = std.fmt.allocPrint(self.core.a(), "ctx.once({s})", .{name}) catch return error.OutOfMemory;
         bag.append(self.core.gpa, .{
             .label = once_label,
             .cleanup = try self.core.bindCleanup(Removal, removal, struct {
                 fn run(r: *Removal) void {
-                    for (r.list.items, 0..) |h, i| {
-                        if (h.listener.ctx == r.listener.ctx and h.listener.call == r.listener.call) {
-                            _ = r.list.orderedRemove(i);
-                            return;
-                        }
-                    }
+                    removeHook(r.list, r.hook);
                 }
             }.run),
         }) catch return error.OutOfMemory;
@@ -1372,10 +1395,11 @@ pub const Context = struct {
     /// listener in registration order.
     pub fn emitNamed(self: *Context, name: []const u8, args: []const Value) void {
         const list = self.core.hooks.getPtr(name) orelse return;
-        var hooks_snapshot: std.ArrayList(Hook) = .empty;
+        var hooks_snapshot: std.ArrayList(*Hook) = .empty;
         defer hooks_snapshot.deinit(self.core.gpa);
         hooks_snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         for (hooks_snapshot.items) |hook| {
+            if (hook.removed) continue;
             if (!self.visible(hook)) continue;
             _ = hook.listener.call(hook.listener.ctx, args);
         }
@@ -1385,10 +1409,11 @@ pub const Context = struct {
     /// upstream.
     pub fn bail(self: *Context, name: []const u8, args: []const Value) ?Value {
         const list = self.core.hooks.getPtr(name) orelse return null;
-        var hooks_snapshot: std.ArrayList(Hook) = .empty;
+        var hooks_snapshot: std.ArrayList(*Hook) = .empty;
         defer hooks_snapshot.deinit(self.core.gpa);
         hooks_snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         for (hooks_snapshot.items) |hook| {
+            if (hook.removed) continue;
             if (!self.visible(hook)) continue;
             if (hook.listener.call(hook.listener.ctx, args)) |result| return result;
         }
@@ -1408,7 +1433,7 @@ pub const Context = struct {
     pub const Next = struct {
         ctx: *Context,
         name: []const u8,
-        hooks: []Hook,
+        hooks: []*Hook,
         index: usize,
         terminal: *const fn (args: []const Value) ?Value,
 
@@ -1423,9 +1448,16 @@ pub const Context = struct {
     };
 
     fn waterfallStep(self: *Context, next: *Next, args: []const Value) ?Value {
-        const hook = next.hooks[next.index];
+        // Skip hooks tombstoned by earlier listeners of this same dispatch
+        // (upstream #242): the snapshot shares the hook pointers, so the
+        // removals are observable here; the chain still falls through to
+        // the terminal when everything remaining was disposed.
+        var index = next.index;
+        while (index < next.hooks.len and next.hooks[index].removed) index += 1;
+        if (index == next.hooks.len) return next.terminal(args);
+        const hook = next.hooks[index];
         const sub = self.core.a().create(Next) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
-        sub.* = .{ .ctx = next.ctx, .name = next.name, .hooks = next.hooks, .index = next.index + 1, .terminal = next.terminal };
+        sub.* = .{ .ctx = next.ctx, .name = next.name, .hooks = next.hooks, .index = index + 1, .terminal = next.terminal };
         var full: std.ArrayListUnmanaged(Value) = .empty;
         defer full.deinit(self.core.gpa);
         full.appendSlice(self.core.gpa, args) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
@@ -1443,13 +1475,13 @@ pub const Context = struct {
     /// When no listener is registered the terminal runs unchanged.
     pub fn waterfall(self: *Context, name: []const u8, args: []const Value, terminal: *const fn (args: []const Value) ?Value) ?Value {
         const list = self.core.hooks.getPtr(name) orelse return terminal(args);
-        var hooks: std.ArrayList(Hook) = .empty;
+        var hooks: std.ArrayList(*Hook) = .empty;
         defer hooks.deinit(self.core.gpa);
         for (list.items) |hook| {
             if (self.visible(hook)) hooks.append(self.core.gpa, hook) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         }
         if (hooks.items.len == 0) return terminal(args);
-        const owned = self.core.a().dupe(Hook, hooks.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
+        const owned = self.core.a().dupe(*Hook, hooks.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         const next = self.core.a().create(Next) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         next.* = .{ .ctx = self, .name = name, .hooks = owned, .index = 0, .terminal = terminal };
         return self.waterfallStep(next, args);
@@ -1495,6 +1527,13 @@ pub const Context = struct {
             fn run(r: *Removal) void {
                 _ = r.core.store.remove(r.key);
                 r.core.notifyDependents(r.ctx, r.name) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
+                // The unload guard (#196): settle the dependents this
+                // withdrawal notified before the provider's remaining
+                // cleanups run, so a dependent's teardown hands its handles
+                // back while the resource they belong to still exists
+                // (upstream: the await Promise.allSettled in the provide
+                // disposer).
+                r.core.settlePending();
             }
         }.run);
         const provide_label = std.fmt.allocPrint(self.core.a(), "ctx.provide({s})", .{name}) catch return error.OutOfMemory;
