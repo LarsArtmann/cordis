@@ -500,6 +500,11 @@ func (f *Fiber) load() {
 	ctx := f.ctx
 	c.mu.Unlock()
 
+	// #134 parity: every (re)load resolves the config through the
+	// internal/config waterfall. With no listener registered this is the
+	// raw stored config, unchanged.
+	config = ctx.Waterfall(EventConfig, func(a ...any) any { return config }, f)
+
 	err := runGuardedApply(apply, ctx, config)
 	name := f.Name()
 

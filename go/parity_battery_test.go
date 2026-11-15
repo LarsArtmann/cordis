@@ -256,3 +256,54 @@ func TestProviderResourcesOutliveDependentTeardown(t *testing.T) {
 		t.Fatal("service still visible after provider and dependents drained")
 	}
 }
+
+// #134 (1431598): config is resolved through the internal/config waterfall
+// on EVERY (re)load — start, update-restart and dependency return — so
+// config sources participate each time, not only at start.
+func TestConfigResolvedOnEveryReload(t *testing.T) {
+	root := New()
+
+	type config struct{ N int }
+
+	var seen []int
+
+	_, err := root.On(EventConfig, func(args ...any) any {
+		next, ok := args[1].(func(...any) any)
+		if !ok {
+			t.Fatalf("arg 1 is %T, want next func", args[1])
+		}
+
+		resolved := next()
+		if cfg, ok := resolved.(config); ok {
+			cfg.N++
+			resolved = cfg
+		}
+
+		return resolved
+	}, Global())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plugin := NewPlugin("p", func(_ *Context, cfg config) error {
+		seen = append(seen, cfg.N)
+		return nil
+	})
+
+	fiber, err := Start(root, plugin, config{N: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := fiber.Update(config{N: 5}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := fiber.Await(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(seen, []int{1, 6}) {
+		t.Fatalf("internal/config not applied on every reload: %v", seen)
+	}
+}

@@ -59,6 +59,12 @@ const (
 	// The fiber identifies the updating fiber so a single global listener can
 	// route the update, mirroring the fiber bound listener context upstream.
 	EventUpdate = "internal/update"
+	// EventConfig intercepts config resolution as a waterfall before every
+	// fiber (re)load, mirroring upstream #134. Args: (*Fiber,
+	// next func(...any) any). The terminal returns the raw stored config; a
+	// listener may replace it by not calling next, so config sources
+	// participate on each activation, not only at start.
+	EventConfig = "internal/config"
 	// EventGet intercepts failed service lookups as a waterfall, needed by
 	// the loader and hmr ports. Args: (name string, *GetError,
 	// next func(...any) any). The terminal returns a *GetResult; a listener
