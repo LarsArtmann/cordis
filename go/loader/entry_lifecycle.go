@@ -20,6 +20,7 @@ func (e *Entry) update(opts EntryOptions, create, force bool) error {
 	t.mu.Lock()
 
 	legacy := e.opts
+
 	next := opts
 	if !create {
 		next = mergeOptions(legacy, opts)

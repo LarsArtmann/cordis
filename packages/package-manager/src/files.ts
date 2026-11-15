@@ -1,7 +1,7 @@
-import { realpath as realpathCallback } from 'node:fs'
-import { readFile, realpath as realpathNative } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { promisify } from 'node:util'
+import { realpath as realpathCallback } from "node:fs";
+import { readFile, realpath as realpathNative } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { promisify } from "node:util";
 
 /**
  * The real path as Node resolves modules. Node's module resolution uses the
@@ -10,12 +10,12 @@ import { promisify } from 'node:util'
  * the libuv implementation, which on Windows also expands 8.3 short names and
  * normalizes the case, so that its result can differ from module URLs.
  */
-export const realpath: (path: string) => Promise<string> = promisify(realpathCallback)
+export const realpath: (path: string) => Promise<string> = promisify(realpathCallback);
 
 /** Whether a path is a directory or below it, without resolving links. */
 export function isWithin(path: string, dir: string) {
-  const rel = relative(dir, path)
-  return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
+  const rel = relative(dir, path);
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /**
@@ -27,44 +27,44 @@ export function isWithin(path: string, dir: string) {
  * A path below neither spelling of the root is kept.
  */
 export async function createRootSpelling(realRoot: string) {
-  const nativeRoot = await realpathNative(realRoot).catch(() => realRoot)
+  const nativeRoot = await realpathNative(realRoot).catch(() => realRoot);
   return (path: string) => {
     for (const from of [realRoot, nativeRoot]) {
-      if (isWithin(path, from)) return join(realRoot, relative(from, path))
+      if (isWithin(path, from)) return join(realRoot, relative(from, path));
     }
-    return path
-  }
+    return path;
+  };
 }
 
 /** Read a text file, or `undefined` if it does not exist. */
 export async function readText(path: string) {
   try {
-    return await readFile(path, 'utf8')
+    return await readFile(path, "utf8");
   } catch (error: any) {
-    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return
-    throw error
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return;
+    throw error;
   }
 }
 
 /** The fields of a `package.json` manifest that the readers use. A field of another type is absent. */
 export interface Manifest {
-  name?: string
-  version?: string
+  name?: string;
+  version?: string;
 }
 
 function parseManifest(text: string): Manifest | undefined {
-  let data: unknown
+  let data: unknown;
   try {
-    data = JSON.parse(text)
+    data = JSON.parse(text);
   } catch {
-    return
+    return;
   }
-  if (typeof data !== 'object' || !data) return
-  const { name, version } = data as Record<string, unknown>
+  if (typeof data !== "object" || !data) return;
+  const { name, version } = data as Record<string, unknown>;
   return {
-    name: typeof name === 'string' ? name : undefined,
-    version: typeof version === 'string' ? version : undefined,
-  }
+    name: typeof name === "string" ? name : undefined,
+    version: typeof version === "string" ? version : undefined,
+  };
 }
 
 /**
@@ -74,16 +74,21 @@ function parseManifest(text: string): Manifest | undefined {
  * after an installation do not share manifests.
  */
 export function createManifestReader() {
-  const manifests = new Map<string, Promise<Manifest | undefined>>()
+  const manifests = new Map<string, Promise<Manifest | undefined>>();
   const readManifest = (dir: string) => {
-    let manifest = manifests.get(dir)
+    let manifest = manifests.get(dir);
     if (!manifest) {
-      manifests.set(dir, manifest = readText(resolve(dir, 'package.json')).then(text => text ? parseManifest(text) : undefined))
+      manifests.set(
+        dir,
+        (manifest = readText(resolve(dir, "package.json")).then((text) =>
+          text ? parseManifest(text) : undefined,
+        )),
+      );
     }
-    return manifest
-  }
-  const readName = async (dir: string) => (await readManifest(dir))?.name
-  return { readManifest, readName }
+    return manifest;
+  };
+  const readName = async (dir: string) => (await readManifest(dir))?.name;
+  return { readManifest, readName };
 }
 
 /**
@@ -95,15 +100,15 @@ export function createManifestReader() {
  *   is resolved once for all siblings.
  */
 export async function createLocator(root: string) {
-  const realRoot = await realpath(root).catch(() => resolve(root))
-  const parents = new Map<string, Promise<string>>()
+  const realRoot = await realpath(root).catch(() => resolve(root));
+  const parents = new Map<string, Promise<string>>();
   return async (location: string, local: boolean) => {
-    const path = resolve(root, location)
-    const fallback = resolve(realRoot, location)
-    if (local) return realpath(path).catch(() => fallback)
-    const parent = dirname(path)
-    let real = parents.get(parent)
-    if (!real) parents.set(parent, real = realpath(parent).catch(() => dirname(fallback)))
-    return join(await real, basename(path))
-  }
+    const path = resolve(root, location);
+    const fallback = resolve(realRoot, location);
+    if (local) return realpath(path).catch(() => fallback);
+    const parent = dirname(path);
+    let real = parents.get(parent);
+    if (!real) parents.set(parent, (real = realpath(parent).catch(() => dirname(fallback))));
+    return join(await real, basename(path));
+  };
 }

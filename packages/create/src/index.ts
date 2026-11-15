@@ -1,74 +1,74 @@
-import { access, copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { execSync } from 'node:child_process'
-import { basename, join, relative } from 'node:path'
-import { Readable } from 'node:stream'
-import * as tar from 'tar'
-import * as yaml from 'js-yaml'
-import envPaths from 'env-paths'
-import getRegistry from 'get-registry'
-import parse from 'yargs-parser'
-import prompts from 'prompts'
-import which from 'which-pm-runs'
-import kleur from 'kleur'
+import { access, copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { execSync } from "node:child_process";
+import { basename, join, relative } from "node:path";
+import { Readable } from "node:stream";
+import * as tar from "tar";
+import * as yaml from "js-yaml";
+import envPaths from "env-paths";
+import getRegistry from "get-registry";
+import parse from "yargs-parser";
+import prompts from "prompts";
+import which from "which-pm-runs";
+import kleur from "kleur";
 
-const paths = envPaths('create-cordis', { suffix: '' })
+const paths = envPaths("create-cordis", { suffix: "" });
 
-let project: string
-let rootDir: string
+let project: string;
+let rootDir: string;
 
-const cwd = process.cwd()
+const cwd = process.cwd();
 const argv = parse(process.argv.slice(2), {
   alias: {
-    ref: ['r'],
-    forced: ['f'],
-    git: ['g'],
-    mirror: ['m'],
-    prod: ['p'],
-    template: ['t'],
-    yes: ['y'],
+    ref: ["r"],
+    forced: ["f"],
+    git: ["g"],
+    mirror: ["m"],
+    prod: ["p"],
+    template: ["t"],
+    yes: ["y"],
   },
-})
+});
 
 function supports(command: string) {
   try {
-    execSync(command, { stdio: 'ignore' })
-    return true
+    execSync(command, { stdio: "ignore" });
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 function isENOENT(error: unknown) {
-  return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT'
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 }
 
 async function confirm(message: string) {
   const { yes } = await prompts({
-    type: 'confirm',
-    name: 'yes',
-    initial: 'Y',
+    type: "confirm",
+    name: "yes",
+    initial: "Y",
     message,
-  })
-  return yes as boolean
+  });
+  return yes as boolean;
 }
 
 export interface YarnRc {
-  yarnPath?: string
-  [key: string]: any
+  yarnPath?: string;
+  [key: string]: any;
 }
 
 export interface StageYarnAgent {
-  name: string
-  version?: string
+  name: string;
+  version?: string;
 }
 
 export interface StageYarnOptions {
-  rootDir: string
-  registry: string
-  agent: StageYarnAgent | undefined
-  cacheDir?: string
-  tempDir?: string
-  fetcher?: typeof fetch
+  rootDir: string;
+  registry: string;
+  agent: StageYarnAgent | undefined;
+  cacheDir?: string;
+  tempDir?: string;
+  fetcher?: typeof fetch;
 }
 
 /**
@@ -90,200 +90,222 @@ export interface StageYarnOptions {
  *    non-standard path) → no-op.
  */
 export async function stageYarnBin(options: StageYarnOptions): Promise<void> {
-  const { rootDir: dir, registry, agent, fetcher = fetch } = options
-  const cacheDir = options.cacheDir ?? join(paths.cache, '.yarn/releases')
-  const tempDir = options.tempDir ?? join(paths.temp, '@yarnpkg/cli-dist')
+  const { rootDir: dir, registry, agent, fetcher = fetch } = options;
+  const cacheDir = options.cacheDir ?? join(paths.cache, ".yarn/releases");
+  const tempDir = options.tempDir ?? join(paths.temp, "@yarnpkg/cli-dist");
 
-  let pkg: any
+  let pkg: any;
   try {
-    pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'))
+    pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
   } catch {
-    return
+    return;
   }
   // Rule 1.
-  if (pkg.packageManager) return
+  if (pkg.packageManager) return;
   // Rule 2.
-  if (agent?.name !== 'yarn') return
+  if (agent?.name !== "yarn") return;
 
-  const rcPath = join(dir, '.yarnrc.yml')
-  let rc: YarnRc = {}
+  const rcPath = join(dir, ".yarnrc.yml");
+  let rc: YarnRc = {};
   try {
-    const loaded = yaml.load(await readFile(rcPath, 'utf8')) ?? {}
-    if (typeof loaded !== 'object' || Array.isArray(loaded)) return
-    rc = loaded as YarnRc
+    const loaded = yaml.load(await readFile(rcPath, "utf8")) ?? {};
+    if (typeof loaded !== "object" || Array.isArray(loaded)) return;
+    rc = loaded as YarnRc;
   } catch (error) {
     // Same for one we cannot read or parse: only a missing file means "no rc".
-    if (!isENOENT(error)) return
+    if (!isENOENT(error)) return;
   }
 
-  const pinned = rc.yarnPath?.match(/^\.yarn\/releases\/yarn-([^/]+)\.cjs$/)?.[1]
-  let version: string
-  let writeRc = false
+  const pinned = rc.yarnPath?.match(/^\.yarn\/releases\/yarn-([^/]+)\.cjs$/)?.[1];
+  let version: string;
+  let writeRc = false;
 
   if (rc.yarnPath) {
     // Rule 3. Non-standard yarnPath — we can't know which cli-dist version to
     // fetch, so stay hands off.
-    if (!pinned) return
-    const targetFile = join(dir, rc.yarnPath)
+    if (!pinned) return;
+    const targetFile = join(dir, rc.yarnPath);
     try {
-      await access(targetFile)
-      return
+      await access(targetFile);
+      return;
     } catch {
-      version = pinned
+      version = pinned;
     }
   } else {
     // Rule 4 vs 5. Only yarn 1.x without yarnPath triggers auto-latest.
-    if (!agent.version?.startsWith('1.')) return
-    const url = `${registry}/@yarnpkg/cli-dist`
-    const resp = await fetcher(url)
+    if (!agent.version?.startsWith("1.")) return;
+    const url = `${registry}/@yarnpkg/cli-dist`;
+    const resp = await fetcher(url);
     if (!resp.ok) {
-      throw new Error(`request failed with status code ${resp.status} ${resp.statusText} from ${url}`)
+      throw new Error(
+        `request failed with status code ${resp.status} ${resp.statusText} from ${url}`,
+      );
     }
-    const meta = await resp.json() as any
-    version = meta?.['dist-tags']?.latest
-    if (typeof version !== 'string' || !version) throw new Error('no latest version from @yarnpkg/cli-dist')
-    rc.yarnPath = `.yarn/releases/yarn-${version}.cjs`
-    writeRc = true
+    const meta = (await resp.json()) as any;
+    version = meta?.["dist-tags"]?.latest;
+    if (typeof version !== "string" || !version)
+      throw new Error("no latest version from @yarnpkg/cli-dist");
+    rc.yarnPath = `.yarn/releases/yarn-${version}.cjs`;
+    writeRc = true;
   }
 
   // Shared cache so we don't redownload across scaffolds.
-  const cacheFile = join(cacheDir, `yarn-${version}.cjs`)
+  const cacheFile = join(cacheDir, `yarn-${version}.cjs`);
   try {
-    await access(cacheFile)
+    await access(cacheFile);
   } catch {
-    await mkdir(tempDir, { recursive: true })
-    await mkdir(cacheDir, { recursive: true })
-    const url = `${registry}/@yarnpkg/cli-dist/-/cli-dist-${version}.tgz`
-    const resp = await fetcher(url)
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(cacheDir, { recursive: true });
+    const url = `${registry}/@yarnpkg/cli-dist/-/cli-dist-${version}.tgz`;
+    const resp = await fetcher(url);
     if (!resp.ok) {
-      throw new Error(`request failed with status code ${resp.status} ${resp.statusText} from ${url}`)
+      throw new Error(
+        `request failed with status code ${resp.status} ${resp.statusText} from ${url}`,
+      );
     }
     await new Promise<void>((resolve, reject) => {
       // an aborted body errors on the source, which `pipe` does not forward
-      const stream = Readable.fromWeb(resp.body as any).on('error', reject).pipe(tar.extract({
-        cwd: tempDir,
-        strip: 2,
-      }, ['package/bin/yarn.js']))
-      stream.on('finish', resolve)
-      stream.on('error', reject)
-    })
+      const stream = Readable.fromWeb(resp.body as any)
+        .on("error", reject)
+        .pipe(
+          tar.extract(
+            {
+              cwd: tempDir,
+              strip: 2,
+            },
+            ["package/bin/yarn.js"],
+          ),
+        );
+      stream.on("finish", resolve);
+      stream.on("error", reject);
+    });
     // https://github.com/satorijs/satori/issues/305
-    await copyFile(join(tempDir, 'yarn.js'), cacheFile)
-    await rm(tempDir, { recursive: true })
+    await copyFile(join(tempDir, "yarn.js"), cacheFile);
+    await rm(tempDir, { recursive: true });
   }
 
-  const targetDir = join(dir, '.yarn/releases')
-  await mkdir(targetDir, { recursive: true })
-  await copyFile(cacheFile, join(targetDir, `yarn-${version}.cjs`))
+  const targetDir = join(dir, ".yarn/releases");
+  await mkdir(targetDir, { recursive: true });
+  await copyFile(cacheFile, join(targetDir, `yarn-${version}.cjs`));
 
   if (writeRc) {
-    await writeFile(rcPath, yaml.dump(rc))
+    await writeFile(rcPath, yaml.dump(rc));
   }
 }
 
 function isTimeoutError(error: unknown) {
-  const cause = (error as { cause?: { name?: string } } | undefined)?.cause?.name
-  return (error as Error | undefined)?.name === 'TimeoutError'
-    || cause === 'HeadersTimeoutError' || cause === 'BodyTimeoutError'
+  const cause = (error as { cause?: { name?: string } } | undefined)?.cause?.name;
+  return (
+    (error as Error | undefined)?.name === "TimeoutError" ||
+    cause === "HeadersTimeoutError" ||
+    cause === "BodyTimeoutError"
+  );
 }
 
 class Scaffold {
-  registry?: string
+  registry?: string;
 
   constructor(public options: Record<string, any> = {}) {}
 
   async getName() {
-    if (argv._[0]) return '' + argv._[0]
+    if (argv._[0]) return "" + argv._[0];
     const { name } = await prompts({
-      type: 'text',
-      name: 'name',
-      message: 'Project name:',
+      type: "text",
+      name: "name",
+      message: "Project name:",
       initial: `${this.options.name}-app`,
-    })
-    return name.trim() as string
+    });
+    return name.trim() as string;
   }
 
   async prepare() {
-    const stats = await stat(rootDir).catch(() => null)
-    if (!stats) return mkdir(rootDir, { recursive: true })
+    const stats = await stat(rootDir).catch(() => null);
+    if (!stats) return mkdir(rootDir, { recursive: true });
 
-    let message: string
+    let message: string;
     if (stats.isDirectory()) {
-      const files = await readdir(rootDir)
-      if (!files.length) return
-      message = `  Target directory "${project}" is not empty.`
+      const files = await readdir(rootDir);
+      if (!files.length) return;
+      message = `  Target directory "${project}" is not empty.`;
     } else {
-      message = `  Target "${project}" is not a directory.`
+      message = `  Target "${project}" is not a directory.`;
     }
 
     if (!argv.forced && !argv.yes) {
-      console.log(kleur.yellow(message))
-      const yes = await confirm('Remove existing files and continue?')
-      if (!yes) process.exit(0)
+      console.log(kleur.yellow(message));
+      const yes = await confirm("Remove existing files and continue?");
+      if (!yes) process.exit(0);
     }
 
-    await rm(rootDir, { recursive: true })
-    await mkdir(rootDir)
+    await rm(rootDir, { recursive: true });
+    await mkdir(rootDir);
   }
 
   async scaffold() {
-    const registry = await getRegistry()
+    const registry = await getRegistry();
     if (!registry) {
-      console.log(kleur.red('error') + ' unable to detect npm registry')
-      process.exit(1)
+      console.log(kleur.red("error") + " unable to detect npm registry");
+      process.exit(1);
     }
     // A registry without a scheme can still parse as a url, with its host read
     // as the scheme (`localhost:4873`).
     if (!/^https?:\/\//i.test(registry)) {
-      console.log(kleur.red('error') + ` invalid npm registry ${registry}`)
-      process.exit(1)
+      console.log(kleur.red("error") + ` invalid npm registry ${registry}`);
+      process.exit(1);
     }
 
-    this.registry = registry.replace(/\/$/, '')
-    console.log(kleur.dim('  Registry server: ') + this.registry)
+    this.registry = registry.replace(/\/$/, "");
+    console.log(kleur.dim("  Registry server: ") + this.registry);
 
-    console.log(kleur.dim('  Scaffolding project in ') + project + kleur.dim(' ...'))
-    const template = argv.template || this.options.template
+    console.log(kleur.dim("  Scaffolding project in ") + project + kleur.dim(" ..."));
+    const template = argv.template || this.options.template;
 
-    const metaUrl = `${this.registry}/${template}`
-    const resp1 = await this.fetchOrExit(metaUrl)
+    const metaUrl = `${this.registry}/${template}`;
+    const resp1 = await this.fetchOrExit(metaUrl);
     const remote = await resp1.json().catch((error) => {
-      if (error instanceof SyntaxError) return null
-      console.log(kleur.red('error') + ` ${isTimeoutError(error) ? 'timed out downloading' : 'unable to download'} ${metaUrl}`)
-      process.exit(1)
-    })
+      if (error instanceof SyntaxError) return null;
+      console.log(
+        kleur.red("error") +
+          ` ${isTimeoutError(error) ? "timed out downloading" : "unable to download"} ${metaUrl}`,
+      );
+      process.exit(1);
+    });
     if (!remote) {
-      console.log(kleur.red('error') + ` invalid registry response from ${metaUrl}`)
-      process.exit(1)
+      console.log(kleur.red("error") + ` invalid registry response from ${metaUrl}`);
+      process.exit(1);
     }
-    const version = remote['dist-tags']?.[argv.ref || 'latest']
+    const version = remote["dist-tags"]?.[argv.ref || "latest"];
     // an unknown tag and a version the mirror has not caught up to both land
     // here, so the message names what is missing rather than guessing which
-    const tarball = remote.versions?.[version]?.dist?.tarball
+    const tarball = remote.versions?.[version]?.dist?.tarball;
     if (!tarball) {
-      console.log(kleur.red('error') + ` no tarball for ${argv.ref || 'latest'}`)
-      process.exit(1)
+      console.log(kleur.red("error") + ` no tarball for ${argv.ref || "latest"}`);
+      process.exit(1);
     }
 
-    const resp2 = await this.fetchOrExit(tarball)
+    const resp2 = await this.fetchOrExit(tarball);
     const failure = await new Promise<string | undefined>((resolve) => {
-      const source = Readable.fromWeb(resp2.body as any)
+      const source = Readable.fromWeb(resp2.body as any);
       // an aborted body errors on the source, which `pipe` does not forward;
       // it is a failed download, while an error from tar is a bad archive
-      source.on('error', (error) => {
-        resolve(`${isTimeoutError(error) ? 'timed out downloading' : 'unable to download'} ${tarball}`)
-      })
-      const stream = source.pipe(tar.extract({
-        cwd: rootDir,
-        newer: true,
-        strip: 1,
-      }))
-      stream.on('finish', () => resolve(undefined))
-      stream.on('error', () => resolve(`invalid tarball from ${tarball}`))
-    }).catch(() => `invalid tarball from ${tarball}`)
+      source.on("error", (error) => {
+        resolve(
+          `${isTimeoutError(error) ? "timed out downloading" : "unable to download"} ${tarball}`,
+        );
+      });
+      const stream = source.pipe(
+        tar.extract({
+          cwd: rootDir,
+          newer: true,
+          strip: 1,
+        }),
+      );
+      stream.on("finish", () => resolve(undefined));
+      stream.on("error", () => resolve(`invalid tarball from ${tarball}`));
+    }).catch(() => `invalid tarball from ${tarball}`);
     if (failure) {
-      console.log(kleur.red('error') + ` ${failure}`)
-      process.exit(1)
+      console.log(kleur.red("error") + ` ${failure}`);
+      process.exit(1);
     }
 
     try {
@@ -291,104 +313,120 @@ class Scaffold {
         rootDir,
         registry: this.registry,
         agent: which(),
-        fetcher: (url, init) => fetch(url, { ...init, signal: this.options.timeout ? AbortSignal.timeout(this.options.timeout) : undefined }),
-      })
+        fetcher: (url, init) =>
+          fetch(url, {
+            ...init,
+            signal: this.options.timeout ? AbortSignal.timeout(this.options.timeout) : undefined,
+          }),
+      });
     } catch (error) {
-      console.log(kleur.red('error') + ` unable to set up yarn: ${isTimeoutError(error) ? 'timed out' : (error as Error).message}`)
-      process.exit(1)
+      console.log(
+        kleur.red("error") +
+          ` unable to set up yarn: ${isTimeoutError(error) ? "timed out" : (error as Error).message}`,
+      );
+      process.exit(1);
     }
-    await this.writePackageJson(template)
-    console.log(kleur.green('  Done.\n'))
+    await this.writePackageJson(template);
+    console.log(kleur.green("  Done.\n"));
   }
 
   private async fetchOrExit(url: string) {
     // The tarball url comes from the registry response and may be malformed.
     if (!URL.canParse(url)) {
-      console.log(kleur.red('error') + ` invalid url ${url}`)
-      process.exit(1)
+      console.log(kleur.red("error") + ` invalid url ${url}`);
+      process.exit(1);
     }
-    let resp: Response
+    let resp: Response;
     try {
       // A registry that accepts the request and never answers is bounded by fetch's own
       // 5-minute default (UND_ERR_HEADERS_TIMEOUT), so the CLI names it rather than the bare cause.
-      resp = await fetch(url, { signal: this.options.timeout ? AbortSignal.timeout(this.options.timeout) : undefined })
+      resp = await fetch(url, {
+        signal: this.options.timeout ? AbortSignal.timeout(this.options.timeout) : undefined,
+      });
     } catch (error) {
       // A timeout and an unreachable host are different causes
-      console.log(kleur.red('error') + ` ${isTimeoutError(error) ? 'timed out waiting for' : 'unable to reach'} ${url}`)
-      process.exit(1)
+      console.log(
+        kleur.red("error") +
+          ` ${isTimeoutError(error) ? "timed out waiting for" : "unable to reach"} ${url}`,
+      );
+      process.exit(1);
     }
     // Name the url: the registry and the tarball host share this message.
     if (!resp.ok) {
-      const { status, statusText } = resp
-      console.log(`${kleur.red('error')} request failed with status code ${status} ${statusText} from ${url}`)
-      process.exit(1)
+      const { status, statusText } = resp;
+      console.log(
+        `${kleur.red("error")} request failed with status code ${status} ${statusText} from ${url}`,
+      );
+      process.exit(1);
     }
-    return resp
+    return resp;
   }
 
   async writePackageJson(template: string) {
-    const filename = join(rootDir, 'package.json')
-    let meta: any
+    const filename = join(rootDir, "package.json");
+    let meta: any;
     try {
-      meta = JSON.parse(await readFile(filename, 'utf8'))
+      meta = JSON.parse(await readFile(filename, "utf8"));
     } catch {
-      console.log(kleur.red('error') + ` invalid package.json from ${template}`)
-      process.exit(1)
+      console.log(kleur.red("error") + ` invalid package.json from ${template}`);
+      process.exit(1);
     }
-    meta.name = project
+    meta.name = project;
     if (argv.prod) {
       // https://github.com/koishijs/koishi/issues/994
       // Do not use `NODE_ENV` or `--production` flag.
       // Instead, simply remove `devDependencies` and `workspaces`.
-      delete meta.workspaces
-      delete meta.devDependencies
+      delete meta.workspaces;
+      delete meta.devDependencies;
     }
-    await writeFile(filename, JSON.stringify(meta, null, 2) + '\n')
+    await writeFile(filename, JSON.stringify(meta, null, 2) + "\n");
   }
 
   async initGit() {
-    if (!argv.git || !supports('git --version')) return
-    execSync('git init', { stdio: 'ignore', cwd: rootDir })
-    console.log(kleur.green('  Done.\n'))
+    if (!argv.git || !supports("git --version")) return;
+    execSync("git init", { stdio: "ignore", cwd: rootDir });
+    console.log(kleur.green("  Done.\n"));
   }
 
   async install() {
     // with `-y` option, we don't install dependencies
-    if (argv.yes) return
+    if (argv.yes) return;
 
-    const agent = which()?.name || 'npm'
-    const yes = await confirm('Install and start it now?')
+    const agent = which()?.name || "npm";
+    const yes = await confirm("Install and start it now?");
     if (yes) {
-      execSync([agent, 'install'].join(' '), { stdio: 'inherit', cwd: rootDir })
-      execSync([agent, 'run', 'start'].join(' '), { stdio: 'inherit', cwd: rootDir })
+      execSync([agent, "install"].join(" "), { stdio: "inherit", cwd: rootDir });
+      execSync([agent, "run", "start"].join(" "), { stdio: "inherit", cwd: rootDir });
     } else {
-      console.log(kleur.dim('  You can start it later by:\n'))
+      console.log(kleur.dim("  You can start it later by:\n"));
       if (rootDir !== cwd) {
-        const related = relative(cwd, rootDir)
-        console.log(kleur.blue(`  cd ${kleur.bold(related)}`))
+        const related = relative(cwd, rootDir);
+        console.log(kleur.blue(`  cd ${kleur.bold(related)}`));
       }
-      console.log(kleur.blue(`  ${agent === 'yarn' ? 'yarn' : `${agent} install`}`))
-      console.log(kleur.blue(`  ${agent === 'yarn' ? 'yarn start' : `${agent} run start`}`))
-      console.log()
+      console.log(kleur.blue(`  ${agent === "yarn" ? "yarn" : `${agent} install`}`));
+      console.log(kleur.blue(`  ${agent === "yarn" ? "yarn start" : `${agent} run start`}`));
+      console.log();
     }
   }
 
   async start() {
-    console.log()
-    console.log(`  ${kleur.bold(`create ${this.options.name}`)}  ${kleur.blue(`v${this.options.version}`)}`)
-    console.log()
+    console.log();
+    console.log(
+      `  ${kleur.bold(`create ${this.options.name}`)}  ${kleur.blue(`v${this.options.version}`)}`,
+    );
+    console.log();
 
-    const name = await this.getName()
-    rootDir = join(cwd, name)
-    project = basename(rootDir)
+    const name = await this.getName();
+    rootDir = join(cwd, name);
+    project = basename(rootDir);
 
-    await this.prepare()
-    await this.scaffold()
-    await this.initGit()
-    await this.install()
+    await this.prepare();
+    await this.scaffold();
+    await this.initGit();
+    await this.install();
   }
 }
 
 export default function scaffold(options: Record<string, any> = {}) {
-  return new Scaffold(options).start()
+  return new Scaffold(options).start();
 }

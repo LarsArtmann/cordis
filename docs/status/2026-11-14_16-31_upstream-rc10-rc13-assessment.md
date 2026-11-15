@@ -65,7 +65,7 @@ Nothing destructive — the session was strictly read-only; zero files modified,
 2. I flagged #209/#196/#133/etc. as "needs parity test" without opening the port code — a 10-minute source read per fix would have upgraded flags into verified gaps/confirmed-parity and made the recommendation sharper.
 3. The #242 gap claim rests on source reading, not a failing test. A tiny reproduction test per port would have converted "verified by eyeball" into "verified by execution."
 4. Did not simulate the upstream-parity guards against the delta (prettier-normalizable check over +21.5k lines, byte guard over deleted `utils/` and renamed fixtures). The sync's riskiest unknown is unexamined.
-5. Did not look at the two new upstream branches (`perf/traceable-underscore`, `refactor/migrate-server`) — possible early signals of the *next* delta.
+5. Did not look at the two new upstream branches (`perf/traceable-underscore`, `refactor/migrate-server`) — possible early signals of the _next_ delta.
 6. The final message asked "Want me to start?" — correct per the assessment-only ask, but the report now bakes the decision points into 3 crisp questions (section g) instead of one vague one.
 
 ## f) Things to get done next (up to 50, grouped, impact-ordered)
@@ -144,4 +144,4 @@ Nothing destructive — the session was strictly read-only; zero files modified,
 
 ---
 
-*Report ends. Session was read-only; awaiting instructions on a) sync start, b) #242 porting, c) the three questions above.*
+_Report ends. Session was read-only; awaiting instructions on a) sync start, b) #242 porting, c) the three questions above._

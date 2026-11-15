@@ -200,15 +200,15 @@ was not touched this session beyond row-creation:
 26. Workflow job-count/runtime review after this week's additions.
 27. HARVEST the 2026-09-09_01-54 report's leftovers (meta-row).
 28. Split the 12 >350-line files when next semantically touched.
-29–33. vulnix follow-ups: jq's 3 CVEs triage; 60%-FP wording nuance;
+    29–33. vulnix follow-ups: jq's 3 CVEs triage; 60%-FP wording nuance;
     cold-cache smoke test of `scripts/vulnix-audit.sh`; perl
     CVE-2026-57432 + libmicrohttpd CVE-2025-62689 verification; zlib
     CVE-2023-6992 product-mismatch confirmation.
-34. Re-run `scripts/vulnix-audit.sh direct` after the 2026-11-09 nixpkgs
+29. Re-run `scripts/vulnix-audit.sh direct` after the 2026-11-09 nixpkgs
     bump (the bump LANDED this cycle; the audit row is stale — expected
     glibc/python/coreutils/gzip/binutils entries to clear).
-35. `yarn npm audit` one-off for the TS workspace.
-36. Split-brain risk flagged, not started: root `package.json` shows
+30. `yarn npm audit` one-off for the TS workspace.
+31. Split-brain risk flagged, not started: root `package.json` shows
     `typescript ^7.0.2` and eslint ^10/vite ^8/vitest ^5 while
     AGENTS.md's verified-working-set section says TS 7 is twice-fatal
     and pins vitest ^4/vite ^7/eslint ^8 — which document tells the
@@ -425,7 +425,7 @@ cross-repo, and hygiene.
    project env)? My default is "leave the fallback, document once" —
    but this is your fleet convention to set.
 3. **The 21 idle crush processes on this box** (1 crush-daily scheduler
-   + ~14 `crush-0.101.0` session processes, several sitting since
-   09:45–10:09) — kill/park them, or are some deliberately long-lived
-   sessions I must not touch? Machine-level; I will not signal other
-   sessions without your word.
+   - ~14 `crush-0.101.0` session processes, several sitting since
+     09:45–10:09) — kill/park them, or are some deliberately long-lived
+     sessions I must not touch? Machine-level; I will not signal other
+     sessions without your word.

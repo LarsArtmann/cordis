@@ -199,38 +199,38 @@ four upstream-parity guards ✓, `yarn lint` ✓, canonical `yarn test`
 
 ## f) NEXT (up to 50, priority order)
 
-| # | Item |
-| --- | --- |
-| 1 | ROADMAP: add the missing #206 intercept-merge row (Go DONE, Rust ?, Zig ?) |
-| 2 | Assess #206 parity in Rust (`intercept` resolution semantics) + Zig; implement or document |
-| 3 | User gate: push the 14 local commits |
-| 4 | CI green verification after push (all four workflows) |
-| 5 | Re-verify greeter.mjs smoke on the final tree (post-rebuild) |
-| 6 | Prove oxlint scans non-zero files (`--format` / file count) after the config swap |
-| 7 | PORTS.md divergence notes (#205 per-port, #296 N/A, #134 no internal/commit, Zig #205 N/A) once the concurrent session lands |
-| 8 | TODO_LIST harvest of genuinely-open items (Zig prepend, drafts, devShell idea) |
-| 9 | Rewrite or supersede-mark the stale narrative sections a)–e) of the 08-18 report |
-| 10 | DOMAIN_LANGUAGE: update the Intercept entry to the merge shape |
-| 11 | Coverage: reproduce the old methodology once, then declare one canonical recipe in AGENTS.md |
-| 12 | Decide the `false` isolate-label micro-edge: align Go or document in PORTS.md |
-| 13 | Zig listener-prepend support (matrix row is "-") |
-| 14 | DevShell canonical TS env: corepack shim PATH vs yarn-berry 4.18.1 — decide; would also un-skip buildflow vitest if ever wanted |
-| 15 | File upstream issue draft 1 (clean single-step build) — user-gated |
-| 16 | File upstream issue draft 2 (TS7 dts break) — user-gated; decide target repo (TypeScript vs cordis) |
-| 17 | Miri local re-run (or consciously trust CI) |
-| 18 | Wire the port greeter examples into executed gates (go test example, rust test, zig test step) |
-| 19 | Buildflow: diff the 638 findings vs the accepted-noise baseline |
-| 20 | rust/src/core.rs split (386 lines; bag.rs extraction) |
-| 21 | Free or repin `/mnt/buildcache` npm cache (system-level; it will bite again) |
-| 22 | Watch-branch sweep at the next cycle: `perf/traceable-underscore`, `refactor/migrate-server` |
-| 23 | vulnix closure re-run after the next nixpkgs bump (standing item) |
-| 24 | Consider golden DSL ops for provide/emit interleaving to pin #196/#242 ordering cross-port (or record a conscious no) |
-| 25 | crush-config: F108/F109 proposals (oxfmt strict-JSONC lesson, fleet .oxfmtrc.json) — needs user blessing |
-| 26 | Optional: one-session-per-worktree lockfile tooling |
-| 27 | Upstream suggestion (fold into draft 1 filing): document the two-step build in cordis README/CI |
+| #  | Item                                                                                                                                       |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1  | ROADMAP: add the missing #206 intercept-merge row (Go DONE, Rust ?, Zig ?)                                                                 |
+| 2  | Assess #206 parity in Rust (`intercept` resolution semantics) + Zig; implement or document                                                 |
+| 3  | User gate: push the 14 local commits                                                                                                       |
+| 4  | CI green verification after push (all four workflows)                                                                                      |
+| 5  | Re-verify greeter.mjs smoke on the final tree (post-rebuild)                                                                               |
+| 6  | Prove oxlint scans non-zero files (`--format` / file count) after the config swap                                                          |
+| 7  | PORTS.md divergence notes (#205 per-port, #296 N/A, #134 no internal/commit, Zig #205 N/A) once the concurrent session lands               |
+| 8  | TODO_LIST harvest of genuinely-open items (Zig prepend, drafts, devShell idea)                                                             |
+| 9  | Rewrite or supersede-mark the stale narrative sections a)–e) of the 08-18 report                                                           |
+| 10 | DOMAIN_LANGUAGE: update the Intercept entry to the merge shape                                                                             |
+| 11 | Coverage: reproduce the old methodology once, then declare one canonical recipe in AGENTS.md                                               |
+| 12 | Decide the `false` isolate-label micro-edge: align Go or document in PORTS.md                                                              |
+| 13 | Zig listener-prepend support (matrix row is "-")                                                                                           |
+| 14 | DevShell canonical TS env: corepack shim PATH vs yarn-berry 4.18.1 — decide; would also un-skip buildflow vitest if ever wanted            |
+| 15 | File upstream issue draft 1 (clean single-step build) — user-gated                                                                         |
+| 16 | File upstream issue draft 2 (TS7 dts break) — user-gated; decide target repo (TypeScript vs cordis)                                        |
+| 17 | Miri local re-run (or consciously trust CI)                                                                                                |
+| 18 | Wire the port greeter examples into executed gates (go test example, rust test, zig test step)                                             |
+| 19 | Buildflow: diff the 638 findings vs the accepted-noise baseline                                                                            |
+| 20 | rust/src/core.rs split (386 lines; bag.rs extraction)                                                                                      |
+| 21 | Free or repin `/mnt/buildcache` npm cache (system-level; it will bite again)                                                               |
+| 22 | Watch-branch sweep at the next cycle: `perf/traceable-underscore`, `refactor/migrate-server`                                               |
+| 23 | vulnix closure re-run after the next nixpkgs bump (standing item)                                                                          |
+| 24 | Consider golden DSL ops for provide/emit interleaving to pin #196/#242 ordering cross-port (or record a conscious no)                      |
+| 25 | crush-config: F108/F109 proposals (oxfmt strict-JSONC lesson, fleet .oxfmtrc.json) — needs user blessing                                   |
+| 26 | Optional: one-session-per-worktree lockfile tooling                                                                                        |
+| 27 | Upstream suggestion (fold into draft 1 filing): document the two-step build in cordis README/CI                                            |
 | 28 | Re-check AGENTS "TS workspace gotchas" for statements invalidated by rc.13 (lockfile tracked, oxlint) — most updated, sweep for stragglers |
-| 29 | Re-verify the panic-allowlist zig count (17) after any future Zig dispatch change — standing |
-| 30 | Sweep CHANGELOG.md for the program's user-visible entries (concurrent session may own this — coordinate) |
+| 29 | Re-verify the panic-allowlist zig count (17) after any future Zig dispatch change — standing                                               |
+| 30 | Sweep CHANGELOG.md for the program's user-visible entries (concurrent session may own this — coordinate)                                   |
 
 ## g) QUESTIONS I cannot figure out myself
 

@@ -1,38 +1,45 @@
-import { Component, Context, Fiber, Service } from 'cordis'
-import type {} from '@cordisjs/fs'
-import { AsyncLocalStorage } from 'node:async_hooks'
-import { realpathSync } from 'node:fs'
-import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { handleError } from './error.ts'
+import { Component, Context, Fiber, Service } from "cordis";
+import type {} from "@cordisjs/fs";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { handleError } from "./error.ts";
 import {
-  activate, invalidateResolution, locatePackage, ModuleCaches, ModuleLoader, Resolution, resolveRequest, restoreResolutions,
-} from './runtime/index.ts'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-import z from 'schemastery'
+  activate,
+  invalidateResolution,
+  locatePackage,
+  ModuleCaches,
+  ModuleLoader,
+  Resolution,
+  resolveRequest,
+  restoreResolutions,
+} from "./runtime/index.ts";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import z from "schemastery";
 
-declare module 'cordis' {
+declare module "cordis" {
   interface Context {
-    hmr: Hmr
+    hmr: Hmr;
   }
 }
 
-type Awaitable<T> = T | Promise<T>
+type Awaitable<T> = T | Promise<T>;
 
 // A specifier that is a URL, e.g. `file:` or `data:`.
-const scheme = /^[a-z][a-z\d+.-]*:/i
+const scheme = /^[a-z][a-z\d+.-]*:/i;
 
 // A Windows drive-letter path, e.g. `C:\app\cordis.yml` or `C:/app/cordis.yml`.
-const driveLetter = /^[A-Za-z]:[\\/]/
+const driveLetter = /^[A-Za-z]:[\\/]/;
 
 // a builtin has no file and no dependencies to follow
 function isBuiltin(url: string) {
-  return url.startsWith('node:')
+  return url.startsWith("node:");
 }
 
 // A native addon cannot be loaded again in the same process: requiring its
 // file once more returns the library that is already loaded.
 function isNativeAddon(url: string) {
-  return url.startsWith('file:') && url.endsWith('.node')
+  return url.startsWith("file:") && url.endsWith(".node");
 }
 
 /**
@@ -45,34 +52,34 @@ async function closure(
   edges: (url: string) => Iterable<string> | Promise<Iterable<string>>,
   stop: (url: string) => boolean = () => false,
 ) {
-  const result = new Set<string>()
+  const result = new Set<string>();
   const traverse = async (url: string) => {
-    if (result.has(url) || isBuiltin(url) || stop(url)) return
-    result.add(url)
-    await Promise.all([...await edges(url)].map(traverse))
-  }
-  await Promise.all([...roots].map(traverse))
-  return result
+    if (result.has(url) || isBuiltin(url) || stop(url)) return;
+    result.add(url);
+    await Promise.all([...(await edges(url))].map(traverse));
+  };
+  await Promise.all([...roots].map(traverse));
+  return result;
 }
 
 /** A registered component whose module has changed. */
 interface StaleComponent {
   /** the module to take the replacement from */
-  url: string
+  url: string;
   /** every module that exports the component */
-  urls: string[]
+  urls: string[];
   /** the modules of `urls` that no other module of `urls` imports, including `url` */
-  entries: string[]
+  entries: string[];
   /** the component before the change */
-  component: Component
+  component: Component;
   /** the closure of the component in the old module graph */
-  modules: Set<string>
+  modules: Set<string>;
 }
 
 /** A change found in stage 1 that cannot be applied in place, reported in `skipped`. */
 class SkipError extends Error {
   constructor(public reason: Hmr.SkipReason) {
-    super(reason)
+    super(reason);
   }
 }
 
@@ -81,12 +88,12 @@ class SkipError extends Error {
  * unlike a URL or an absolute path, which resolves to itself.
  */
 function isRequest({ specifier }: Resolution) {
-  return !isAbsolute(specifier) && !scheme.test(specifier)
+  return !isAbsolute(specifier) && !scheme.test(specifier);
 }
 
 /** Whether `path` is `dir` or lies below it. */
 function contains(dir: string, path: string) {
-  return path === dir || path.startsWith(dir.endsWith(sep) ? dir : dir + sep)
+  return path === dir || path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
 }
 
 /**
@@ -96,92 +103,98 @@ function contains(dir: string, path: string) {
  * A manifest stands for its directory.
  */
 function covers(root: string, path: string) {
-  if (basename(root) === 'package.json') root = dirname(root)
-  if (contains(root, path)) return true
-  const location = locatePackage(root)
-  return !!location && contains(location.dir, path)
+  if (basename(root) === "package.json") root = dirname(root);
+  if (contains(root, path)) return true;
+  const location = locatePackage(root);
+  return !!location && contains(location.dir, path);
 }
 
 /** The import of a stale component in stage 1. */
 interface ImportAttempt {
-  stale: StaleComponent
+  stale: StaleComponent;
   /** the modules imported for the entries of the component, which may have moved */
-  imported: string[]
+  imported: string[];
   /** the new component, if the import succeeded */
-  replacement?: Component
-  failed: boolean
-  error?: unknown
+  replacement?: Component;
+  failed: boolean;
+  error?: unknown;
   /** why the component cannot be replaced in place, if it cannot */
-  skip?: Hmr.SkipReason
+  skip?: Hmr.SkipReason;
   /** the modules that were not cached before this import, other than evicted modules */
-  loaded: string[]
+  loaded: string[];
 }
 
 /** A set of stale components that commit, abort or are skipped together. */
 interface ReconcileUnit {
-  attempts: ImportAttempt[]
+  attempts: ImportAttempt[];
   /** the evicted modules in the closures of the components */
-  modules: Set<string>
+  modules: Set<string>;
 }
 
 /** Get the component exported by a module namespace. */
 function unwrapExports(exports: any) {
-  if (exports === null || exports === undefined) return exports
-  exports = exports.default ?? exports
+  if (exports === null || exports === undefined) return exports;
+  exports = exports.default ?? exports;
   // https://github.com/evanw/esbuild/issues/2623
   // https://esbuild.github.io/content-types/#default-interop
-  if (!exports.__esModule) return exports
-  return exports.default ?? exports
+  if (!exports.__esModule) return exports;
+  return exports.default ?? exports;
 }
 
 function toPath(url: string) {
-  if (url.startsWith('file:')) return fileURLToPath(url)
+  if (url.startsWith("file:")) return fileURLToPath(url);
 }
 
 class Hmr extends Service {
   /** The resolved `base`. `watch.files` and logged paths are relative to it. */
-  public baseDir: string
+  public baseDir: string;
 
   /** Node's internal ESM loader. */
-  private _loader: ModuleLoader
+  private _loader: ModuleLoader;
   /** Node's module caches. */
-  private _modules: ModuleCaches
+  private _modules: ModuleCaches;
 
   /**
    * The dependency tree of the main entry point. A change to any of these
    * modules can only be applied by restarting the process.
    */
-  public hostModules = new Set<string>()
+  public hostModules = new Set<string>();
 
   /** The tail of the transaction queue. */
-  private _queue: Promise<void> = Promise.resolve()
+  private _queue: Promise<void> = Promise.resolve();
 
   /** The running transaction, matched against the async context of a call. */
-  private _current?: symbol
-  private _storage = new AsyncLocalStorage<symbol>()
+  private _current?: symbol;
+  private _storage = new AsyncLocalStorage<symbol>();
 
-  constructor(ctx: Context, public config: Hmr.Config) {
-    super(ctx, 'hmr')
-    const loader = ModuleLoader.fromInternal()
+  constructor(
+    ctx: Context,
+    public config: Hmr.Config,
+  ) {
+    super(ctx, "hmr");
+    const loader = ModuleLoader.fromInternal();
     if (!loader) {
-      throw new Error('loader internals are unavailable, pass --expose-internals or install node-addon-require-builtin')
+      throw new Error(
+        "loader internals are unavailable, pass --expose-internals or install node-addon-require-builtin",
+      );
     }
-    this._loader = loader
-    this._modules = new ModuleCaches(loader)
-    ctx.effect(() => activate())
+    this._loader = loader;
+    this._modules = new ModuleCaches(loader);
+    ctx.effect(() => activate());
 
     // `base` is resolved:
     // - on Windows, as a drive-letter path through `pathToFileURL`, since
     //   `new URL()` would read `C:` as a URL scheme;
     // - as a URL against `ctx.baseUrl`, or as a file URL without one;
     // - otherwise, against the working directory.
-    this.baseDir = process.platform === 'win32' && config.base && driveLetter.test(config.base)
-      ? fileURLToPath(pathToFileURL(config.base))
-      : ctx.baseUrl || config.base?.startsWith('file:')
-        ? fileURLToPath(new URL(config.base || '.', ctx.baseUrl))
-        : resolve(config.base || '.')
+    this.baseDir =
+      process.platform === "win32" && config.base && driveLetter.test(config.base)
+        ? fileURLToPath(pathToFileURL(config.base))
+        : ctx.baseUrl || config.base?.startsWith("file:")
+          ? fileURLToPath(new URL(config.base || ".", ctx.baseUrl))
+          : resolve(config.base || ".");
 
-    ctx.inject(['fs'], ctx => this._watch(ctx))
+    ctx.inject(["fs"], (ctx) => this._watch(ctx));
   }
 
   /**
@@ -190,70 +203,76 @@ class Hmr extends Service {
    * concern an aborted unit are retried with the next batch.
    */
   private _watch(ctx: Context) {
-    const { enabled, files, debounce } = this.config.watch
-    if (!enabled || !files.length) return
+    const { enabled, files, debounce } = this.config.watch;
+    if (!enabled || !files.length) return;
     if (!this.config.base) {
-      this.ctx.logger.info('watching %o', files)
+      this.ctx.logger.info("watching %o", files);
     } else {
-      this.ctx.logger.info('watching %o in %s', files, this.baseDir)
+      this.ctx.logger.info("watching %o in %s", files, this.baseDir);
     }
 
-    const stashed = new Set<string>()
-    const retained = new Set<string>()
-    let timer: NodeJS.Timeout | undefined
-    ctx.effect(() => () => clearTimeout(timer))
+    const stashed = new Set<string>();
+    const retained = new Set<string>();
+    let timer: NodeJS.Timeout | undefined;
+    ctx.effect(() => () => clearTimeout(timer));
 
     // Batches are flushed one after another, including the handling of their
     // results, so that a batch takes the changes retained by the one before.
-    let flushing = Promise.resolve()
+    let flushing = Promise.resolve();
 
     const flush = async () => {
-      if (!stashed.size) return
-      const files = new Set([...retained, ...stashed])
-      retained.clear()
-      stashed.clear()
+      if (!stashed.size) return;
+      const files = new Set([...retained, ...stashed]);
+      retained.clear();
+      stashed.clear();
       try {
-        const result = await this.reconcile(() => files)
+        const result = await this.reconcile(() => files);
         if (result.skipped.length) {
-          this.ctx.logger.warn([
-            'skipped changes, which apply after a restart:',
-            ...result.skipped.flatMap(({ urls, reason }) => urls.map(url => `- ${this._relative(url)} (${reason})`)),
-          ].join('\n'))
+          this.ctx.logger.warn(
+            [
+              "skipped changes, which apply after a restart:",
+              ...result.skipped.flatMap(({ urls, reason }) =>
+                urls.map((url) => `- ${this._relative(url)} (${reason})`),
+              ),
+            ].join("\n"),
+          );
         }
         // An aborted unit has been logged by the transaction itself. The next
         // batch may only repair a module that the unit newly imports, so the
         // files that changed the unit are retained.
-        const paths = result.aborted.flatMap(({ urls }) => urls.flatMap(url => toPath(url) ?? []))
+        const paths = result.aborted.flatMap(({ urls }) =>
+          urls.flatMap((url) => toPath(url) ?? []),
+        );
         for (const file of files) {
-          if (paths.some(path => covers(file, path))) retained.add(file)
+          if (paths.some((path) => covers(file, path))) retained.add(file);
         }
       } catch (error) {
-        this.ctx.logger.warn(error)
-        for (const path of files) retained.add(path)
+        this.ctx.logger.warn(error);
+        for (const path of files) retained.add(path);
       }
-    }
+    };
 
-    ctx.fs.watch(pathToFileURL(this.baseDir), { filter: files }).on('change', (url) => {
-      const filename = fileURLToPath(url)
-      this.ctx.logger.debug('change detected at %C', relative(this.baseDir, filename))
-      stashed.add(filename)
-      clearTimeout(timer)
-      timer = setTimeout(() => flushing = flushing.then(flush), debounce)
-    })
+    ctx.fs.watch(pathToFileURL(this.baseDir), { filter: files }).on("change", (url) => {
+      const filename = fileURLToPath(url);
+      this.ctx.logger.debug("change detected at %C", relative(this.baseDir, filename));
+      stashed.add(filename);
+      clearTimeout(timer);
+      timer = setTimeout(() => (flushing = flushing.then(flush)), debounce);
+    });
   }
 
-  async* [Service.init]() {
+  async *[Service.init]() {
     // Collect host modules: framework modules reachable from the main entry.
     // process.argv[1] is undefined in REPL, node -e, and some packed binaries.
     // It may be a link, such as a bin shim, while module URLs are real paths.
     if (process.argv[1]) {
-      let main = resolve(process.argv[1])
+      let main = resolve(process.argv[1]);
       try {
-        main = realpathSync(main)
+        main = realpathSync(main);
       } catch {}
-      const mainUrl = pathToFileURL(main).href
+      const mainUrl = pathToFileURL(main).href;
       if (this._modules.has(mainUrl)) {
-        this.hostModules = await closure([mainUrl], url => this._modules.edges(url))
+        this.hostModules = await closure([mainUrl], (url) => this._modules.edges(url));
       }
     }
   }
@@ -284,26 +303,31 @@ class Hmr extends Service {
    * of their modules tries again.
    */
   reconcile(callback: () => Awaitable<Iterable<string>>): Promise<Hmr.Result> {
-    const current = this._storage.getStore()
+    const current = this._storage.getStore();
     if (current && current === this._current) {
-      return Promise.reject(new Error('cannot start a transaction inside another transaction'))
+      return Promise.reject(new Error("cannot start a transaction inside another transaction"));
     }
     const task = this._queue.then(() => {
-      const id = Symbol('transaction')
-      this._current = id
-      return this._storage.run(id, () => this._reconcile(callback)).finally(() => {
-        this._current = undefined
-      })
-    })
+      const id = Symbol("transaction");
+      this._current = id;
+      return this._storage
+        .run(id, () => this._reconcile(callback))
+        .finally(() => {
+          this._current = undefined;
+        });
+    });
     // only the order matters, so the result is not kept alive
-    this._queue = task.then(() => {}, () => {})
-    return task
+    this._queue = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
   }
 
   private _relative(url: string) {
     // a module loaded through a custom scheme, such as `data:`, has no path
-    if (!url.startsWith('file:')) return url
-    return relative(this.baseDir, fileURLToPath(url))
+    if (!url.startsWith("file:")) return url;
+    return relative(this.baseDir, fileURLToPath(url));
   }
 
   /**
@@ -317,35 +341,35 @@ class Hmr extends Service {
    * the eviction, i.e. the old module graph.
    */
   private async _analyze(changed: Set<string>) {
-    const caches = this._modules
-    const urls = [...caches.urls()].filter(url => !isBuiltin(url))
-    const edges = new Map<string, Set<string>>()
-    await Promise.all(urls.map(async url => edges.set(url, await caches.edges(url))))
+    const caches = this._modules;
+    const urls = [...caches.urls()].filter((url) => !isBuiltin(url));
+    const edges = new Map<string, Set<string>>();
+    await Promise.all(urls.map(async (url) => edges.set(url, await caches.edges(url))));
 
-    const importers = new Map<string, string[]>()
+    const importers = new Map<string, string[]>();
     for (const [url, children] of edges) {
-      if (this.hostModules.has(url)) continue
+      if (this.hostModules.has(url)) continue;
       for (const child of children) {
-        let list = importers.get(child)
-        if (!list) importers.set(child, list = [])
-        list.push(url)
+        let list = importers.get(child);
+        if (!list) importers.set(child, (list = []));
+        list.push(url);
       }
     }
 
-    const accepted = new Set<string>()
-    const queue = [...changed]
+    const accepted = new Set<string>();
+    const queue = [...changed];
     while (queue.length) {
-      const url = queue.pop()!
-      if (accepted.has(url)) continue
-      accepted.add(url)
-      queue.push(...importers.get(url) ?? [])
+      const url = queue.pop()!;
+      if (accepted.has(url)) continue;
+      accepted.add(url);
+      queue.push(...(importers.get(url) ?? []));
     }
 
-    const declined = new Set(this.hostModules)
+    const declined = new Set(this.hostModules);
     for (const url of urls) {
-      if (!accepted.has(url)) declined.add(url)
+      if (!accepted.has(url)) declined.add(url);
     }
-    return { accepted, declined, edges }
+    return { accepted, declined, edges };
   }
 
   /**
@@ -363,37 +387,41 @@ class Hmr extends Service {
     edges: (url: string) => Promise<Iterable<string>>,
     retained: Set<string>,
   ) {
-    const reaches = await Promise.all(attempts.map(attempt => {
-      return closure([...attempt.stale.urls, ...attempt.imported], edges, url => retained.has(url))
-    }))
-    const parents = attempts.map((_, index) => index)
+    const reaches = await Promise.all(
+      attempts.map((attempt) => {
+        return closure([...attempt.stale.urls, ...attempt.imported], edges, (url) =>
+          retained.has(url),
+        );
+      }),
+    );
+    const parents = attempts.map((_, index) => index);
     const find = (index: number) => {
-      while (parents[index] !== index) index = parents[index] = parents[parents[index]]
-      return index
-    }
-    const owners = new Map<string, number>()
+      while (parents[index] !== index) index = parents[index] = parents[parents[index]];
+      return index;
+    };
+    const owners = new Map<string, number>();
     attempts.forEach((attempt, index) => {
       for (const url of [...attempt.stale.modules, ...reaches[index]]) {
-        if (!evicted.has(url)) continue
-        const owner = owners.get(url)
+        if (!evicted.has(url)) continue;
+        const owner = owners.get(url);
         if (owner === undefined) {
-          owners.set(url, index)
+          owners.set(url, index);
         } else {
-          parents[find(index)] = find(owner)
+          parents[find(index)] = find(owner);
         }
       }
-    })
-    const units = new Map<number, ReconcileUnit>()
+    });
+    const units = new Map<number, ReconcileUnit>();
     attempts.forEach((attempt, index) => {
-      const root = find(index)
-      let unit = units.get(root)
-      if (!unit) units.set(root, unit = { attempts: [], modules: new Set() })
-      unit.attempts.push(attempt)
+      const root = find(index);
+      let unit = units.get(root);
+      if (!unit) units.set(root, (unit = { attempts: [], modules: new Set() }));
+      unit.attempts.push(attempt);
       for (const url of [...attempt.stale.modules, ...reaches[index]]) {
-        if (evicted.has(url)) unit.modules.add(url)
+        if (evicted.has(url)) unit.modules.add(url);
       }
-    })
-    return [...units.values()]
+    });
+    return [...units.values()];
   }
 
   /**
@@ -402,23 +430,26 @@ class Hmr extends Service {
    * only `require()` has loaded is found too.
    */
   private _discover(declined: Set<string>) {
-    const candidates = new Map<string, Component>()
+    const candidates = new Map<string, Component>();
     for (const url of this._modules.urls()) {
-      if (declined.has(url) || isBuiltin(url)) continue
-      for (const exports of [() => this._modules.namespace(url), () => this._modules.exports(url)]) {
-        let component: Component | undefined
+      if (declined.has(url) || isBuiltin(url)) continue;
+      for (const exports of [
+        () => this._modules.namespace(url),
+        () => this._modules.exports(url),
+      ]) {
+        let component: Component | undefined;
         try {
           // reading a binding that has not been initialized throws
-          component = unwrapExports(exports())
+          component = unwrapExports(exports());
         } catch {
-          continue
+          continue;
         }
-        if (!component || !this.ctx.registry.has(component)) continue
-        candidates.set(url, component)
-        break
+        if (!component || !this.ctx.registry.has(component)) continue;
+        candidates.set(url, component);
+        break;
       }
     }
-    return candidates
+    return candidates;
   }
 
   /**
@@ -434,14 +465,14 @@ class Hmr extends Service {
    */
   private _locate(url: string, removed: Resolution[], evicted: Set<string>) {
     const sources = removed.filter((resolution) => {
-      return resolution.url === url && !evicted.has(resolution.parentURL) && isRequest(resolution)
-    })
-    if (!sources.length) return { url }
-    const targets = new Set(sources.map(source => resolveRequest(this._loader, source)))
+      return resolution.url === url && !evicted.has(resolution.parentURL) && isRequest(resolution);
+    });
+    if (!sources.length) return { url };
+    const targets = new Set(sources.map((source) => resolveRequest(this._loader, source)));
     if (targets.size > 1) {
-      throw new SkipError(Hmr.SkipReason.AmbiguousImport)
+      throw new SkipError(Hmr.SkipReason.AmbiguousImport);
     }
-    return { url: [...targets][0], source: sources[0] }
+    return { url: [...targets][0], source: sources[0] };
   }
 
   /**
@@ -460,38 +491,38 @@ class Hmr extends Service {
    * shadow; a module that requested the child otherwise is reloaded needlessly.
    */
   private async _moved(roots: Set<string>, matched: Set<string>, removed: Resolution[]) {
-    const moved = new Set<string>()
+    const moved = new Set<string>();
     for (const resolution of removed) {
-      const { parentURL, url } = resolution
-      if (matched.has(parentURL) || matched.has(url) || !this._modules.has(url)) continue
-      const links = (await this._modules.edges(parentURL)).has(url)
-      if (!links && !isRequest(resolution)) continue
-      let target: string | undefined
+      const { parentURL, url } = resolution;
+      if (matched.has(parentURL) || matched.has(url) || !this._modules.has(url)) continue;
+      const links = (await this._modules.edges(parentURL)).has(url);
+      if (!links && !isRequest(resolution)) continue;
+      let target: string | undefined;
       try {
-        target = resolveRequest(this._loader, resolution)
+        target = resolveRequest(this._loader, resolution);
       } catch {}
-      if (target !== url) moved.add(links ? parentURL : url)
+      if (target !== url) moved.add(links ? parentURL : url);
     }
 
-    const locations = [...roots].flatMap(root => locatePackage(root) ?? [])
-    if (!locations.length) return moved
+    const locations = [...roots].flatMap((root) => locatePackage(root) ?? []);
+    if (!locations.length) return moved;
     for (const url of this._modules.urls()) {
-      const path = toPath(url)
-      if (!path) continue
+      const path = toPath(url);
+      if (!path) continue;
       for (const { name, dir } of locations) {
-        if (!contains(dir, path)) continue
-        const marker = `${sep}node_modules${sep}${name.split('/').join(sep)}${sep}`
+        if (!contains(dir, path)) continue;
+        const marker = `${sep}node_modules${sep}${name.split("/").join(sep)}${sep}`;
         const shadows = this._modules.children(url).some((child) => {
-          const childPath = toPath(child)
-          const index = childPath?.lastIndexOf(marker) ?? -1
-          if (index === -1) return false
-          const above = childPath!.slice(0, index)
-          return above !== dir && contains(above, dir)
-        })
-        if (shadows) moved.add(url)
+          const childPath = toPath(child);
+          const index = childPath?.lastIndexOf(marker) ?? -1;
+          if (index === -1) return false;
+          const above = childPath!.slice(0, index);
+          return above !== dir && contains(above, dir);
+        });
+        if (shadows) moved.add(url);
       }
     }
-    return moved
+    return moved;
   }
 
   /**
@@ -499,113 +530,117 @@ class Hmr extends Service {
    * them. A root that matches no loaded module is logged.
    */
   private _match(roots: Set<string>) {
-    const matched = new Set<string>()
-    const used = new Set<string>()
+    const matched = new Set<string>();
+    const used = new Set<string>();
     for (const url of this._modules.urls()) {
-      let path = toPath(url)
-      if (!path) continue
+      let path = toPath(url);
+      if (!path) continue;
       // The ancestors are looked up instead of comparing prefixes, so that a
       // root matches whole path segments only.
       while (true) {
         if (roots.has(path)) {
-          matched.add(url)
-          used.add(path)
+          matched.add(url);
+          used.add(path);
         }
-        const parent = dirname(path)
-        if (parent === path) break
-        path = parent
+        const parent = dirname(path);
+        if (parent === path) break;
+        path = parent;
       }
     }
     for (const root of roots) {
-      if (!used.has(root)) this.ctx.logger.debug('skip %C (no loaded module)', relative(this.baseDir, root))
+      if (!used.has(root))
+        this.ctx.logger.debug("skip %C (no loaded module)", relative(this.baseDir, root));
     }
-    return matched
+    return matched;
   }
 
   private async _reconcile(callback: () => Awaitable<Iterable<string>>): Promise<Hmr.Result> {
-    const result: Hmr.Result = { settled: [], aborted: [], skipped: [] }
-    const roots = new Set<string>()
+    const result: Hmr.Result = { settled: [], aborted: [], skipped: [] };
+    const roots = new Set<string>();
     for (const root of await callback()) {
-      if (typeof root !== 'string' || !isAbsolute(root)) {
-        throw new TypeError(`invalid root ${JSON.stringify(root)}, expected an absolute path`)
+      if (typeof root !== "string" || !isAbsolute(root)) {
+        throw new TypeError(`invalid root ${JSON.stringify(root)}, expected an absolute path`);
       }
       // `resolve()` normalizes the path and removes a trailing separator
-      roots.add(resolve(root))
+      roots.add(resolve(root));
     }
     // after the callback, so that a module job that failed during it is removed too
-    const caches = this._modules
-    await caches.sweep()
-    if (!roots.size) return result
+    const caches = this._modules;
+    await caches.sweep();
+    if (!roots.size) return result;
 
     // also when the roots match no loaded module, e.g. a changed manifest
-    const removed = invalidateResolution(roots)
+    const removed = invalidateResolution(roots);
 
-    const matched = this._match(roots)
-    const changed = new Set<string>()
-    for (const url of new Set([...matched, ...await this._moved(roots, matched, removed)])) {
+    const matched = this._match(roots);
+    const changed = new Set<string>();
+    for (const url of new Set([...matched, ...(await this._moved(roots, matched, removed))])) {
       if (this.hostModules.has(url)) {
-        result.skipped.push({ urls: [url], reason: Hmr.SkipReason.HostModule })
+        result.skipped.push({ urls: [url], reason: Hmr.SkipReason.HostModule });
       } else if (isNativeAddon(url)) {
-        result.skipped.push({ urls: [url], reason: Hmr.SkipReason.NativeAddon })
+        result.skipped.push({ urls: [url], reason: Hmr.SkipReason.NativeAddon });
       } else {
-        changed.add(url)
+        changed.add(url);
       }
     }
-    if (!changed.size) return result
+    if (!changed.size) return result;
 
-    const { accepted, declined, edges } = await this._analyze(changed)
-    const oldEdges = (url: string) => edges.get(url) ?? []
+    const { accepted, declined, edges } = await this._analyze(changed);
+    const oldEdges = (url: string) => edges.get(url) ?? [];
 
     // A component may be exported by several modules, e.g. an entry module that
     // re-exports its implementation. All of them are imported again together.
-    const exporters = new Map<Component.Runtime, Map<string, Component>>()
+    const exporters = new Map<Component.Runtime, Map<string, Component>>();
     for (const [url, component] of this._discover(declined)) {
-      const runtime = this.ctx.registry.get(component)!
-      let exported = exporters.get(runtime)
-      if (!exported) exporters.set(runtime, exported = new Map())
-      exported.set(url, component)
+      const runtime = this.ctx.registry.get(component)!;
+      let exported = exporters.get(runtime);
+      if (!exported) exporters.set(runtime, (exported = new Map()));
+      exported.set(url, component);
     }
 
     // The closure of a component consists of its modules and the accepted modules
     // they reach through accepted modules. It includes the modules of another
     // component, so that a component importing another one shares its unit.
-    const staleComponents: StaleComponent[] = []
-    const evicted = new Set(accepted)
-    const owned = new Set<string>()
+    const staleComponents: StaleComponent[] = [];
+    const evicted = new Set(accepted);
+    const owned = new Set<string>();
     for (const exported of exporters.values()) {
-      const urls = [...exported.keys()]
-      const own = new Set(urls)
-      const stop = (url: string) => declined.has(url) && !own.has(url)
-      const closures = new Map<string, Set<string>>()
+      const urls = [...exported.keys()];
+      const own = new Set(urls);
+      const stop = (url: string) => declined.has(url) && !own.has(url);
+      const closures = new Map<string, Set<string>>();
       for (const url of urls) {
-        closures.set(url, await closure([url], oldEdges, stop))
+        closures.set(url, await closure([url], oldEdges, stop));
       }
-      const modules = new Set([...closures.values()].flatMap(closure => [...closure]))
-      if (![...modules].some(url => accepted.has(url))) continue
+      const modules = new Set([...closures.values()].flatMap((closure) => [...closure]));
+      if (![...modules].some((url) => accepted.has(url))) continue;
       for (const url of modules) {
-        evicted.add(url)
-        owned.add(url)
+        evicted.add(url);
+        owned.add(url);
       }
 
       // The replacement is taken from a module that no other module of the
       // component imports. Stage 1 imports the other such modules too and checks
       // that they export the same component.
-      const outermost = urls.filter(url => !urls.some(other => other !== url && closures.get(other)!.has(url)))
-      const url = outermost[0] ?? urls[0]
+      const outermost = urls.filter(
+        (url) => !urls.some((other) => other !== url && closures.get(other)!.has(url)),
+      );
+      const url = outermost[0] ?? urls[0];
       staleComponents.push({
         url,
         component: exported.get(url)!,
         urls,
         entries: outermost.length ? outermost : [url],
         modules,
-      })
+      });
     }
 
     for (const url of changed) {
-      if (!owned.has(url)) this.ctx.logger.debug('evict %C (no dependent component)', this._relative(url))
+      if (!owned.has(url))
+        this.ctx.logger.debug("evict %C (no dependent component)", this._relative(url));
     }
 
-    const backup = caches.evict(evicted)
+    const backup = caches.evict(evicted);
 
     // Stage 1: import the new modules of every stale component. Only the caches
     // have changed so far, and restoring them undoes a failure:
@@ -613,81 +648,87 @@ class Hmr extends Service {
     //   rollback;
     // - no cache entry is restored before every component has been imported, so
     //   that no new module links against an evicted one.
-    const retained = caches.urls()
-    const attempts: ImportAttempt[] = []
+    const retained = caches.urls();
+    const attempts: ImportAttempt[] = [];
     for (const stale of staleComponents) {
-      const before = caches.urls()
-      const attempt: ImportAttempt = { stale, imported: [], loaded: [], failed: false }
+      const before = caches.urls();
+      const attempt: ImportAttempt = { stale, imported: [], loaded: [], failed: false };
       // The new module is recorded before it is imported, so that the new
       // module graph is taken from it also when the import fails.
       const load = async (url: string) => {
-        const { url: target, source } = this._locate(url, removed, evicted)
-        attempt.imported.push(target)
+        const { url: target, source } = this._locate(url, removed, evicted);
+        attempt.imported.push(target);
         // through the request, which records it in the resolve cache again
-        return unwrapExports(await (source
-          ? this._loader.import(source.specifier, source.parentURL, source.attributes)
-          : this._loader.import(url, import.meta.url, {})))
-      }
+        return unwrapExports(
+          await (source
+            ? this._loader.import(source.specifier, source.parentURL, source.attributes)
+            : this._loader.import(url, import.meta.url, {})),
+        );
+      };
       try {
         // Import the other entries of the component too, so that their failures
         // abort its unit as well. A module that another entry imports is
         // imported through it, also when it has moved.
-        const others: unknown[] = []
+        const others: unknown[] = [];
         for (const url of stale.entries) {
-          if (url !== stale.url) others.push(await load(url))
+          if (url !== stale.url) others.push(await load(url));
         }
-        const exports = await load(stale.url)
+        const exports = await load(stale.url);
         if (!this.ctx.registry.resolve(exports)) {
-          throw new Error(`invalid component at ${this._relative(stale.url)}, `
-            + `expect function or object with an "apply" method, received ${typeof exports}`)
+          throw new Error(
+            `invalid component at ${this._relative(stale.url)}, ` +
+              `expect function or object with an "apply" method, received ${typeof exports}`,
+          );
         }
-        if (others.some(other => other !== exports)) {
-          throw new SkipError(Hmr.SkipReason.AmbiguousExport)
+        if (others.some((other) => other !== exports)) {
+          throw new SkipError(Hmr.SkipReason.AmbiguousExport);
         }
-        attempt.replacement = exports
+        attempt.replacement = exports;
       } catch (error) {
         if (error instanceof SkipError) {
-          attempt.skip = error.reason
+          attempt.skip = error.reason;
         } else {
-          handleError(this.ctx, error)
-          attempt.failed = true
-          attempt.error = error
+          handleError(this.ctx, error);
+          attempt.failed = true;
+          attempt.error = error;
         }
       }
       for (const url of caches.urls()) {
-        if (!before.has(url) && !evicted.has(url)) attempt.loaded.push(url)
+        if (!before.has(url) && !evicted.has(url)) attempt.loaded.push(url);
       }
-      attempts.push(attempt)
+      attempts.push(attempt);
     }
 
     // The new module graph is read once, before any cache entry is restored.
-    const newGraph = new Map<string, Promise<Set<string>>>()
+    const newGraph = new Map<string, Promise<Set<string>>>();
     const newEdges = (url: string) => {
-      let edges = newGraph.get(url)
-      if (!edges) newGraph.set(url, edges = caches.edges(url))
-      return edges
-    }
+      let edges = newGraph.get(url);
+      if (!edges) newGraph.set(url, (edges = caches.edges(url)));
+      return edges;
+    };
 
     // A unit is aborted if an attempt failed, and otherwise skipped if an
     // attempt cannot be applied in place. Both are kept: their modules are
     // restored alike.
-    const units = await this._partition(attempts, evicted, newEdges, retained)
-    const aborted = units.filter(unit => unit.attempts.some(attempt => attempt.failed))
-    const skipped = units.filter(unit => !aborted.includes(unit) && unit.attempts.some(attempt => attempt.skip))
-    const committed = units.filter(unit => !aborted.includes(unit) && !skipped.includes(unit))
-    const kept = [...aborted, ...skipped]
+    const units = await this._partition(attempts, evicted, newEdges, retained);
+    const aborted = units.filter((unit) => unit.attempts.some((attempt) => attempt.failed));
+    const skipped = units.filter(
+      (unit) => !aborted.includes(unit) && unit.attempts.some((attempt) => attempt.skip),
+    );
+    const committed = units.filter((unit) => !aborted.includes(unit) && !skipped.includes(unit));
+    const kept = [...aborted, ...skipped];
 
     // An evicted module outside every unit is restored with the kept units it
     // reaches in the old module graph, so that it links against the modules
     // they restore. If it also reaches a committed unit, neither version is
     // consistent with the caches, and it is left evicted.
-    const unowned = new Set(evicted)
-    for (const unit of units) unit.modules.forEach(url => unowned.delete(url))
+    const unowned = new Set(evicted);
+    for (const unit of units) unit.modules.forEach((url) => unowned.delete(url));
     for (const url of unowned) {
-      const reached = await closure([url], oldEdges, url => !evicted.has(url))
-      const overlaps = (unit: ReconcileUnit) => [...unit.modules].some(url => reached.has(url))
-      if (committed.some(overlaps)) continue
-      for (const unit of kept.filter(overlaps)) unit.modules.add(url)
+      const reached = await closure([url], oldEdges, (url) => !evicted.has(url));
+      const overlaps = (unit: ReconcileUnit) => [...unit.modules].some((url) => reached.has(url));
+      if (committed.some(overlaps)) continue;
+      for (const unit of kept.filter(overlaps)) unit.modules.add(url);
     }
 
     // A module first loaded in stage 1:
@@ -696,48 +737,54 @@ class Hmr extends Service {
     // - is kept otherwise, also if a kept unit loaded it, so that a committed
     //   unit that imported it shares its instance with later imports.
     // A job of it that failed is removed by the sweep of the next transaction.
-    const restored = new Set(kept.flatMap(unit => [...unit.modules]))
-    for (const url of attempts.flatMap(attempt => attempt.loaded)) {
-      const reached = await closure([url], newEdges, url => retained.has(url))
-      if ([...reached].some(url => restored.has(url))) caches.evict([url])
+    const restored = new Set(kept.flatMap((unit) => [...unit.modules]));
+    for (const url of attempts.flatMap((attempt) => attempt.loaded)) {
+      const reached = await closure([url], newEdges, (url) => retained.has(url));
+      if ([...reached].some((url) => restored.has(url))) caches.evict([url]);
     }
-    backup.restore(restored)
+    backup.restore(restored);
     // The resolutions to and from the restored modules are restored too, so
     // that the resolve cache records the requests that loaded them, e.g. the
     // import of a component entry. A replaced parent resolves its imports again
     // by itself.
-    const replaced = new Set([...evicted].filter(url => !restored.has(url)))
-    restoreResolutions(removed.filter(({ parentURL, url }) => {
-      return (restored.has(url) || restored.has(parentURL)) && !replaced.has(url) && !replaced.has(parentURL)
-    }))
+    const replaced = new Set([...evicted].filter((url) => !restored.has(url)));
+    restoreResolutions(
+      removed.filter(({ parentURL, url }) => {
+        return (
+          (restored.has(url) || restored.has(parentURL)) &&
+          !replaced.has(url) &&
+          !replaced.has(parentURL)
+        );
+      }),
+    );
 
     for (const unit of aborted) {
-      const failure = unit.attempts.find(attempt => attempt.failed)!
-      result.aborted.push({ urls: [...unit.modules], error: failure.error })
+      const failure = unit.attempts.find((attempt) => attempt.failed)!;
+      result.aborted.push({ urls: [...unit.modules], error: failure.error });
     }
     for (const unit of skipped) {
-      const skip = unit.attempts.find(attempt => attempt.skip)!
-      result.skipped.push({ urls: [...unit.modules], reason: skip.skip! })
+      const skip = unit.attempts.find((attempt) => attempt.skip)!;
+      result.skipped.push({ urls: [...unit.modules], reason: skip.skip! });
     }
 
     // Stage 2: replace the components in place (synchronous).
     // A component may have been disposed while stage 1 was importing, in which
     // case the replacement only forwards a later registration of it.
     // Waiting is left to stage 3, so that no component is delayed behind another.
-    const fibers: Fiber[] = []
-    const applied = new Set(committed.flatMap(unit => unit.attempts))
+    const fibers: Fiber[] = [];
+    const applied = new Set(committed.flatMap((unit) => unit.attempts));
     for (const attempt of attempts) {
-      if (!applied.has(attempt)) continue
-      const { url, component } = attempt.stale
-      const path = this._relative(url)
+      if (!applied.has(attempt)) continue;
+      const { url, component } = attempt.stale;
+      const path = this._relative(url);
       try {
-        const replaced = this.ctx.registry.replace(component, attempt.replacement!)
-        if (!replaced.length) continue
-        this.ctx.logger.info('reload component at %C', path)
-        fibers.push(...replaced)
+        const replaced = this.ctx.registry.replace(component, attempt.replacement!);
+        if (!replaced.length) continue;
+        this.ctx.logger.info("reload component at %C", path);
+        fibers.push(...replaced);
       } catch (error) {
-        this.ctx.logger.warn('failed to reload component at %C', path)
-        this.ctx.logger.warn(error)
+        this.ctx.logger.warn("failed to reload component at %C", path);
+        this.ctx.logger.warn(error);
       }
     }
 
@@ -745,38 +792,49 @@ class Hmr extends Service {
     // No rollback: a component that fails to apply is left FAILED, exactly as it
     // would be on a cold start, and has already been logged by its fiber. It
     // keeps its parent and config, so the next change to the file retries it.
-    await Promise.all(fibers.map(fiber => fiber.await().catch(() => {})))
+    await Promise.all(fibers.map((fiber) => fiber.await().catch(() => {})));
     // a fiber below another restarted fiber may have been disposed by it
-    result.settled = fibers.filter(fiber => fiber.uid !== null)
+    result.settled = fibers.filter((fiber) => fiber.uid !== null);
 
-    return result
+    return result;
   }
 }
 
 namespace Hmr {
   export interface WatchConfig {
-    enabled: boolean
-    files: string[]
-    debounce: number
+    enabled: boolean;
+    files: string[];
+    debounce: number;
   }
 
   export interface Config {
-    base?: string
-    watch: WatchConfig
+    base?: string;
+    watch: WatchConfig;
   }
 
   export const Config: z<Config> = z.object({
-    base: z.string().description('The base directory. Defaults to `ctx.baseUrl`.'),
-    watch: z.object({
-      enabled: z.boolean().default(false).description('Reload on file changes. Requires the `fs` service.'),
-      files: z.array(String).role('table').default([
-        '.',
-        '!**/node_modules',
-        '!**/.*',
-      ]).description('Files to watch, in glob patterns relative to `base`, as `filter` of `ctx.fs.watch()`.'),
-      debounce: z.natural().role('ms').default(100).description('Debounce changes before reloading, in milliseconds.'),
-    }).description('Watch'),
-  })
+    base: z.string().description("The base directory. Defaults to `ctx.baseUrl`."),
+    watch: z
+      .object({
+        enabled: z
+          .boolean()
+          .default(false)
+          .description("Reload on file changes. Requires the `fs` service."),
+        files: z
+          .array(String)
+          .role("table")
+          .default([".", "!**/node_modules", "!**/.*"])
+          .description(
+            "Files to watch, in glob patterns relative to `base`, as `filter` of `ctx.fs.watch()`.",
+          ),
+        debounce: z
+          .natural()
+          .role("ms")
+          .default(100)
+          .description("Debounce changes before reloading, in milliseconds."),
+      })
+      .description("Watch"),
+  });
 
   /**
    * The running state is brought in line with the changes, as far as they can
@@ -784,11 +842,11 @@ namespace Hmr {
    */
   export interface Result {
     /** the replaced fibers; a fiber whose new component fails to apply is left `FAILED` */
-    settled: Fiber[]
+    settled: Fiber[];
     /** the units whose new modules fail to import; a later transaction retries them */
-    aborted: Abort[]
+    aborted: Abort[];
     /** the changes that cannot be applied in place; a restart applies them */
-    skipped: Skip[]
+    skipped: Skip[];
   }
 
   /**
@@ -801,9 +859,9 @@ namespace Hmr {
    */
   export interface Abort {
     /** the evicted modules of the unit, whose cache entries are restored */
-    urls: string[]
+    urls: string[];
     /** the first error raised while importing the unit */
-    error: unknown
+    error: unknown;
   }
 
   /**
@@ -812,28 +870,28 @@ namespace Hmr {
    */
   export interface Skip {
     /** the changed module, or the evicted modules of the unit */
-    urls: string[]
-    reason: SkipReason
+    urls: string[];
+    reason: SkipReason;
   }
 
   /** Why a change cannot be applied in place. */
   export const enum SkipReason {
     /** The module is reached statically from the main entry point, which runs once. */
-    HostModule = 'host-module',
+    HostModule = "host-module",
     /** The module is a native addon, which a process cannot load again. */
-    NativeAddon = 'native-addon',
+    NativeAddon = "native-addon",
     /**
      * The imports that resolved to a component module now resolve to different
      * modules, e.g. after only one of two links to a package is retargeted.
      * A fiber does not record which import it comes from.
      */
-    AmbiguousImport = 'ambiguous-import',
+    AmbiguousImport = "ambiguous-import",
     /**
      * The modules that exported one component now export different values. A
      * fiber does not record which module it comes from.
      */
-    AmbiguousExport = 'ambiguous-export',
+    AmbiguousExport = "ambiguous-export",
   }
 }
 
-export default Hmr
+export default Hmr;

@@ -103,10 +103,10 @@ result-*
 
 ## Javascript and typescript
 build/
-*.tsbuildinfo
 .next/
 .nuxt/
 .docusaurus/
+.eslintcache
 .cache/
 .parcel-cache/
 pnpm-debug.log*

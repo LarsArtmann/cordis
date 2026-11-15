@@ -51,6 +51,6 @@
   "dependencies": {
     "chokidar": "^4.0.3",
     "cosmokit": "^1.8.1",
-    "picomatch": "^4.0.3"
+    "picomatch": "^4.0.7"
   }
 }

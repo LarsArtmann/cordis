@@ -1,474 +1,491 @@
-import { Context, FiberState, Service, ValidationError } from '../src/index.ts'
-import { expect, describe, it, vi } from 'vitest'
-import { mock } from 'node:test'
-import { event, sleep, withTimers } from './utils.ts'
+import { Context, FiberState, Service, ValidationError } from "../src/index.ts";
+import { expect, describe, it, vi } from "vitest";
+import { mock } from "node:test";
+import { event, sleep, withTimers } from "./utils.ts";
 
-describe('Fiber', () => {
-  it('inertia lock 1', withTimers(async (root) => {
-    const dispose = root.provide('foo', 1)
-    const fiber = root.inject(['foo'], async () => {
-      await sleep(1000)
-      return () => sleep(1000)
-    })
-    await vi.advanceTimersByTimeAsync(400) // 400
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    dispose()
-    await vi.advanceTimersByTimeAsync(400) // 800
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    await vi.advanceTimersByTimeAsync(400) // 1200
-    expect(fiber.state).to.equal(FiberState.UNLOADING)
-    root.provide('foo', 1)
-    await vi.advanceTimersByTimeAsync(1000) // 2200
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    await vi.advanceTimersByTimeAsync(1000) // 3200
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-  }))
+describe("Fiber", () => {
+  it(
+    "inertia lock 1",
+    withTimers(async (root) => {
+      const dispose = root.provide("foo", 1);
+      const fiber = root.inject(["foo"], async () => {
+        await sleep(1000);
+        return () => sleep(1000);
+      });
+      await vi.advanceTimersByTimeAsync(400); // 400
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      dispose();
+      await vi.advanceTimersByTimeAsync(400); // 800
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      await vi.advanceTimersByTimeAsync(400); // 1200
+      expect(fiber.state).to.equal(FiberState.UNLOADING);
+      root.provide("foo", 1);
+      await vi.advanceTimersByTimeAsync(1000); // 2200
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      await vi.advanceTimersByTimeAsync(1000); // 3200
+      expect(fiber.state).to.equal(FiberState.ACTIVE);
+    }),
+  );
 
-  it('inertia lock 2', withTimers(async (root) => {
-    const dispose = root.provide('foo', 1)
-    const fiber = root.inject(['foo'], async () => {
-      await sleep(1000)
-      return () => sleep(1000)
-    })
-    await vi.advanceTimersByTimeAsync(400) // 400
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    dispose()
-    await vi.advanceTimersByTimeAsync(400) // 800
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    root.provide('foo', 2)
-    await vi.advanceTimersByTimeAsync(400) // 1200
-    // A new binding from the same provider still supersedes the old load.
-    expect(fiber.state).to.equal(FiberState.UNLOADING)
-    await vi.advanceTimersByTimeAsync(1000) // 2200
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    await vi.advanceTimersByTimeAsync(1000) // 3200
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-    expect(fiber.ctx.foo).to.equal(2)
-  }))
+  it(
+    "inertia lock 2",
+    withTimers(async (root) => {
+      const dispose = root.provide("foo", 1);
+      const fiber = root.inject(["foo"], async () => {
+        await sleep(1000);
+        return () => sleep(1000);
+      });
+      await vi.advanceTimersByTimeAsync(400); // 400
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      dispose();
+      await vi.advanceTimersByTimeAsync(400); // 800
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      root.provide("foo", 2);
+      await vi.advanceTimersByTimeAsync(400); // 1200
+      // A new binding from the same provider still supersedes the old load.
+      expect(fiber.state).to.equal(FiberState.UNLOADING);
+      await vi.advanceTimersByTimeAsync(1000); // 2200
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      await vi.advanceTimersByTimeAsync(1000); // 3200
+      expect(fiber.state).to.equal(FiberState.ACTIVE);
+      expect(fiber.ctx.foo).to.equal(2);
+    }),
+  );
 
-  it('inertia lock 3', withTimers(async (root) => {
-    class Foo extends Service {
-      constructor(ctx: Context) {
-        super(ctx, 'foo')
+  it(
+    "inertia lock 3",
+    withTimers(async (root) => {
+      class Foo extends Service {
+        constructor(ctx: Context) {
+          super(ctx, "foo");
+        }
       }
-    }
-    const provider = await root.use(Foo)
-    const fiber = root.inject(['foo'], async () => {
-      await sleep(1000)
-      return () => sleep(1000)
-    })
-    await vi.advanceTimersByTimeAsync(400) // 400
-    expect(fiber.state).to.equal(FiberState.LOADING)
-    await vi.runAllTimersAsync() // 1000
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-    await Promise.all([
-      provider.dispose(),
-      vi.runAllTimersAsync(), // 2000
-    ])
-    expect(fiber.state).to.equal(FiberState.PENDING)
-  }))
+      const provider = await root.use(Foo);
+      const fiber = root.inject(["foo"], async () => {
+        await sleep(1000);
+        return () => sleep(1000);
+      });
+      await vi.advanceTimersByTimeAsync(400); // 400
+      expect(fiber.state).to.equal(FiberState.LOADING);
+      await vi.runAllTimersAsync(); // 1000
+      expect(fiber.state).to.equal(FiberState.ACTIVE);
+      await Promise.all([
+        provider.dispose(),
+        vi.runAllTimersAsync(), // 2000
+      ]);
+      expect(fiber.state).to.equal(FiberState.PENDING);
+    }),
+  );
 
-  it('component error', async () => {
-    const root = new Context()
-    const callback = mock.fn()
-    const error = mock.fn()
-    ;(root.logger as any).error = error
+  it("component error", async () => {
+    const root = new Context();
+    const callback = mock.fn();
+    const error = mock.fn();
+    (root.logger as any).error = error;
     const apply = mock.fn((ctx: Context, config: { foo?: boolean } | undefined) => {
-      ctx.on(event, callback)
-      if (!config?.foo) throw new Error('component error')
-    })
+      ctx.on(event, callback);
+      if (!config?.foo) throw new Error("component error");
+    });
 
-    const fiber1 = root.use(apply)
-    const fiber2 = root.use(apply, { foo: true })
-    await sleep()
-    expect(fiber1.state).to.equal(FiberState.FAILED)
-    expect(fiber2.state).to.equal(FiberState.ACTIVE)
+    const fiber1 = root.use(apply);
+    const fiber2 = root.use(apply, { foo: true });
+    await sleep();
+    expect(fiber1.state).to.equal(FiberState.FAILED);
+    expect(fiber2.state).to.equal(FiberState.ACTIVE);
     // expect(apply.mock.calls).to.have.length(2)
-    expect(error.mock.calls).to.have.length(1)
+    expect(error.mock.calls).to.have.length(1);
 
-    root.emit(event)
-    expect(callback.mock.calls).to.have.length(1)
-  })
+    root.emit(event);
+    expect(callback.mock.calls).to.have.length(1);
+  });
 
-  it('failed fiber does not re-enter on dependency refresh', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const apply = mock.fn(() => { throw new Error('boom') })
-    const dispose = root.provide('foo', 1)
-    const fiber = root.inject(['foo'], apply)
-    await sleep()
-    expect(fiber.state).to.equal(FiberState.FAILED)
-    await dispose()
-    root.provide('foo', 2)
-    await sleep()
-    expect(apply.mock.calls).to.have.length(1)
-    expect(fiber.state).to.equal(FiberState.FAILED)
-  })
+  it("failed fiber does not re-enter on dependency refresh", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const apply = mock.fn(() => {
+      throw new Error("boom");
+    });
+    const dispose = root.provide("foo", 1);
+    const fiber = root.inject(["foo"], apply);
+    await sleep();
+    expect(fiber.state).to.equal(FiberState.FAILED);
+    await dispose();
+    root.provide("foo", 2);
+    await sleep();
+    expect(apply.mock.calls).to.have.length(1);
+    expect(fiber.state).to.equal(FiberState.FAILED);
+  });
 
-  it('update recovers a failed fiber', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const apply = mock.fn((): void => { throw new Error('boom') })
-    root.provide('foo', 1)
-    const fiber = root.inject(['foo'], apply)
-    await sleep()
-    expect(fiber.state).to.equal(FiberState.FAILED)
-    apply.mock.mockImplementationOnce(() => {})
-    await fiber.update(undefined)
-    expect(apply.mock.calls).to.have.length(2)
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-  })
+  it("update recovers a failed fiber", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const apply = mock.fn((): void => {
+      throw new Error("boom");
+    });
+    root.provide("foo", 1);
+    const fiber = root.inject(["foo"], apply);
+    await sleep();
+    expect(fiber.state).to.equal(FiberState.FAILED);
+    apply.mock.mockImplementationOnce(() => {});
+    await fiber.update(undefined);
+    expect(apply.mock.calls).to.have.length(2);
+    expect(fiber.state).to.equal(FiberState.ACTIVE);
+  });
 
-  it('update waits for asynchronous recovery', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const { promise, resolve } = Promise.withResolvers<void>()
-    const fiber = root.use(async (_ctx: Context, config: { fixed: boolean }) => {
-      if (!config.fixed) throw new Error('boom')
-      await promise
-    }, { fixed: false })
-    await expect(fiber.await()).rejects.toThrow('boom')
+  it("update waits for asynchronous recovery", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const fiber = root.use(
+      async (_ctx: Context, config: { fixed: boolean }) => {
+        if (!config.fixed) throw new Error("boom");
+        await promise;
+      },
+      { fixed: false },
+    );
+    await expect(fiber.await()).rejects.toThrow("boom");
 
-    const settled = mock.fn()
-    const task = Promise.resolve(fiber.update({ fixed: true })).then(settled)
+    const settled = mock.fn();
+    const task = Promise.resolve(fiber.update({ fixed: true })).then(settled);
     try {
-      await sleep()
-      expect(settled.mock.calls).to.have.length(0)
+      await sleep();
+      expect(settled.mock.calls).to.have.length(0);
     } finally {
-      resolve()
-      await task
+      resolve();
+      await task;
     }
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-  })
+    expect(fiber.state).to.equal(FiberState.ACTIVE);
+  });
 
-  it('update surfaces a failed recovery to its caller', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const fiber = root.use((_ctx: Context, config: { message: string }) => {
-      throw new Error(config.message)
-    }, { message: 'initial failure' })
-    await expect(fiber.await()).rejects.toThrow('initial failure')
+  it("update surfaces a failed recovery to its caller", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const fiber = root.use(
+      (_ctx: Context, config: { message: string }) => {
+        throw new Error(config.message);
+      },
+      { message: "initial failure" },
+    );
+    await expect(fiber.await()).rejects.toThrow("initial failure");
 
-    await expect(fiber.update({ message: 'retry failure' })).rejects.toThrow('retry failure')
-    expect(fiber.state).to.equal(FiberState.FAILED)
-  })
+    await expect(fiber.update({ message: "retry failure" })).rejects.toThrow("retry failure");
+    expect(fiber.state).to.equal(FiberState.FAILED);
+  });
 
-  it('update surfaces a failed reload to its caller', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const apply = mock.fn(() => {})
-    const fiber = root.use(apply)
-    await fiber
+  it("update surfaces a failed reload to its caller", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const apply = mock.fn(() => {});
+    const fiber = root.use(apply);
+    await fiber;
     apply.mock.mockImplementationOnce(() => {
-      throw new Error('boom')
-    })
-    await expect(fiber.update({})).rejects.toThrow('boom')
-    expect(fiber.state).to.equal(FiberState.FAILED)
-  })
+      throw new Error("boom");
+    });
+    await expect(fiber.update({})).rejects.toThrow("boom");
+    expect(fiber.state).to.equal(FiberState.FAILED);
+  });
 
   // the fiber reports the failure itself, so a caller that never asks for the
   // result must not be punished with an unhandled rejection
-  it('update does not leak a dropped failure', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const apply = mock.fn(() => {})
-    const fiber = root.use(apply)
-    await fiber
+  it("update does not leak a dropped failure", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const apply = mock.fn(() => {});
+    const fiber = root.use(apply);
+    await fiber;
     apply.mock.mockImplementationOnce(() => {
-      throw new Error('boom')
-    })
-    fiber.update({})
-    await sleep()
-    expect(fiber.state).to.equal(FiberState.FAILED)
-  })
+      throw new Error("boom");
+    });
+    fiber.update({});
+    await sleep();
+    expect(fiber.state).to.equal(FiberState.FAILED);
+  });
 
-  it('dispose error', async () => {
-    const root = new Context()
-    const error = mock.fn()
-    ;(root.logger as any).error = error
+  it("dispose error", async () => {
+    const root = new Context();
+    const error = mock.fn();
+    (root.logger as any).error = error;
     const dispose = mock.fn(() => {
-      throw new Error('test')
-    })
+      throw new Error("test");
+    });
     const component = (ctx: Context) => {
-      return dispose
-    }
+      return dispose;
+    };
 
-    const fiber = await root.use(component)
-    expect(dispose.mock.calls).to.have.length(0)
-    await expect(fiber.dispose()).resolves.toBeUndefined()
-    await sleep()
-    expect(dispose.mock.calls).to.have.length(1)
-    expect(error.mock.calls).to.have.length(1)
-  })
+    const fiber = await root.use(component);
+    expect(dispose.mock.calls).to.have.length(0);
+    await expect(fiber.dispose()).resolves.toBeUndefined();
+    await sleep();
+    expect(dispose.mock.calls).to.have.length(1);
+    expect(error.mock.calls).to.have.length(1);
+  });
 
-  it('settles a pending fiber to DISPOSED on dispose', async () => {
-    const root = new Context()
-    const fiber = root.inject(['never-provided'], () => {})
-    const target = Object.getPrototypeOf(fiber)
-    const transitions: [FiberState, FiberState][] = []
-    const off = root.on('internal/status', (current, oldState) => {
+  it("settles a pending fiber to DISPOSED on dispose", async () => {
+    const root = new Context();
+    const fiber = root.inject(["never-provided"], () => {});
+    const target = Object.getPrototypeOf(fiber);
+    const transitions: [FiberState, FiberState][] = [];
+    const off = root.on("internal/status", (current, oldState) => {
       if (current === target) {
-        transitions.push([oldState, current.state])
+        transitions.push([oldState, current.state]);
       }
-    })
+    });
 
     try {
-      expect(fiber.state).to.equal(FiberState.PENDING)
+      expect(fiber.state).to.equal(FiberState.PENDING);
 
-      await fiber.dispose()
+      await fiber.dispose();
 
-      expect(fiber.uid).to.equal(null)
-      expect(fiber.inertia).to.equal(undefined)
-      expect(fiber.state).to.equal(FiberState.DISPOSED)
-      expect(transitions).to.deep.equal([
-        [FiberState.PENDING, FiberState.DISPOSED],
-      ])
+      expect(fiber.uid).to.equal(null);
+      expect(fiber.inertia).to.equal(undefined);
+      expect(fiber.state).to.equal(FiberState.DISPOSED);
+      expect(transitions).to.deep.equal([[FiberState.PENDING, FiberState.DISPOSED]]);
     } finally {
-      off()
+      off();
     }
-  })
+  });
 
-  it('settles a failed fiber to DISPOSED on dispose', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
+  it("settles a failed fiber to DISPOSED on dispose", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
 
     const fiber = root.use(() => {
-      throw new Error('boom')
-    })
-    const target = Object.getPrototypeOf(fiber)
-    const transitions: [FiberState, FiberState][] = []
+      throw new Error("boom");
+    });
+    const target = Object.getPrototypeOf(fiber);
+    const transitions: [FiberState, FiberState][] = [];
 
-    await expect(fiber.await()).rejects.toThrow('boom')
-    expect(fiber.state).to.equal(FiberState.FAILED)
+    await expect(fiber.await()).rejects.toThrow("boom");
+    expect(fiber.state).to.equal(FiberState.FAILED);
 
-    const off = root.on('internal/status', (current, oldState) => {
+    const off = root.on("internal/status", (current, oldState) => {
       if (current === target) {
-        transitions.push([oldState, current.state])
+        transitions.push([oldState, current.state]);
       }
-    })
+    });
 
     try {
-      await fiber.dispose()
+      await fiber.dispose();
 
-      expect(fiber.uid).to.equal(null)
-      expect(fiber.inertia).to.equal(undefined)
-      expect(fiber.state).to.equal(FiberState.DISPOSED)
-      expect(transitions).to.deep.equal([
-        [FiberState.FAILED, FiberState.DISPOSED],
-      ])
+      expect(fiber.uid).to.equal(null);
+      expect(fiber.inertia).to.equal(undefined);
+      expect(fiber.state).to.equal(FiberState.DISPOSED);
+      expect(transitions).to.deep.equal([[FiberState.FAILED, FiberState.DISPOSED]]);
     } finally {
-      off()
+      off();
     }
-  })
+  });
 
-  it('keeps the active dispose sequence stable', async () => {
-    const root = new Context()
-    const fiber = root.use(() => {})
-    await fiber.await()
+  it("keeps the active dispose sequence stable", async () => {
+    const root = new Context();
+    const fiber = root.use(() => {});
+    await fiber.await();
 
-    const target = Object.getPrototypeOf(fiber)
-    const transitions: [FiberState, FiberState][] = []
-    const off = root.on('internal/status', (current, oldState) => {
+    const target = Object.getPrototypeOf(fiber);
+    const transitions: [FiberState, FiberState][] = [];
+    const off = root.on("internal/status", (current, oldState) => {
       if (current === target) {
-        transitions.push([oldState, current.state])
+        transitions.push([oldState, current.state]);
       }
-    })
+    });
 
     try {
-      await fiber.dispose()
+      await fiber.dispose();
 
-      expect(fiber.uid).to.equal(null)
-      expect(fiber.inertia).to.equal(undefined)
-      expect(fiber.state).to.equal(FiberState.DISPOSED)
+      expect(fiber.uid).to.equal(null);
+      expect(fiber.inertia).to.equal(undefined);
+      expect(fiber.state).to.equal(FiberState.DISPOSED);
       expect(transitions).to.deep.equal([
         [FiberState.ACTIVE, FiberState.UNLOADING],
         [FiberState.UNLOADING, FiberState.DISPOSED],
-      ])
+      ]);
     } finally {
-      off()
+      off();
     }
-  })
+  });
 
-  it('update config on wrapped fiber', async () => {
-    const root = new Context()
-    const callback = mock.fn()
+  it("update config on wrapped fiber", async () => {
+    const root = new Context();
+    const callback = mock.fn();
 
-    const fiber = root.use(callback, { msg: 'hello' })
-    await fiber
-    expect(callback.mock.calls).to.have.length(1)
-    expect(callback.mock.calls[0].arguments[1]).to.deep.equal({ msg: 'hello' })
+    const fiber = root.use(callback, { msg: "hello" });
+    await fiber;
+    expect(callback.mock.calls).to.have.length(1);
+    expect(callback.mock.calls[0].arguments[1]).to.deep.equal({ msg: "hello" });
 
-    fiber.update({ msg: 'world' })
-    await fiber
-    expect(callback.mock.calls).to.have.length(2)
-    expect(callback.mock.calls[1].arguments[1]).to.deep.equal({ msg: 'world' })
+    fiber.update({ msg: "world" });
+    await fiber;
+    expect(callback.mock.calls).to.have.length(2);
+    expect(callback.mock.calls[1].arguments[1]).to.deep.equal({ msg: "world" });
 
-    fiber.update({ msg: '!!!' })
-    await fiber
-    expect(callback.mock.calls).to.have.length(3)
-    expect(callback.mock.calls[2].arguments[1]).to.deep.equal({ msg: '!!!' })
-  })
+    fiber.update({ msg: "!!!" });
+    await fiber;
+    expect(callback.mock.calls).to.have.length(3);
+    expect(callback.mock.calls[2].arguments[1]).to.deep.equal({ msg: "!!!" });
+  });
 
-  it('restart wrapped fiber', async () => {
-    const root = new Context()
-    const callback = mock.fn()
-    const fiber = root.use(callback)
+  it("restart wrapped fiber", async () => {
+    const root = new Context();
+    const callback = mock.fn();
+    const fiber = root.use(callback);
 
-    await fiber
-    await fiber.restart()
+    await fiber;
+    await fiber.restart();
 
-    expect(callback.mock.calls).to.have.length(2)
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-    expect(Object.hasOwn(fiber, 'state')).to.equal(false)
-    expect(Object.hasOwn(fiber, 'inertia')).to.equal(false)
-  })
+    expect(callback.mock.calls).to.have.length(2);
+    expect(fiber.state).to.equal(FiberState.ACTIVE);
+    expect(Object.hasOwn(fiber, "state")).to.equal(false);
+    expect(Object.hasOwn(fiber, "inertia")).to.equal(false);
+  });
 
-  it('update config while injected service reloads', async () => {
-    const applied: [number, string][] = []
+  it("update config while injected service reloads", async () => {
+    const applied: [number, string][] = [];
 
     class Provider extends Service {
-      value: number
+      value: number;
 
       constructor(ctx: Context, config: { value: number }) {
-        super(ctx, 'provider')
-        this.value = config.value
+        super(ctx, "provider");
+        this.value = config.value;
       }
     }
 
     const Consumer = {
-      inject: ['provider'],
+      inject: ["provider"],
       apply(ctx: Context, config: { mode: string }) {
-        applied.push([(ctx as any).provider.value, config.mode])
+        applied.push([(ctx as any).provider.value, config.mode]);
       },
-    }
+    };
 
-    const root = new Context()
-    const provider = root.use(Provider, { value: 1 })
-    const consumer = root.use(Consumer, { mode: 'old' })
+    const root = new Context();
+    const provider = root.use(Provider, { value: 1 });
+    const consumer = root.use(Consumer, { mode: "old" });
 
-    await provider
-    await consumer
+    await provider;
+    await consumer;
 
-    provider.update({ value: 2 })
-    consumer.update({ mode: 'new' })
+    provider.update({ value: 2 });
+    consumer.update({ mode: "new" });
 
-    await Promise.all([provider.await(), consumer.await()])
+    await Promise.all([provider.await(), consumer.await()]);
 
-    const base = Object.getPrototypeOf(consumer)
+    const base = Object.getPrototypeOf(consumer);
     expect(applied).to.deep.equal([
-      [1, 'old'],
-      [2, 'new'],
-    ])
-    expect(consumer.config).to.equal(base.config)
-    expect(consumer.state).to.equal(base.state)
-    expect(consumer.state).to.equal(FiberState.ACTIVE)
-    expect(Object.hasOwn(consumer, 'config')).to.equal(false)
-    expect(Object.hasOwn(consumer, 'state')).to.equal(false)
-    expect(Object.hasOwn(consumer, 'inertia')).to.equal(false)
-  })
-})
+      [1, "old"],
+      [2, "new"],
+    ]);
+    expect(consumer.config).to.equal(base.config);
+    expect(consumer.state).to.equal(base.state);
+    expect(consumer.state).to.equal(FiberState.ACTIVE);
+    expect(Object.hasOwn(consumer, "config")).to.equal(false);
+    expect(Object.hasOwn(consumer, "state")).to.equal(false);
+    expect(Object.hasOwn(consumer, "inertia")).to.equal(false);
+  });
+});
 
 // config is resolved on every reload, so an invalid config can only be
 // detected up front while the dependencies are satisfied
-describe('Fiber: config validation', () => {
+describe("Fiber: config validation", () => {
   const Config: any = {
-    '~standard': {
+    "~standard": {
       version: 1,
-      vendor: 'test',
-      validate: (value: any) => value?.ok
-        ? { value: { ...value, resolved: true } }
-        : { issues: [{ message: 'not ok' }] },
+      vendor: "test",
+      validate: (value: any) =>
+        value?.ok ? { value: { ...value, resolved: true } } : { issues: [{ message: "not ok" }] },
     },
-  }
+  };
 
-  it('fail on first load', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const apply = mock.fn(() => {})
+  it("fail on first load", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const apply = mock.fn(() => {});
 
-    const fiber = root.use({ apply, Config }, { ok: false })
-    await sleep()
+    const fiber = root.use({ apply, Config }, { ok: false });
+    await sleep();
 
-    expect(apply.mock.calls).to.have.length(0)
-    expect(fiber.state).to.equal(FiberState.FAILED)
-  })
+    expect(apply.mock.calls).to.have.length(0);
+    expect(fiber.state).to.equal(FiberState.FAILED);
+  });
 
-  it('keep a running component on update', async () => {
-    const root = new Context()
-    ;(root.logger as any).error = mock.fn()
-    const apply = mock.fn(() => {})
+  it("keep a running component on update", async () => {
+    const root = new Context();
+    (root.logger as any).error = mock.fn();
+    const apply = mock.fn(() => {});
 
-    const fiber = root.use({ apply, Config }, { ok: true })
-    await fiber
-    expect(apply.mock.calls).to.have.length(1)
+    const fiber = root.use({ apply, Config }, { ok: true });
+    await fiber;
+    expect(apply.mock.calls).to.have.length(1);
 
-    expect(() => fiber.update({ ok: false })).toThrow('invalid config')
-    await sleep()
+    expect(() => fiber.update({ ok: false })).toThrow("invalid config");
+    await sleep();
 
-    expect(apply.mock.calls).to.have.length(1)
-    expect(fiber.state).to.equal(FiberState.ACTIVE)
-    expect(fiber.config).to.deep.equal({ ok: true })
-  })
+    expect(apply.mock.calls).to.have.length(1);
+    expect(fiber.state).to.equal(FiberState.ACTIVE);
+    expect(fiber.config).to.deep.equal({ ok: true });
+  });
 
-  it('keep the issues and their paths', () => {
+  it("keep the issues and their paths", () => {
     const issues = [
-      { message: 'not a number', path: [{ key: 'items' }, 0] },
-      { message: 'required', path: [] },
-    ]
-    const error = new ValidationError(issues)
-    expect(error.issues).to.equal(issues)
-    expect(ValidationError.is(error)).to.be.true
-    expect(ValidationError.is(new TypeError())).to.be.false
-    expect(error.message).to.equal('invalid config:\n  - not a number (at items.0)\n  - required')
-  })
+      { message: "not a number", path: [{ key: "items" }, 0] },
+      { message: "required", path: [] },
+    ];
+    const error = new ValidationError(issues);
+    expect(error.issues).to.equal(issues);
+    expect(ValidationError.is(error)).to.be.true;
+    expect(ValidationError.is(new TypeError())).to.be.false;
+    expect(error.message).to.equal("invalid config:\n  - not a number (at items.0)\n  - required");
+  });
 
   // listeners see what the component would see, while the fiber keeps the source
-  it('pass the resolved config to listeners', async () => {
-    const root = new Context()
-    const received: any[] = []
-    const applied: any[] = []
+  it("pass the resolved config to listeners", async () => {
+    const root = new Context();
+    const received: any[] = [];
+    const applied: any[] = [];
     const apply = mock.fn((ctx: Context, config: any) => {
-      applied.push(config)
-      ctx.on('internal/update', (config, next) => {
-        received.push(config)
-        return next()
-      })
-    })
+      applied.push(config);
+      ctx.on("internal/update", (config, next) => {
+        received.push(config);
+        return next();
+      });
+    });
 
-    const fiber = root.use({ apply, Config }, { ok: true })
-    await fiber
-    expect(applied).to.deep.equal([{ ok: true, resolved: true }])
+    const fiber = root.use({ apply, Config }, { ok: true });
+    await fiber;
+    expect(applied).to.deep.equal([{ ok: true, resolved: true }]);
 
-    await fiber.update({ ok: true, extra: 1 })
+    await fiber.update({ ok: true, extra: 1 });
 
-    expect(received).to.deep.equal([{ ok: true, extra: 1, resolved: true }])
-    expect(fiber.config).to.deep.equal({ ok: true, extra: 1 })
-  })
+    expect(received).to.deep.equal([{ ok: true, extra: 1, resolved: true }]);
+    expect(fiber.config).to.deep.equal({ ok: true, extra: 1 });
+  });
 
-  it('keep the source config when a listener handles the update', async () => {
-    const root = new Context()
-    const received: any[] = []
-    const applied: any[] = []
-    const fiber = await root.use({
-      Config,
-      apply(ctx: Context, config: any) {
-        applied.push(config)
-        ctx.on('internal/update', (config) => {
-          received.push(config)
-        })
+  it("keep the source config when a listener handles the update", async () => {
+    const root = new Context();
+    const received: any[] = [];
+    const applied: any[] = [];
+    const fiber = await root.use(
+      {
+        Config,
+        apply(ctx: Context, config: any) {
+          applied.push(config);
+          ctx.on("internal/update", (config) => {
+            received.push(config);
+          });
+        },
       },
-    }, { ok: true })
+      { ok: true },
+    );
 
-    const source = { ok: true, extra: 1 }
-    await fiber.update(source)
-    expect(received).to.deep.equal([{ ok: true, extra: 1, resolved: true }])
-    expect(applied).to.have.length(1)
-    expect(fiber.config).to.equal(source)
+    const source = { ok: true, extra: 1 };
+    await fiber.update(source);
+    expect(received).to.deep.equal([{ ok: true, extra: 1, resolved: true }]);
+    expect(applied).to.have.length(1);
+    expect(fiber.config).to.equal(source);
 
-    await fiber.restart()
+    await fiber.restart();
     expect(applied).to.deep.equal([
       { ok: true, resolved: true },
       { ok: true, extra: 1, resolved: true },
-    ])
-  })
-})
+    ]);
+  });
+});

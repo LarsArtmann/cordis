@@ -463,5 +463,5 @@ following READ → EXECUTE → VERIFY per item.
 
 ---
 
-*Report ends. Working tree uncommitted by standing instruction; all
-local gates green at report time.*
+_Report ends. Working tree uncommitted by standing instruction; all
+local gates green at report time._

@@ -1,118 +1,124 @@
-import { expect, describe, it } from 'vitest'
-import { Context, Service } from '../src/index.ts'
+import { expect, describe, it } from "vitest";
+import { Context, Service } from "../src/index.ts";
 
 interface Config {
-  a?: number
-  b?: number
-  c?: number
-  tags?: string[]
+  a?: number;
+  b?: number;
+  c?: number;
+  tags?: string[];
 }
 
 class Foo extends Service<Config> {
   constructor(ctx: Context) {
-    super(ctx, 'foo')
+    super(ctx, "foo");
   }
 
   config() {
-    return this[Service.resolveIntercept]()
+    return this[Service.resolveIntercept]();
   }
 }
 
 class Bar extends Service {
-  static inject = { foo: { a: 2 } }
+  static inject = { foo: { a: 2 } };
 
   constructor(ctx: Context) {
-    super(ctx, 'bar')
+    super(ctx, "bar");
   }
 
   config() {
-    return this.ctx.foo.config()
+    return this.ctx.foo.config();
   }
 }
 
-describe('Intercept', () => {
-  it('merge context intercepts from outer to inner', async () => {
-    const root = new Context()
-    await root.use(Foo)
-    expect(root.foo.config()).to.deep.equal({})
-    const ctx = root.intercept('foo', { a: 1, b: 1 }).intercept('foo', { b: 2 })
-    expect(ctx.foo.config()).to.deep.equal({ a: 1, b: 2 })
-  })
+describe("Intercept", () => {
+  it("merge context intercepts from outer to inner", async () => {
+    const root = new Context();
+    await root.use(Foo);
+    expect(root.foo.config()).to.deep.equal({});
+    const ctx = root.intercept("foo", { a: 1, b: 1 }).intercept("foo", { b: 2 });
+    expect(ctx.foo.config()).to.deep.equal({ a: 1, b: 2 });
+  });
 
-  it('merge injected config under context intercepts', async () => {
-    const root = new Context()
-    await root.use(Foo)
-    let config!: Config
-    await root.intercept('foo', { b: 2 }).inject({ foo: { a: 1, b: 1 } }, (ctx) => {
-      config = ctx.intercept('foo', { c: 3 }).foo.config()
-    })
-    expect(config).to.deep.equal({ a: 1, b: 2, c: 3 })
-  })
+  it("merge injected config under context intercepts", async () => {
+    const root = new Context();
+    await root.use(Foo);
+    let config!: Config;
+    await root.intercept("foo", { b: 2 }).inject({ foo: { a: 1, b: 1 } }, (ctx) => {
+      config = ctx.intercept("foo", { c: 3 }).foo.config();
+    });
+    expect(config).to.deep.equal({ a: 1, b: 2, c: 3 });
+  });
 
-  it('take injected config from the declaring fiber', async () => {
-    const root = new Context()
-    await root.use(Foo)
-    const configs: Config[] = []
+  it("take injected config from the declaring fiber", async () => {
+    const root = new Context();
+    await root.use(Foo);
+    const configs: Config[] = [];
     await root.inject({ foo: { a: 1 } }, async (ctx) => {
       // no declaration of its own, so the access is admitted by the outer fiber
       await ctx.use((ctx) => {
-        configs.push(ctx.foo.config())
-      })
+        configs.push(ctx.foo.config());
+      });
       // the nearest declaration wins, and the outer one is not merged in
       await ctx.inject({ foo: { b: 2 } }, (ctx) => {
-        configs.push(ctx.foo.config())
-      })
-    })
-    expect(configs).to.deep.equal([{ a: 1 }, { b: 2 }])
-  })
+        configs.push(ctx.foo.config());
+      });
+    });
+    expect(configs).to.deep.equal([{ a: 1 }, { b: 2 }]);
+  });
 
-  it('stop looking for injected config at an isolation boundary', async () => {
-    const root = new Context()
-    await root.use(Foo)
-    const label = Symbol('foo')
-    await root.isolate('foo', label).use(Foo)
-    let config!: Config
+  it("stop looking for injected config at an isolation boundary", async () => {
+    const root = new Context();
+    await root.use(Foo);
+    const label = Symbol("foo");
+    await root.isolate("foo", label).use(Foo);
+    let config!: Config;
     await root.inject({ foo: { a: 1 } }, async (ctx) => {
       await ctx.use((ctx) => {
-        config = ctx.isolate('foo', label).get('foo').config()
-      })
-    })
-    expect(config).to.deep.equal({})
-  })
+        config = ctx.isolate("foo", label).get("foo").config();
+      });
+    });
+    expect(config).to.deep.equal({});
+  });
 
-  it('take no injected config for own provisions', async () => {
-    const root = new Context()
-    await root.use(Foo)
-    let configs!: Config[]
+  it("take no injected config for own provisions", async () => {
+    const root = new Context();
+    await root.use(Foo);
+    let configs!: Config[];
     await root.inject({ foo: { a: 1 } }, (ctx) => {
-      const isolated = ctx.isolate('foo')
-      new Foo(isolated)
+      const isolated = ctx.isolate("foo");
+      new Foo(isolated);
       // the injected config belongs to the dependency, not to the service the fiber provides itself
-      configs = [ctx.foo.config(), isolated.foo.config(), isolated.intercept('foo', { b: 2 }).foo.config()]
-    })
-    expect(configs).to.deep.equal([{ a: 1 }, {}, { b: 2 }])
-  })
+      configs = [
+        ctx.foo.config(),
+        isolated.foo.config(),
+        isolated.intercept("foo", { b: 2 }).foo.config(),
+      ];
+    });
+    expect(configs).to.deep.equal([{ a: 1 }, {}, { b: 2 }]);
+  });
 
-  it('take injected config from the def site', async () => {
-    const root = new Context()
-    await root.use(Foo)
-    await root.use(Bar)
-    expect(root.intercept('foo', { b: 1 }).bar.config()).to.deep.equal({ a: 2, b: 1 })
-  })
+  it("take injected config from the def site", async () => {
+    const root = new Context();
+    await root.use(Foo);
+    await root.use(Bar);
+    expect(root.intercept("foo", { b: 1 }).bar.config()).to.deep.equal({ a: 2, b: 1 });
+  });
 
-  it('custom merge', async () => {
+  it("custom merge", async () => {
     class Tagged extends Foo {
       [Service.mergeIntercept](...configs: Config[]) {
-        return { tags: configs.flatMap(config => config.tags ?? []) }
+        return { tags: configs.flatMap((config) => config.tags ?? []) };
       }
     }
 
-    const root = new Context()
-    await root.use(Tagged)
-    let config!: Config
-    await root.intercept('foo', { tags: ['outer'] }).inject({ foo: { tags: ['inject'] } }, (ctx) => {
-      config = ctx.intercept('foo', { tags: ['inner'] }).foo.config()
-    })
-    expect(config).to.deep.equal({ tags: ['inject', 'outer', 'inner'] })
-  })
-})
+    const root = new Context();
+    await root.use(Tagged);
+    let config!: Config;
+    await root
+      .intercept("foo", { tags: ["outer"] })
+      .inject({ foo: { tags: ["inject"] } }, (ctx) => {
+        config = ctx.intercept("foo", { tags: ["inner"] }).foo.config();
+      });
+    expect(config).to.deep.equal({ tags: ["inject", "outer", "inner"] });
+  });
+});

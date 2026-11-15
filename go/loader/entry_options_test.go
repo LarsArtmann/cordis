@@ -16,6 +16,7 @@ import (
 // start time with a generic message.
 func TestUpdateRejectsUncomparableIsolateLabel(t *testing.T) {
 	rec := &recorder{}
+
 	tree := NewTree(cordis.New(), registerEcho(t, rec))
 	defer tree.Close()
 
@@ -33,7 +34,10 @@ func TestUpdateRejectsUncomparableIsolateLabel(t *testing.T) {
 		}
 	}
 
-	if err := tree.Replace("a", EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "hi"}, Isolate: map[string]any{"logger": 42}}); err != nil {
+	if err := tree.Replace(
+		"a",
+		EntryOptions{ID: "a", Name: "echo", Config: echoConf{Msg: "hi"}, Isolate: map[string]any{"logger": 42}},
+	); err != nil {
 		t.Fatalf("Replace with a comparable isolate label must succeed: %v", err)
 	}
 
@@ -103,9 +107,11 @@ func TestRecordErrorLastWriterWins(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
+
 	for _, fail := range []string{"boom1", "boom2"} {
 		go func(msg string) {
 			defer wg.Done()
+
 			if err := tree.SetConfig("a", flakyConf{Fail: msg}); err != nil {
 				t.Errorf("SetConfig(%q): %v", msg, err)
 			}

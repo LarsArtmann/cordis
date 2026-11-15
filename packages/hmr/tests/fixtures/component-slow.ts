@@ -1,25 +1,25 @@
-import { Context } from 'cordis'
-import { version } from './drain-dep.ts'
+import { Context } from "cordis";
+import { version } from "./drain-dep.ts";
 
-declare module 'cordis' {
+declare module "cordis" {
   interface Events {
-    'hmr-test/get-slow'(): string
+    "hmr-test/get-slow"(): string;
   }
 }
 
-const stats: any = ((globalThis as any).__hmrTest ??= {})
+const stats: any = ((globalThis as any).__hmrTest ??= {});
 
-export const name = 'component-slow'
+export const name = "component-slow";
 
 /** Models a component that owns an exclusive resource and releases it slowly. */
 export function apply(ctx: Context) {
-  if (stats.slowHeld) stats.slowOverlaps = (stats.slowOverlaps ?? 0) + 1
-  stats.slowHeld = true
-  ctx.on('hmr-test/get-slow', () => version)
+  if (stats.slowHeld) stats.slowOverlaps = (stats.slowOverlaps ?? 0) + 1;
+  stats.slowHeld = true;
+  ctx.on("hmr-test/get-slow", () => version);
   ctx.effect(() => async () => {
-    stats.slowDisposeStartedAt = Date.now()
-    await new Promise(resolve => setTimeout(resolve, 300))
-    stats.slowHeld = false
-    stats.slowReleasedAt = Date.now()
-  })
+    stats.slowDisposeStartedAt = Date.now();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    stats.slowHeld = false;
+    stats.slowReleasedAt = Date.now();
+  });
 }

@@ -305,10 +305,12 @@ func TestMidDispatchDisposalSkipsRemovedEmit(t *testing.T) {
 
 	mustOn(t, ctx, "test", func(args ...any) any {
 		victim()
+
 		return nil
 	})
 	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
 		victimCalled = true
+
 		return nil
 	})
 
@@ -328,10 +330,12 @@ func TestMidDispatchDisposalSkipsRemovedSerial(t *testing.T) {
 
 	mustOn(t, ctx, "test", func(args ...any) any {
 		victim()
+
 		return nil
 	})
 	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
 		victimCalled = true
+
 		return "victim"
 	})
 
@@ -353,10 +357,12 @@ func TestMidDispatchDisposalSkipsRemovedBail(t *testing.T) {
 
 	mustOn(t, ctx, "test", func(args ...any) any {
 		victim()
+
 		return "first"
 	})
 	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
 		victimCalled = true
+
 		return "victim"
 	})
 
@@ -393,10 +399,12 @@ func TestWaterfallContinuesPastRemovedListener(t *testing.T) {
 
 	mustOn(t, ctx, "test", func(args ...any) any {
 		victim()
+
 		return nextArg(t, args)()
 	})
 	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
 		victimCalled = true
+
 		return nil
 	})
 	mustOn(t, ctx, "test", func(args ...any) any {
@@ -429,10 +437,12 @@ func TestWaterfallAllListenersRemovedReachesTerminal(t *testing.T) {
 
 	mustOn(t, ctx, "test", func(args ...any) any {
 		victim()
+
 		return nextArg(t, args)()
 	})
 	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
 		victimCalled = true
+
 		return nil
 	})
 
@@ -455,6 +465,7 @@ func TestWaterfallDefersAddedListenersUntilNextDispatch(t *testing.T) {
 	mustOn(t, ctx, "test", func(args ...any) any {
 		mustOn(t, ctx, "test", func(args ...any) any {
 			lateCalled = true
+
 			return nil
 		})
 
@@ -490,16 +501,18 @@ func TestWaterfallDefersAddedListenersUntilNextDispatch(t *testing.T) {
 func TestMidDispatchDisposalParallel(t *testing.T) {
 	ctx := New()
 
-	var victimCalls int64
+	var victimCalls atomic.Int64
 
 	var victim Disposer
 
 	mustOn(t, ctx, "test", func(args ...any) any {
 		victim()
+
 		return nil
 	})
 	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
-		atomic.AddInt64(&victimCalls, 1)
+		victimCalls.Add(1)
+
 		return nil
 	})
 
@@ -507,7 +520,7 @@ func TestMidDispatchDisposalParallel(t *testing.T) {
 		t.Fatalf("unexpected joined error: %v", err)
 	}
 
-	if calls := atomic.LoadInt64(&victimCalls); calls > 1 {
+	if calls := victimCalls.Load(); calls > 1 {
 		t.Fatalf("victim listener ran %d times", calls)
 	}
 }

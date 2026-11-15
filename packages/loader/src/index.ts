@@ -1,169 +1,190 @@
-import { Context, Fiber, FiberState, Service, ValidationError } from 'cordis'
-import { defineProperty } from 'cosmokit'
-import { Entry } from './config/entry.ts'
-import { EntryGroup } from './config/group.ts'
-import { EntryChange, EntryTree } from './config/tree.ts'
-import { interpolate } from './config/utils.ts'
-import { getInternalLoader, unwrapExports } from './internal.ts'
+import { Context, Fiber, FiberState, Service, ValidationError } from "cordis";
+import { defineProperty } from "cosmokit";
+import { Entry } from "./config/entry.ts";
+import { EntryGroup } from "./config/group.ts";
+import { EntryChange, EntryTree } from "./config/tree.ts";
+import { interpolate } from "./config/utils.ts";
+import { getInternalLoader, unwrapExports } from "./internal.ts";
 
-export * from './config/entry.ts'
-export * from './config/group.ts'
-export * from './config/isolate.ts'
-export * from './config/tree.ts'
-export * from './config/utils.ts'
+export * from "./config/entry.ts";
+export * from "./config/group.ts";
+export * from "./config/isolate.ts";
+export * from "./config/tree.ts";
+export * from "./config/utils.ts";
 
-declare module 'cordis' {
+declare module "cordis" {
   interface Events {
-    'exit'(signal: NodeJS.Signals): Promise<void>
-    'loader/config-update'(): void
+    exit(signal: NodeJS.Signals): Promise<void>;
+    "loader/config-update"(): void;
   }
 
   interface Context {
-    loader: Loader
+    loader: Loader;
   }
 
   interface EnvData {
-    startTime?: number
+    startTime?: number;
   }
 
   interface Fiber {
-    entry?: Entry
+    entry?: Entry;
   }
 }
 
 export namespace Loader {
   export interface Config {
-    baseUrl?: string
+    baseUrl?: string;
   }
 
   export interface Intercept {
-    await?: boolean
+    await?: boolean;
   }
 }
 
 export class Loader extends EntryTree {
-  declare [Service.metadata]: Loader.Intercept
+  declare [Service.metadata]: Loader.Intercept;
 
   public envData = process.env.CORDIS_SHARED
     ? JSON.parse(process.env.CORDIS_SHARED)
-    : { startTime: Date.now() }
+    : { startTime: Date.now() };
 
-  public name = 'loader'
-  public internal = getInternalLoader()
+  public name = "loader";
+  public internal = getInternalLoader();
 
-  constructor(ctx: Context, public config: Loader.Config = {}) {
-    super(ctx)
+  constructor(
+    ctx: Context,
+    public config: Loader.Config = {},
+  ) {
+    super(ctx);
     if (config.baseUrl) {
-      this.ctx.baseUrl = config.baseUrl
+      this.ctx.baseUrl = config.baseUrl;
     }
-    const self = this
+    const self = this;
 
     defineProperty(this, Service.tracker, {
-      associate: 'loader',
-      property: 'ctx',
+      associate: "loader",
+      property: "ctx",
       noShadow: true,
-    })
+    });
 
-    ctx.reflect.provide('loader', this, this[Service.check])
+    ctx.reflect.provide("loader", this, this[Service.check]);
 
     // the source config each entry fiber last resolved
-    const sources = new WeakMap<Fiber, any>()
+    const sources = new WeakMap<Fiber, any>();
 
     // Registered before the built-in validation listener, so validation
     // failures can be traced to the config source. A config passed in at
     // runtime is not written anywhere yet, so its failures are left as is.
-    ctx.on('internal/config', (fiber, next) => {
-      if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return next()
-      try {
-        return next()
-      } catch (error) {
-        if (ValidationError.is(error) && sources.get(fiber) === fiber.entry.options.config) {
-          fiber.entry.traceValidation(error)
+    ctx.on(
+      "internal/config",
+      (fiber, next) => {
+        if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return next();
+        try {
+          return next();
+        } catch (error) {
+          if (ValidationError.is(error) && sources.get(fiber) === fiber.entry.options.config) {
+            fiber.entry.traceValidation(error);
+          }
+          throw error;
         }
-        throw error
-      }
-    }, { prepend: true })
+      },
+      { prepend: true },
+    );
 
     // Registered after the built-in validation listener, so interpolation runs
     // on the source config and validation sees the interpolated result.
-    ctx.on('internal/config', (fiber, next) => {
-      const config = next()
+    ctx.on("internal/config", (fiber, next) => {
+      const config = next();
       // nested components inherit `entry` through the context prototype chain;
       // only the entry's own fiber carries the entry config
-      if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return config
-      sources.set(fiber, config)
+      if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return config;
+      sources.set(fiber, config);
       // a group's config is the entry list itself, which the loader mutates in
       // place and identifies by reference
-      if (fiber.runtime!.callback[EntryGroup.key]) return config
-      return interpolate(fiber.ctx, config, fiber.entry.trace, ['config'])
-    })
+      if (fiber.runtime!.callback[EntryGroup.key]) return config;
+      return interpolate(fiber.ctx, config, fiber.entry.trace, ["config"]);
+    });
 
-    ctx.on('internal/commit', (fiber, config) => {
-      if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return
-      const unparse = fiber.runtime?.Config?.['simplify']
-      const { entry } = fiber
-      const legacy = { ...entry.options }
-      entry.options.config = unparse ? unparse(config) : config
-      entry.parent.tree.commit({ id: entry.options.id, group: entry.parent, options: entry.options, legacy })
-    })
+    ctx.on("internal/commit", (fiber, config) => {
+      if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return;
+      const unparse = fiber.runtime?.Config?.["simplify"];
+      const { entry } = fiber;
+      const legacy = { ...entry.options };
+      entry.options.config = unparse ? unparse(config) : config;
+      entry.parent.tree.commit({
+        id: entry.options.id,
+        group: entry.parent,
+        options: entry.options,
+        legacy,
+      });
+    });
 
-    ctx.on('internal/update', function (config, next) {
-      if (!this.entry || this.parent.fiber?.entry === this.entry) return next()
-      self.showLog(this.entry, 'reload')
-      return next()
-    }, { global: true })
+    ctx.on(
+      "internal/update",
+      function (config, next) {
+        if (!this.entry || this.parent.fiber?.entry === this.entry) return next();
+        self.showLog(this.entry, "reload");
+        return next();
+      },
+      { global: true },
+    );
 
-    ctx.on('internal/status', (fiber) => {
-      if (!Entry.isOuter(fiber) || fiber.state !== FiberState.UNLOADING) return
-      const entry: Entry = fiber.parent[Entry.key]
+    ctx.on("internal/status", (fiber) => {
+      if (!Entry.isOuter(fiber) || fiber.state !== FiberState.UNLOADING) return;
+      const entry: Entry = fiber.parent[Entry.key];
       // dependency loss unloads the outer fiber without `entry.dispose()`;
       // the uid check skips an outer fiber that has been replaced
-      if (entry.outerFiber?.uid === fiber.uid) entry._verdict = undefined
-    })
+      if (entry.outerFiber?.uid === fiber.uid) entry._verdict = undefined;
+    });
 
-    ctx.on('internal/plugin', (fiber) => {
+    ctx.on("internal/plugin", (fiber) => {
       // 1. set `fiber.entry`
       // the inner fiber, not the outer one, is the entry's root
       if (fiber.parent[Entry.key] && !fiber.entry && !Entry.isOuter(fiber)) {
-        fiber.entry = fiber.parent[Entry.key]
+        fiber.entry = fiber.parent[Entry.key];
       }
 
       // 2. handle self-dispose
       // We only care about `ctx.fiber.dispose()`, so we need to filter out other cases.
 
       // case 1: fiber is created
-      if (fiber.uid) return
+      if (fiber.uid) return;
 
       // case 2: fiber is not tracked by loader
-      if (!fiber.entry) return
+      if (!fiber.entry) return;
 
       // case 3: fiber is a child component under the entry (not the entry's root fiber)
-      if (fiber.parent.fiber?.entry === fiber.entry) return
+      if (fiber.parent.fiber?.entry === fiber.entry) return;
 
       // case 4: the entry's tree is being disposed
-      if (!fiber.entry.parent.tree.ctx.fiber.uid) return
+      if (!fiber.entry.parent.tree.ctx.fiber.uid) return;
 
-      const { entry } = fiber
-      this.showLog(entry, 'unload')
+      const { entry } = fiber;
+      this.showLog(entry, "unload");
 
       // case 5: the entry's parent is being unloaded, which takes the entry with it
       // (the parent may still be registered, e.g. when it has lost a dependency)
-      if (fiber.parent.fiber.state === FiberState.UNLOADING) return
+      if (fiber.parent.fiber.state === FiberState.UNLOADING) return;
 
       // case 6: the entry is being removed by the loader (`EntryGroup.remove`
       // unregisters it before disposing the fiber)
-      if (entry.parent.tree.store[entry.options.id] !== entry) return
+      if (entry.parent.tree.store[entry.options.id] !== entry) return;
 
       // case 7: fiber is disposed by loader behavior through `entry.dispose()`,
       // such as config file update, ancestor group disable, rebuild
-      if (entry._disposing) return
+      if (entry._disposing) return;
 
-      const legacy = { ...entry.options }
-      entry.options.disabled = true
-      entry._verdict = true
-      entry.parent.tree.commit({ id: entry.options.id, group: entry.parent, options: entry.options, legacy })
-      if (entry.outerFiber) entry.dispose()
-    })
+      const legacy = { ...entry.options };
+      entry.options.disabled = true;
+      entry._verdict = true;
+      entry.parent.tree.commit({
+        id: entry.options.id,
+        group: entry.parent,
+        options: entry.options,
+        legacy,
+      });
+      if (entry.outerFiber) entry.dispose();
+    });
   }
 
   commit(_change: EntryChange) {
@@ -171,28 +192,28 @@ export class Loader extends EntryTree {
   }
 
   [Service.check]() {
-    const config: Loader.Intercept = Service.prototype[Service.resolveIntercept].call(this)
-    if (config.await && this.getTasks().length) return false
-    return true
+    const config: Loader.Intercept = Service.prototype[Service.resolveIntercept].call(this);
+    if (config.await && this.getTasks().length) return false;
+    return true;
   }
 
   showLog(entry: Entry, type: string) {
-    if (entry.options.group || !entry.parent.tree.enableLogs) return
-    this.ctx[Context.root].logger?.('loader').info('%s component %C', type, entry.options.name)
+    if (entry.options.group || !entry.parent.tree.enableLogs) return;
+    this.ctx[Context.root].logger?.("loader").info("%s component %C", type, entry.options.name);
   }
 
   locate(fiber = this.ctx.fiber) {
     while (1) {
-      if (fiber.entry) return fiber.entry.id
-      const next = fiber.parent.fiber
-      if (fiber === next) return
-      fiber = next
+      if (fiber.entry) return fiber.entry.id;
+      const next = fiber.parent.fiber;
+      if (fiber === next) return;
+      fiber = next;
     }
   }
 
   unwrapExports(exports: any) {
-    return unwrapExports(exports)
+    return unwrapExports(exports);
   }
 }
 
-export default Loader
+export default Loader;

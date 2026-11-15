@@ -1,151 +1,155 @@
-import { Context, Fiber, Message } from 'cordis'
-import Loader from '@cordisjs/loader'
-import Fs from '@cordisjs/fs'
-import NodeFs from '@cordisjs/fs-node'
-import LoggerConsole from '@cordisjs/logger-console'
-import { expect, describe, it, afterEach } from 'vitest'
-import { readFile, rm, writeFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import Include from '../src/index.ts'
+import { Context, Fiber, Message } from "cordis";
+import Loader from "@cordisjs/loader";
+import Fs from "@cordisjs/fs";
+import NodeFs from "@cordisjs/fs-node";
+import LoggerConsole from "@cordisjs/logger-console";
+import { expect, describe, it, afterEach } from "vitest";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import Include from "../src/index.ts";
 
 function waitFor(condFn: () => any, timeout = 5000, interval = 20): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const check = setInterval(() => {
-      if (condFn()) { clearInterval(check); resolve() }
-    }, interval)
-    setTimeout(() => { clearInterval(check); reject(new Error('waitFor timed out')) }, timeout)
-  })
+      if (condFn()) {
+        clearInterval(check);
+        resolve();
+      }
+    }, interval);
+    setTimeout(() => {
+      clearInterval(check);
+      reject(new Error("waitFor timed out"));
+    }, timeout);
+  });
 }
 
-const INNER = '- id: inner\n  name: ./test-component\n'
-const INNER_EXTRA = '- id: inner\n  name: ./test-component\n- id: extra\n  name: ./extra-component\n'
-const NOT_AN_ARRAY = 'inner: ./test-component\n'
-const UNPARSABLE = '- {\n'
+const INNER = "- id: inner\n  name: ./test-component\n";
+const INNER_EXTRA =
+  "- id: inner\n  name: ./test-component\n- id: extra\n  name: ./extra-component\n";
+const NOT_AN_ARRAY = "inner: ./test-component\n";
+const UNPARSABLE = "- {\n";
 
 interface Harness {
-  ctx: Context
-  filename: string
-  include(): Include
-  warnings(): string[]
+  ctx: Context;
+  filename: string;
+  include(): Include;
+  warnings(): string[];
 }
 
-describe('Include reload', () => {
-  let ctx: Context | undefined
-  let fiber: Fiber | undefined
-  let filename: string | undefined
+describe("Include reload", () => {
+  let ctx: Context | undefined;
+  let fiber: Fiber | undefined;
+  let filename: string | undefined;
 
   afterEach(async () => {
-    await fiber?.dispose()
-    if (filename) await rm(filename, { force: true })
-    ctx = fiber = filename = undefined
-  })
+    await fiber?.dispose();
+    if (filename) await rm(filename, { force: true });
+    ctx = fiber = filename = undefined;
+  });
 
   async function setup(name: string, content: string, config: any = {}): Promise<Harness> {
-    filename = fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
-    await writeFile(filename, content)
-    ctx = new Context()
-    await ctx.use(LoggerConsole)
-    const messages: Message[] = []
-    ctx.logger.exporter({ export: message => messages.push(message) })
-    await ctx.use(Fs)
-    await ctx.use(NodeFs)
+    filename = fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
+    await writeFile(filename, content);
+    ctx = new Context();
+    await ctx.use(LoggerConsole);
+    const messages: Message[] = [];
+    ctx.logger.exporter({ export: (message) => messages.push(message) });
+    await ctx.use(Fs);
+    await ctx.use(NodeFs);
     fiber = await ctx.use(Loader, {
       baseUrl: import.meta.url,
-    })
+    });
     const id = await ctx.loader.create({
-      name: '@cordisjs/include',
+      name: "@cordisjs/include",
       config: {
         path: `./fixtures/${name}`,
         ...config,
       },
-    })
+    });
     return {
       ctx: ctx!,
       filename: filename!,
       include: () => ctx!.loader.store[id]!.subtree as Include,
-      warnings: () => messages.filter(m => m.type === 'warn').map(m => m.args.join(' ')),
-    }
+      warnings: () => messages.filter((m) => m.type === "warn").map((m) => m.args.join(" ")),
+    };
   }
 
-  it('re-applies patches on every reload', async () => {
-    const app = await setup('tmp-reload-patches.yml', INNER, {
-      patches: [
-        { id: 'inner', disabled: true },
-      ],
-    })
-    await new Promise(r => setTimeout(r, 500))
-    expect(app.ctx.bail('test/get-value')).to.be.undefined
+  it("re-applies patches on every reload", async () => {
+    const app = await setup("tmp-reload-patches.yml", INNER, {
+      patches: [{ id: "inner", disabled: true }],
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(app.ctx.bail("test/get-value")).to.be.undefined;
 
-    await writeFile(app.filename, INNER_EXTRA)
-    await app.include().refresh()
+    await writeFile(app.filename, INNER_EXTRA);
+    await app.include().refresh();
 
     // the new entry loads, and the overlay is applied to the new parse too
-    await waitFor(() => app.ctx.bail('test/get-extra'))
-    expect(app.ctx.bail('test/get-value')).to.be.undefined
-  }, 10000)
+    await waitFor(() => app.ctx.bail("test/get-extra"));
+    expect(app.ctx.bail("test/get-value")).to.be.undefined;
+  }, 10000);
 
-  it('rebuilds an entry whose name changes in the file', async () => {
-    const app = await setup('tmp-reload-rename.yml', INNER)
-    await waitFor(() => app.ctx.bail('test/get-value'))
+  it("rebuilds an entry whose name changes in the file", async () => {
+    const app = await setup("tmp-reload-rename.yml", INNER);
+    await waitFor(() => app.ctx.bail("test/get-value"));
 
-    await writeFile(app.filename, '- id: inner\n  name: ./extra-component\n')
-    await app.include().refresh()
+    await writeFile(app.filename, "- id: inner\n  name: ./extra-component\n");
+    await app.include().refresh();
 
-    await waitFor(() => app.ctx.bail('test/get-extra'))
-    expect(app.ctx.bail('test/get-value')).to.be.undefined
+    await waitFor(() => app.ctx.bail("test/get-extra"));
+    expect(app.ctx.bail("test/get-value")).to.be.undefined;
     // the old component is not taken for a self-dispose
-    expect(await readFile(app.filename, 'utf8')).to.equal('- id: inner\n  name: ./extra-component\n')
-  }, 10000)
+    expect(await readFile(app.filename, "utf8")).to.equal(
+      "- id: inner\n  name: ./extra-component\n",
+    );
+  }, 10000);
 
-  it('reverts an entry when its patch is removed', async () => {
-    const app = await setup('tmp-reload-revert.yml', INNER, {
-      patches: [
-        { id: 'inner', disabled: true },
-      ],
-    })
-    await new Promise(r => setTimeout(r, 500))
-    expect(app.ctx.bail('test/get-value')).to.be.undefined
+  it("reverts an entry when its patch is removed", async () => {
+    const app = await setup("tmp-reload-revert.yml", INNER, {
+      patches: [{ id: "inner", disabled: true }],
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(app.ctx.bail("test/get-value")).to.be.undefined;
 
     // patches apply to a clone of the cached parse, so dropping one reverts the entry
     await app.ctx.loader.update(app.include().ctx.fiber.entry!.id, {
       config: {
-        path: './fixtures/tmp-reload-revert.yml',
+        path: "./fixtures/tmp-reload-revert.yml",
       },
-    })
+    });
 
-    await waitFor(() => app.ctx.bail('test/get-value'))
-    expect(app.ctx.bail('test/get-value')).to.equal('default')
-  }, 10000)
+    await waitFor(() => app.ctx.bail("test/get-value"));
+    expect(app.ctx.bail("test/get-value")).to.equal("default");
+  }, 10000);
 
-  it('keeps the tree reloadable after an invalid file', async () => {
-    const app = await setup('tmp-reload-invalid.yml', INNER)
-    await waitFor(() => app.ctx.bail('test/get-value'))
+  it("keeps the tree reloadable after an invalid file", async () => {
+    const app = await setup("tmp-reload-invalid.yml", INNER);
+    await waitFor(() => app.ctx.bail("test/get-value"));
 
-    await writeFile(app.filename, NOT_AN_ARRAY)
+    await writeFile(app.filename, NOT_AN_ARRAY);
     // refresh resolves on a bad file; the include reports it itself
-    await app.include().refresh()
-    expect(app.warnings().some(line => line.includes('failed to validate config file'))).to.be.true
-    expect(app.ctx.bail('test/get-value')).to.equal('default')
+    await app.include().refresh();
+    expect(app.warnings().some((line) => line.includes("failed to validate config file"))).to.be
+      .true;
+    expect(app.ctx.bail("test/get-value")).to.equal("default");
 
     // the cache still holds the last good file, so the next good file reads
     // as a change and reconciles against an intact tree
-    await writeFile(app.filename, INNER_EXTRA)
-    await app.include().refresh()
-    await waitFor(() => app.ctx.bail('test/get-extra'))
-    expect(app.ctx.bail('test/get-value')).to.equal('default')
-  }, 10000)
+    await writeFile(app.filename, INNER_EXTRA);
+    await app.include().refresh();
+    await waitFor(() => app.ctx.bail("test/get-extra"));
+    expect(app.ctx.bail("test/get-value")).to.equal("default");
+  }, 10000);
 
-  it('never overwrites an existing but unparsable file with initial', async () => {
-    const app = await setup('tmp-reload-initial.yml', UNPARSABLE, {
-      initial: [
-        { id: 'extra', name: './extra-component' },
-      ],
-    })
-    await new Promise(r => setTimeout(r, 500))
+  it("never overwrites an existing but unparsable file with initial", async () => {
+    const app = await setup("tmp-reload-initial.yml", UNPARSABLE, {
+      initial: [{ id: "extra", name: "./extra-component" }],
+    });
+    await new Promise((r) => setTimeout(r, 500));
 
     // only ENOENT falls back to `initial`; a file we failed to parse belongs to
     // the user and must survive
-    expect(await readFile(app.filename, 'utf8')).to.equal(UNPARSABLE)
-    expect(app.ctx.bail('test/get-extra')).to.be.undefined
-  }, 10000)
-})
+    expect(await readFile(app.filename, "utf8")).to.equal(UNPARSABLE);
+    expect(app.ctx.bail("test/get-extra")).to.be.undefined;
+  }, 10000);
+});

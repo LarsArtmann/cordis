@@ -1,4 +1,4 @@
-const kFsError = Symbol.for('cordis.fs.error')
+const kFsError = Symbol.for("cordis.fs.error");
 
 /**
  * A failure of a file system operation. The set of codes will grow, so a
@@ -7,43 +7,48 @@ const kFsError = Symbol.for('cordis.fs.error')
 export class FsError extends Error {
   // `instanceof` also recognizes an error from another copy of this package
   static [Symbol.hasInstance](value: unknown) {
-    return !!(value as any)?.[kFsError]
+    return !!(value as any)?.[kFsError];
   }
 
-  name = 'FsError'
-  declare [kFsError]: true
+  name = "FsError";
+  declare [kFsError]: true;
 
-  constructor(public code: FsError.Code, public url: URL | undefined, message: string, options?: ErrorOptions) {
-    super(message, options)
+  constructor(
+    public code: FsError.Code,
+    public url: URL | undefined,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
   }
 }
 
-FsError.prototype[kFsError] = true
+FsError.prototype[kFsError] = true;
 
 export namespace FsError {
   export type Code =
     /** No provider is mounted for the location. */
-    | 'NoProvider'
+    | "NoProvider"
     /** The provider of the location does not implement the operation, or the storage does not support it. */
-    | 'NotSupported'
+    | "NotSupported"
     /** The location or one of its parent directories does not exist. */
-    | 'NotFound'
+    | "NotFound"
     /** The operation requires the location not to exist, and it exists. */
-    | 'AlreadyExists'
+    | "AlreadyExists"
     /** A component of the path is not a directory, or a directory operation is applied to a non-directory. */
-    | 'NotADirectory'
+    | "NotADirectory"
     /** A file operation is applied to a directory. */
-    | 'IsADirectory'
+    | "IsADirectory"
     /** The operation requires an empty directory, and the directory is not empty. */
-    | 'DirectoryNotEmpty'
+    | "DirectoryNotEmpty"
     /** The storage denies the operation. */
-    | 'PermissionDenied'
+    | "PermissionDenied"
     /** The entry is in use; the operation may succeed later. */
-    | 'Busy'
+    | "Busy"
     /** The two locations are not in the same provider or device, so the operation cannot be performed as one. */
-    | 'CrossesDevices'
+    | "CrossesDevices"
     /** The input is not a valid location. */
-    | 'InvalidPath'
+    | "InvalidPath"
     /** The storage reports a failure of no other category. */
-    | 'Unknown'
+    | "Unknown";
 }

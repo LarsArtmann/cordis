@@ -148,6 +148,7 @@ func (r *goldenRunner) provide(scope *Context, name, realm string) {
 // logger, exercising the shared logger service surface.
 func (r *goldenRunner) logLine(level, msg string) {
 	l := r.ctx.Logger("gold")
+
 	switch level {
 	case "error":
 		l.Error(msg)

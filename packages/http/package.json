@@ -50,7 +50,7 @@
   "devDependencies": {
     "@cordisjs/logger-console": "^1.0.1",
     "cordis": "^4.0.0-rc.13",
-    "undici": "^8.1.0"
+    "undici": "^8.12.4"
   },
   "dependencies": {
     "@cordisjs/fetch-file": "^1.0.3",

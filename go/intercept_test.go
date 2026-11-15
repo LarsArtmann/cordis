@@ -39,12 +39,14 @@ func TestInjectConfigMergesUnderScopeIntercepts(t *testing.T) {
 	}
 
 	var got any
+
 	scoped := ctx.Intercept("foo", map[string]any{"b": 2})
 
 	_, err := cordis.Start(scoped, cordis.NewPlugin("consumer", func(c *cordis.Context, _ int) error {
 		inner := c.Intercept("foo", map[string]any{"c": 3})
 
 		var ok bool
+
 		got, ok = inner.Intercepted("foo")
 		if !ok {
 			t.Fatal("Intercepted must see the merged override")

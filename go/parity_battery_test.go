@@ -41,6 +41,7 @@ func TestEventUpdateHooksDoNotAccumulateAcrossReloads(t *testing.T) {
 
 			return next()
 		})
+
 		return err
 	})
 
@@ -164,6 +165,7 @@ func TestIsolateProviderUnloadAllowsReprovide(t *testing.T) {
 
 	provider := NewPlugin("provider", func(ctx *Context, _ struct{}) error {
 		_, err := ctx.Provide("svc", "value")
+
 		return err
 	})
 
@@ -210,6 +212,7 @@ func TestProviderResourcesOutliveDependentTeardown(t *testing.T) {
 		}
 
 		_, err := ctx.Provide("svc", resource)
+
 		return err
 	})
 
@@ -236,6 +239,7 @@ func TestProviderResourcesOutliveDependentTeardown(t *testing.T) {
 				t.Errorf("service backing resource released before dependent teardown")
 			}
 		})
+
 		return err
 	})
 	if err != nil {
@@ -287,6 +291,7 @@ func TestConfigResolvedOnEveryReload(t *testing.T) {
 
 	plugin := NewPlugin("p", func(_ *Context, cfg config) error {
 		seen = append(seen, cfg.N)
+
 		return nil
 	})
 

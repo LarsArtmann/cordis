@@ -1,70 +1,71 @@
-import { Context, Fiber, Message } from 'cordis'
-import Loader from '@cordisjs/loader'
-import Fs from '@cordisjs/fs'
-import NodeFs from '@cordisjs/fs-node'
-import { afterEach } from 'vitest'
-import { chmod, readFile, rm, writeFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import * as yaml from 'yaml'
-import Include from '../src/index.ts'
+import { Context, Fiber, Message } from "cordis";
+import Loader from "@cordisjs/loader";
+import Fs from "@cordisjs/fs";
+import NodeFs from "@cordisjs/fs-node";
+import { afterEach } from "vitest";
+import { chmod, readFile, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import * as yaml from "yaml";
+import Include from "../src/index.ts";
 
-export const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
+export const fixture = (name: string) =>
+  fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
 export const component = (id: string, value: number, extra: any = {}) => ({
   id,
-  name: './config-component',
+  name: "./config-component",
   config: { tag: id, value },
   ...extra,
-})
+});
 
 export const group = (id: string, config: any[]) => ({
   id,
-  name: '@cordisjs/group',
+  name: "@cordisjs/group",
   group: true,
   config,
-})
+});
 
 /**
  * Per-suite harness: `setup` boots a loader with one include over a fresh
  * fixture file; everything it created is disposed and removed after each test.
  */
 export function harness() {
-  let fiber: Fiber | undefined
-  const files: string[] = []
+  let fiber: Fiber | undefined;
+  const files: string[] = [];
 
   afterEach(async () => {
-    await fiber?.dispose()
-    fiber = undefined
+    await fiber?.dispose();
+    fiber = undefined;
     for (const file of files.splice(0)) {
-      await chmod(file, 0o644).catch(() => {})
-      await rm(file, { force: true })
+      await chmod(file, 0o644).catch(() => {});
+      await rm(file, { force: true });
     }
-  })
+  });
 
   async function setup(name: string, data: any[] | string, config: any = {}) {
-    const filename = fixture(name)
-    files.push(filename)
-    await writeFile(filename, typeof data === 'string' ? data : yaml.stringify(data))
+    const filename = fixture(name);
+    files.push(filename);
+    await writeFile(filename, typeof data === "string" ? data : yaml.stringify(data));
 
-    const ctx = new Context()
-    const messages: Message[] = []
-    ctx.logger.exporter({ export: message => messages.push(message) })
-    await ctx.use(Fs)
-    await ctx.use(NodeFs)
-    fiber = await ctx.use(Loader, { baseUrl: import.meta.url })
+    const ctx = new Context();
+    const messages: Message[] = [];
+    ctx.logger.exporter({ export: (message) => messages.push(message) });
+    await ctx.use(Fs);
+    await ctx.use(NodeFs);
+    fiber = await ctx.use(Loader, { baseUrl: import.meta.url });
     const id = await ctx.loader.create({
-      name: '@cordisjs/include',
+      name: "@cordisjs/include",
       config: { path: `./fixtures/${name}`, ...config },
-    })
-    await ctx.loader.store[id]!.innerFiber!.await()
+    });
+    await ctx.loader.store[id]!.innerFiber!.await();
 
-    const include = () => ctx.loader.store[id]!.subtree as Include
+    const include = () => ctx.loader.store[id]!.subtree as Include;
     // what `ctx.fs.watch()` triggers on a change; `refresh` also waits for any write
     const settle = async () => {
-      await include().refresh()
-      await ctx.loader.await()
-    }
-    await settle()
+      await include().refresh();
+      await ctx.loader.await();
+    };
+    await settle();
 
     return {
       ctx,
@@ -75,13 +76,14 @@ export function harness() {
       messages,
       files,
       dispose: () => fiber!.dispose(),
-      text: () => readFile(filename, 'utf8'),
-      read: async () => yaml.parse(await readFile(filename, 'utf8')) as any[],
-      config: (tag: string) => ctx.bail('test/config', tag),
-      logs: (type: Message['type']) => messages.filter(m => m.type === type).map(m => m.args.join(' ')),
+      text: () => readFile(filename, "utf8"),
+      read: async () => yaml.parse(await readFile(filename, "utf8")) as any[],
+      config: (tag: string) => ctx.bail("test/config", tag),
+      logs: (type: Message["type"]) =>
+        messages.filter((m) => m.type === type).map((m) => m.args.join(" ")),
       update: (local: string, options: any) => ctx.loader.update(`${id}:${local}`, options),
-    }
+    };
   }
 
-  return { setup }
+  return { setup };
 }

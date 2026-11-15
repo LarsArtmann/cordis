@@ -196,6 +196,7 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 
 func (c *core) removeHookLocked(name string, h *hook) {
 	h.removed.Store(true)
+
 	hooks := c.hooks[name]
 	for i, candidate := range hooks {
 		if candidate == h {

@@ -13,26 +13,26 @@ by me).
 
 **Local commits this session (NOT pushed; origin/main behind by 10):**
 
-| Commit | Content |
-| --- | --- |
-| `e19481b` | T01: D1–D5 ratified in ROADMAP Open decisions |
+| Commit    | Content                                                                          |
+| --------- | -------------------------------------------------------------------------------- |
+| `e19481b` | T01: D1–D5 ratified in ROADMAP Open decisions                                    |
 | `910684f` | T03–T05: upstream rc.13 sync (packages/ → 68c9d99, yarn.lock, pin, guards green) |
-| `0b864af` | T06/T07/T16: TS mechanics CI + buildflow + AGENTS.md facts |
-| `d95516a` | T08: Go #242 mid-dispatch disposal |
-| `b6c0e48` | T09: Rust #242 mid-dispatch disposal |
-| `a22cfaf` | T11–T14 (Go): parity battery + #205 parallel-error label |
-| `6edba3b` | T10 + Zig battery: #242 + #196 settle + battery (rewritten commit, see d) |
-| `ecdd1e7` | T13: Go #134 internal/config resolution on every reload |
+| `0b864af` | T06/T07/T16: TS mechanics CI + buildflow + AGENTS.md facts                       |
+| `d95516a` | T08: Go #242 mid-dispatch disposal                                               |
+| `b6c0e48` | T09: Rust #242 mid-dispatch disposal                                             |
+| `a22cfaf` | T11–T14 (Go): parity battery + #205 parallel-error label                         |
+| `6edba3b` | T10 + Zig battery: #242 + #196 settle + battery (rewritten commit, see d)        |
+| `ecdd1e7` | T13: Go #134 internal/config resolution on every reload                          |
 
 **Second stretch (same day) — session close:**
 
-| Commit | Content |
-| --- | --- |
-| `bdf294f` | T11–T14 (Rust): battery + #205 label + #196 settle_pending port fix |
+| Commit    | Content                                                                   |
+| --------- | ------------------------------------------------------------------------- |
+| `bdf294f` | T11–T14 (Rust): battery + #205 label + #196 settle_pending port fix       |
 | `ca59fcd` | T17: oxlint convergence (.oxlintrc.json deleted), vitest-test skip policy |
-| `49d9b46` | T18/T19/T20: hmr D3 memo, registry.replace rejection memo, loader review |
-| `b06de59` | T21: DOMAIN_LANGUAGE component note, ROADMAP rc.13 matrix rows, README |
-| `cb6d144` | #206 Go: intercept layers merge outer→inner, inject configs underneath |
+| `49d9b46` | T18/T19/T20: hmr D3 memo, registry.replace rejection memo, loader review  |
+| `b06de59` | T21: DOMAIN_LANGUAGE component note, ROADMAP rc.13 matrix rows, README    |
+| `cb6d144` | #206 Go: intercept layers merge outer→inner, inject configs underneath    |
 
 **Worktree at close:** my remaining files (ROADMAP watch-branches note +
 #134 rationale, AGENTS.md lessons + coverage baselines, the upstream
@@ -52,8 +52,8 @@ report) remain theirs, untouched.
 2. **T02 — Guard audit:** manifest-parity (HEAD-based, post-commit gate,
    allowlist needs NO widening), fixture-canary (file-name-agnostic but
    flat-dir assumption), CI upstream-parity job (byte + prettier semantic
-   + manifest + canary + dprint guard), file-list diff (115 A / 25 D /
-   71 M / 13 R in packages/), root-file delta map.
+   - manifest + canary + dprint guard), file-list diff (115 A / 25 D /
+     71 M / 13 R in packages/), root-file delta map.
 3. **T03–T05 — The sync:** `git rm -r packages` + `restore
    --source=68c9d99` (exact tree equality, zero merge risk); root
    `package.json` adopted then `@types/node ^26.6.6` reapplied (verified:
@@ -205,47 +205,47 @@ report) remain theirs, untouched.
 
 ## f) NEXT (up to 50, priority order)
 
-| # | Item |
-| --- | --- |
-| 1 | ~~Fix Rust battery compile errors (`?` on attach/provide bodies; restructure `probe` closure)~~ done at `bdf294f` |
-| 2 | ~~`cargo test` + `--features thread-safe`, clippy both variants → green~~ done at `bdf294f` |
-| 3 | ~~Commit Rust battery + #205 label~~ done at `bdf294f` (with the #196 settle_pending fix it uncovered) |
-| 4 | ~~T17: `nix run .#test-go` / `.#test-rust` / `.#test-zig`~~ done, all green 2026-11-15 |
-| 5 | ~~T17: `nix flake check`~~ done, all checks passed 2026-11-15 |
-| 6 | ~~T17: `nix develop -c buildflow`~~ done — 99/100 green; vitest-test skipped with rationale (yarn-test owner), docs-gates cleared at session close |
-| 7 | ~~T17: golden byte-identity ×3 ports~~ done (six scenarios, all three suites green) |
-| 8 | ~~Re-run all four parity guards on the final tree~~ done (manifest, canary, byte, semantic all green) |
-| 9 | ~~Verify `yarn lint` (oxlint) passes~~ done at `ca59fcd` (legacy `.oxlintrc.json` deleted; upstream config owns) |
-| 10 | ~~Verify example smoke (`node examples/typescript/greeter.mjs`) still green~~ done |
-| 11 | ~~T18: read #244/#269 diffs, write hmr divergence memo, confirm D3~~ done at `49d9b46` (memo: hmr-rc13-divergence) |
-| 12 | ~~T18: re-check #264 defaults vs Go hmr~~ done — no Go surface (no fs watcher); watch-golden untouched and green |
-| 13 | ~~T19: `registry.replace` read + Go prototype/rejection memo~~ done at `49d9b46` (rejected, memo) |
-| 14 | ~~T20: map 8 loader fixes onto go/loader; reconcile with 0c42ee9~~ done at `49d9b46` (loader-parity-review) |
-| 15 | ~~T20: re-run loader watch-golden~~ done (green in the sweep) |
-| 16 | ~~T21: DOMAIN_LANGUAGE: component rename + Plugin-kept divergence entries~~ done at `b06de59` |
-| 17 | ~~T21: ROADMAP parity matrix rows~~ done at `b06de59` (+ #242/#196 rows) |
-| 18 | T21: PORTS.md notes (#205, #296 N/A, #134 no internal/commit, Zig #205 N/A) — still blocked on the concurrent session's uncommitted PORTS.md edits; divergence content lives in ROADMAP matrix + memos meanwhile |
-| 19 | ~~T21: README port table refresh~~ done at `b06de59` (six golden scenarios, rc.13 pin) |
-| 20 | T22: harvest plan + 16-31 report + this report into TODO_LIST/ROADMAP — partially done: ROADMAP updated (matrix, watch-branches, resolved open item 1); TODO_LIST rows are the concurrent session's uncommitted file, left to them |
-| 22 | ~~T22: fix TODO_LIST errata (upstream-tracking, deny.toml)~~ done — already resolved in the concurrent session's working tree (deny.toml committed f6bf182; job-count verdict recorded) |
-| 23 | ~~T22: coverage re-baseline into AGENTS.md after sweep~~ done — Go 90.3% total / 88.3–91.0 per pkg; Rust 85.7% lines / 84.1% regions (llvm_23 recipe pinned) |
-| 24 | ~~T22: ROADMAP: upstream watch-branches note~~ done (`perf/traceable-underscore`, `refactor/migrate-server`) |
-| 25 | ~~AGENTS.md: commit-time-gate + subagent-scope lessons (e.1/e.3)~~ done (Program-execution lessons bullet in Repo hygiene) |
-| 26 | ~~Verify 0c42ee9's greeter/golden-#5#6/miri items~~ done (greeter smoke green; golden #5/#6 in all three suites; miri job present in ports.yml, CI will execute) |
-| 27 | ~~#206 intercept metadata merge: verify + pin test (Go)~~ done at `cb6d144` (implemented: layered merge + 3 tests, race-clean) |
-| 28 | #296/#136/#205 divergences documented per port in PORTS.md — same blocker as item 18; content in ROADMAP matrix + loader memo meanwhile |
-| 29 | ~~Decide + implement (or reject) Rust/Zig #134 internal/config hook~~ decided: rejected for now (no loader consumer in Rust/Zig; rationale in ROADMAP matrix note) |
-| 30 | ~~T23: panic-free follow-ups~~ done — closed 2026-11-14 by the concurrent session (TODO_LIST documents the evidence) |
-| 31 | ~~T24: verify deny.toml devShell story; workflow job-count review~~ done (cargo-deny green in buildflow; verdicts in TODO_LIST) |
+| #  | Item                                                                                                                                                                                                                                                               |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1  | ~~Fix Rust battery compile errors (`?` on attach/provide bodies; restructure `probe` closure)~~ done at `bdf294f`                                                                                                                                                  |
+| 2  | ~~`cargo test` + `--features thread-safe`, clippy both variants → green~~ done at `bdf294f`                                                                                                                                                                        |
+| 3  | ~~Commit Rust battery + #205 label~~ done at `bdf294f` (with the #196 settle_pending fix it uncovered)                                                                                                                                                             |
+| 4  | ~~T17: `nix run .#test-go` / `.#test-rust` / `.#test-zig`~~ done, all green 2026-11-15                                                                                                                                                                             |
+| 5  | ~~T17: `nix flake check`~~ done, all checks passed 2026-11-15                                                                                                                                                                                                      |
+| 6  | ~~T17: `nix develop -c buildflow`~~ done — 99/100 green; vitest-test skipped with rationale (yarn-test owner), docs-gates cleared at session close                                                                                                                 |
+| 7  | ~~T17: golden byte-identity ×3 ports~~ done (six scenarios, all three suites green)                                                                                                                                                                                |
+| 8  | ~~Re-run all four parity guards on the final tree~~ done (manifest, canary, byte, semantic all green)                                                                                                                                                              |
+| 9  | ~~Verify `yarn lint` (oxlint) passes~~ done at `ca59fcd` (legacy `.oxlintrc.json` deleted; upstream config owns)                                                                                                                                                   |
+| 10 | ~~Verify example smoke (`node examples/typescript/greeter.mjs`) still green~~ done                                                                                                                                                                                 |
+| 11 | ~~T18: read #244/#269 diffs, write hmr divergence memo, confirm D3~~ done at `49d9b46` (memo: hmr-rc13-divergence)                                                                                                                                                 |
+| 12 | ~~T18: re-check #264 defaults vs Go hmr~~ done — no Go surface (no fs watcher); watch-golden untouched and green                                                                                                                                                   |
+| 13 | ~~T19: `registry.replace` read + Go prototype/rejection memo~~ done at `49d9b46` (rejected, memo)                                                                                                                                                                  |
+| 14 | ~~T20: map 8 loader fixes onto go/loader; reconcile with 0c42ee9~~ done at `49d9b46` (loader-parity-review)                                                                                                                                                        |
+| 15 | ~~T20: re-run loader watch-golden~~ done (green in the sweep)                                                                                                                                                                                                      |
+| 16 | ~~T21: DOMAIN_LANGUAGE: component rename + Plugin-kept divergence entries~~ done at `b06de59`                                                                                                                                                                      |
+| 17 | ~~T21: ROADMAP parity matrix rows~~ done at `b06de59` (+ #242/#196 rows)                                                                                                                                                                                           |
+| 18 | T21: PORTS.md notes (#205, #296 N/A, #134 no internal/commit, Zig #205 N/A) — still blocked on the concurrent session's uncommitted PORTS.md edits; divergence content lives in ROADMAP matrix + memos meanwhile                                                   |
+| 19 | ~~T21: README port table refresh~~ done at `b06de59` (six golden scenarios, rc.13 pin)                                                                                                                                                                             |
+| 20 | T22: harvest plan + 16-31 report + this report into TODO_LIST/ROADMAP — partially done: ROADMAP updated (matrix, watch-branches, resolved open item 1); TODO_LIST rows are the concurrent session's uncommitted file, left to them                                 |
+| 22 | ~~T22: fix TODO_LIST errata (upstream-tracking, deny.toml)~~ done — already resolved in the concurrent session's working tree (deny.toml committed f6bf182; job-count verdict recorded)                                                                            |
+| 23 | ~~T22: coverage re-baseline into AGENTS.md after sweep~~ done — Go 90.3% total / 88.3–91.0 per pkg; Rust 85.7% lines / 84.1% regions (llvm_23 recipe pinned)                                                                                                       |
+| 24 | ~~T22: ROADMAP: upstream watch-branches note~~ done (`perf/traceable-underscore`, `refactor/migrate-server`)                                                                                                                                                       |
+| 25 | ~~AGENTS.md: commit-time-gate + subagent-scope lessons (e.1/e.3)~~ done (Program-execution lessons bullet in Repo hygiene)                                                                                                                                         |
+| 26 | ~~Verify 0c42ee9's greeter/golden-#5#6/miri items~~ done (greeter smoke green; golden #5/#6 in all three suites; miri job present in ports.yml, CI will execute)                                                                                                   |
+| 27 | ~~#206 intercept metadata merge: verify + pin test (Go)~~ done at `cb6d144` (implemented: layered merge + 3 tests, race-clean)                                                                                                                                     |
+| 28 | #296/#136/#205 divergences documented per port in PORTS.md — same blocker as item 18; content in ROADMAP matrix + loader memo meanwhile                                                                                                                            |
+| 29 | ~~Decide + implement (or reject) Rust/Zig #134 internal/config hook~~ decided: rejected for now (no loader consumer in Rust/Zig; rationale in ROADMAP matrix note)                                                                                                 |
+| 30 | ~~T23: panic-free follow-ups~~ done — closed 2026-11-14 by the concurrent session (TODO_LIST documents the evidence)                                                                                                                                               |
+| 31 | ~~T24: verify deny.toml devShell story; workflow job-count review~~ done (cargo-deny green in buildflow; verdicts in TODO_LIST)                                                                                                                                    |
 | 32 | ~~T25: `scripts/vulnix-audit.sh direct` re-run~~ done 2026-11-15: 23 derivations, 3 flagged, all known false-positive classes (MediaWiki-Cargo collision spot-checked against NVD; ShellCheck/Go version-range errors); nothing actionable, vulnix stays out of CI |
-| 33 | ~~T25: `yarn npm audit` on the adopted lockfile~~ done 2026-11-15: 5 advisories, all dev-only toolchain (vite 7.3.6 + launch-editor, Windows dev-server surface) in upstream-adopted lock bytes; accept + revisit at next upstream sync |
-| 34 | T27: upstream issue — clean single-step build root-cause — drafted (docs/planning/2026-11-15_upstream-issue-drafts.md, draft 1); filing is user-gated |
-| 35 | T27: TS 7 minimal reproducer issue draft — drafted (same file, draft 2); filing is user-gated |
-| 36 | Lock hygiene: `yarn dedupe --check` — decided NO: the lockfile is byte-parity-adopted upstream bytes; dedupe belongs upstream (would fork the lock) |
-| 37 | devShell `npm_config_cache` override — decided NO for the shared flake: machine-specific workaround; fix the machine (repin the full /mnt/buildcache npm cache) instead |
-| 38 | Push the local commits (user gate) — 16 commits now awaiting the push decision |
-| 39 | CI green verification on push (F62) — blocked on item 38 |
-| 40 | One-session-per-worktree guard tooling — not built; the discipline is recorded in AGENTS.md lessons instead |
+| 33 | ~~T25: `yarn npm audit` on the adopted lockfile~~ done 2026-11-15: 5 advisories, all dev-only toolchain (vite 7.3.6 + launch-editor, Windows dev-server surface) in upstream-adopted lock bytes; accept + revisit at next upstream sync                            |
+| 34 | T27: upstream issue — clean single-step build root-cause — drafted (docs/planning/2026-11-15_upstream-issue-drafts.md, draft 1); filing is user-gated                                                                                                              |
+| 35 | T27: TS 7 minimal reproducer issue draft — drafted (same file, draft 2); filing is user-gated                                                                                                                                                                      |
+| 36 | Lock hygiene: `yarn dedupe --check` — decided NO: the lockfile is byte-parity-adopted upstream bytes; dedupe belongs upstream (would fork the lock)                                                                                                                |
+| 37 | devShell `npm_config_cache` override — decided NO for the shared flake: machine-specific workaround; fix the machine (repin the full /mnt/buildcache npm cache) instead                                                                                            |
+| 38 | Push the local commits (user gate) — 16 commits now awaiting the push decision                                                                                                                                                                                     |
+| 39 | CI green verification on push (F62) — blocked on item 38                                                                                                                                                                                                           |
+| 40 | One-session-per-worktree guard tooling — not built; the discipline is recorded in AGENTS.md lessons instead                                                                                                                                                        |
 
 ## g) QUESTIONS (cannot be answered from the repo)
 
@@ -266,4 +266,4 @@ report) remain theirs, untouched.
 
 ---
 
-*Snapshot; living state moves to TODO_LIST.md/ROADMAP.md at T22.*
+_Snapshot; living state moves to TODO_LIST.md/ROADMAP.md at T22._

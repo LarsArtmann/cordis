@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"slices"
 )
 
 // Context is a scope in the context tree. It carries the services, event
@@ -166,20 +167,23 @@ func (c *Context) Intercepted(name string) (any, bool) {
 	}
 
 	var layers []any
-	for i := len(scopeChain) - 1; i >= 0; i-- {
-		if layer := scopeChain[i].injectLayer; layer != nil {
+
+	for _, s := range slices.Backward(scopeChain) {
+		if layer := s.injectLayer; layer != nil {
 			if v, ok := layer[name]; ok {
 				layers = append(layers, v)
 			}
 		}
 	}
-	for i := len(scopeChain) - 1; i >= 0; i-- {
-		if intercept := scopeChain[i].intercept; intercept != nil {
+
+	for _, s := range slices.Backward(scopeChain) {
+		if intercept := s.intercept; intercept != nil {
 			if v, ok := intercept[name]; ok {
 				layers = append(layers, v)
 			}
 		}
 	}
+
 	if len(layers) == 0 {
 		return nil, false
 	}
@@ -210,6 +214,7 @@ func mergeIntercept(older, newer any) any {
 	if oldVal.IsValid() && newVal.IsValid() && oldVal.Type() == newVal.Type() && oldVal.Kind() == reflect.Struct {
 		merged := reflect.New(oldVal.Type()).Elem()
 		merged.Set(oldVal)
+
 		for i := range oldVal.NumField() {
 			if field := newVal.Field(i); field.IsValid() && !field.IsZero() {
 				merged.Field(i).Set(field)

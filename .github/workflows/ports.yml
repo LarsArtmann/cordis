@@ -112,7 +112,6 @@ jobs:
         working-directory: rust
         run: cargo miri test --test golden --test typed --test parity
 
-
   panic-allowlist:
     runs-on: ubuntu-latest
     timeout-minutes: 5

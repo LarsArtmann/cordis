@@ -42,7 +42,12 @@ func validateIsolateLabels(entry string, isolate map[string]any) error {
 			continue
 		default:
 			if !reflect.TypeOf(label).Comparable() {
-				return fmt.Errorf("loader: entry %q: isolate[%q]: label of type %T is not comparable", entry, name, label)
+				return fmt.Errorf(
+					"loader: entry %q: isolate[%q]: label of type %T is not comparable",
+					entry,
+					name,
+					label,
+				)
 			}
 		}
 	}
