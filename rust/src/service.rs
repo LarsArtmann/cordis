@@ -110,10 +110,19 @@ impl Context {
                 let ctx = self.clone();
                 let name = name.to_string();
                 move || {
-                    let mut c = core.borrow_mut();
-                    c.store.remove(&key);
-                    let names = [name.clone()];
-                    c.notify_dependents(&ctx, &names);
+                    {
+                        let mut c = core.borrow_mut();
+                        c.store.remove(&key);
+                        let names = [name.clone()];
+                        c.notify_dependents(&ctx, &names);
+                    }
+                    // The unload guard: settle the dependents this
+                    // withdrawal notified before the provider's remaining
+                    // cleanups run, so a consumer's teardown hands its
+                    // resources back while the provider's cleanup for them
+                    // has not run yet (upstream: the await Promise.allSettled
+                    // in the provide disposer).
+                    core::settle_pending(&core);
                 }
             }),
         );

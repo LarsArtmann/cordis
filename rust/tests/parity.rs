@@ -37,6 +37,20 @@ fn counting_listener(calls: &Counter) -> TestListener {
     })
 }
 
+fn service_view_probe(
+    results: &Rc<RefCell<Vec<Option<String>>>>,
+    name: &str,
+) -> cordis::FnPlugin<()> {
+    let results = Rc::clone(results);
+    plugin(name, move |ctx: &Context, (): &()| {
+        results.borrow_mut().push(
+            ctx.get_named("foo")
+                .and_then(|v| v.downcast_ref::<String>().cloned()),
+        );
+        Ok(())
+    })
+}
+
 #[test]
 fn on_emit_dispose() {
     let ctx = Context::new();
@@ -204,9 +218,7 @@ fn victim_listener(fired: &Rc<RefCell<bool>>) -> TestListener {
 }
 
 fn register_victim(ctx: &Context, name: &str, fired: &Rc<RefCell<bool>>, victim: &VictimCell) {
-    let disposer = ctx
-        .on_named(name, victim_listener(fired), opts())
-        .unwrap();
+    let disposer = ctx.on_named(name, victim_listener(fired), opts()).unwrap();
     *victim.borrow_mut() = Some(disposer);
 }
 
@@ -221,7 +233,10 @@ fn mid_dispatch_disposal_skips_removed_emit() {
 
     ctx.emit_named("test", &[]);
 
-    assert!(!*fired.borrow(), "listener disposed by an earlier listener of the same dispatch still fired");
+    assert!(
+        !*fired.borrow(),
+        "listener disposed by an earlier listener of the same dispatch still fired"
+    );
 }
 
 #[test]
@@ -236,7 +251,10 @@ fn mid_dispatch_disposal_skips_removed_serial() {
     // The disposer returns None, so without the tombstone the victim would
     // fire and bail the chain with "victim".
     assert!(ctx.serial("test", &[]).is_none());
-    assert!(!*fired.borrow(), "disposed listener fired in serial dispatch");
+    assert!(
+        !*fired.borrow(),
+        "disposed listener fired in serial dispatch"
+    );
 }
 
 #[test]
@@ -263,7 +281,10 @@ fn mid_dispatch_disposal_skips_removed_parallel() {
 
     ctx.parallel("test", &[]).unwrap();
 
-    assert!(!*fired.borrow(), "disposed listener fired in parallel dispatch");
+    assert!(
+        !*fired.borrow(),
+        "disposed listener fired in parallel dispatch"
+    );
 }
 
 #[test]
@@ -284,7 +305,10 @@ fn waterfall_continues_past_removed_listener() {
     let terminal: Next = Rc::new(|args| args.first().cloned());
     let result = ctx.waterfall("test", vec![], &terminal).unwrap();
     assert_eq!(*result.downcast::<&str>().unwrap(), "third");
-    assert!(!*fired.borrow(), "disposed listener fired in waterfall dispatch");
+    assert!(
+        !*fired.borrow(),
+        "disposed listener fired in waterfall dispatch"
+    );
 }
 
 #[test]
@@ -299,7 +323,10 @@ fn waterfall_all_listeners_removed_reaches_terminal() {
     let terminal: Next = Rc::new(|_| Some(value("terminal")));
     let result = ctx.waterfall("test", vec![], &terminal).unwrap();
     assert_eq!(*result.downcast::<&str>().unwrap(), "terminal");
-    assert!(!*fired.borrow(), "disposed listener fired in waterfall dispatch");
+    assert!(
+        !*fired.borrow(),
+        "disposed listener fired in waterfall dispatch"
+    );
 }
 
 #[test]
@@ -338,10 +365,16 @@ fn waterfall_defers_added_listeners_until_next_dispatch() {
     let terminal: Next = Rc::new(|_| Some(value("done")));
     let result = ctx.waterfall("test", vec![], &terminal).unwrap();
     assert_eq!(*result.downcast::<&str>().unwrap(), "done");
-    assert!(!*late_called.borrow(), "listener added mid-dispatch joined the running waterfall");
+    assert!(
+        !*late_called.borrow(),
+        "listener added mid-dispatch joined the running waterfall"
+    );
 
     ctx.emit_named("test", &[]);
-    assert!(*late_called.borrow(), "listener added mid-dispatch never ran on the next dispatch");
+    assert!(
+        *late_called.borrow(),
+        "listener added mid-dispatch never ran on the next dispatch"
+    );
 }
 
 #[test]
@@ -1415,4 +1448,181 @@ fn attach_labeled_exposes_labels_in_introspection() {
     // Default label for the unlabeled attach.
     let _plain = ctx.attach(|| {}).unwrap();
     assert_eq!(ctx.fiber().effects()[1].label, "ctx.attach()");
+}
+
+// Parity battery for the upstream rc.13 core fixes (mirrors
+// go/parity_battery_test.go): each scenario pins an upstream spec; red
+// means the port drifted.
+
+#[test]
+fn event_update_hooks_do_not_accumulate_across_reloads() {
+    // #56: internal/update hooks are fiber effects, so reloads never
+    // accumulate them.
+    use cordis::EVENT_UPDATE;
+
+    let ctx = Context::new();
+    let calls: Rc<RefCell<Vec<i32>>> = Rc::new(RefCell::new(Vec::new()));
+    let p = plugin("p", {
+        let calls = Rc::clone(&calls);
+        move |ctx: &Context, _cfg: &i32| {
+            let calls = Rc::clone(&calls);
+            ctx.on_named(
+                EVENT_UPDATE,
+                Rc::new(move |args: &[Value]| {
+                    let config = args.get(1).and_then(|v| v.downcast_ref::<i32>()).copied()?;
+                    calls.borrow_mut().push(config);
+                    let next = args
+                        .get(3)
+                        .and_then(|v| v.clone().downcast::<Next>().ok())?;
+                    next(&args[..3])
+                }),
+                opts(),
+            )?;
+            Ok(())
+        }
+    });
+    let fiber = start_fn(&ctx, &p, 0_i32).unwrap();
+    fiber.update(value(1_i32)).unwrap();
+    fiber.update(value(2_i32)).unwrap();
+    fiber.update(value(3_i32)).unwrap();
+    assert_eq!(*calls.borrow(), vec![1, 2, 3]);
+}
+
+#[test]
+fn disposed_pending_fiber_settles_disposed() {
+    // #133: a pending fiber that is disposed settles to DISPOSED.
+    let ctx = Context::new();
+    let fiber = ctx.inject(&["never-provided"], |_| Ok(())).unwrap();
+    assert_eq!(fiber.state(), FiberState::Pending);
+    fiber.dispose();
+    assert_eq!(fiber.state(), FiberState::Disposed);
+}
+
+#[test]
+fn isolation_boundary_stops_injected_view() {
+    // #209: an isolated child scope does not inherit the injected service
+    // view across the isolation boundary.
+    let ctx = Context::new();
+    ctx.provide_named("foo", value("outer".to_string()))
+        .unwrap();
+
+    let results: Rc<RefCell<Vec<Option<String>>>> = Rc::new(RefCell::new(Vec::new()));
+
+    let results_probe = Rc::clone(&results);
+    ctx.inject(&["foo"], move |ctx| {
+        start_fn(ctx, &service_view_probe(&results_probe, "child"), ()).unwrap();
+        let iso = ctx.isolate("foo");
+        start_fn(&iso, &service_view_probe(&results_probe, "isolated"), ()).unwrap();
+        Ok(())
+    })
+    .unwrap();
+
+    assert_eq!(
+        results
+            .borrow()
+            .iter()
+            .map(Option::as_deref)
+            .collect::<Vec<_>>(),
+        vec![Some("outer"), None]
+    );
+}
+
+#[test]
+fn reprovide_after_isolated_provider_unload() {
+    // #191: after an isolated provider unloads, providing the same service
+    // in the same isolated scope again succeeds.
+    let ctx = Context::new();
+    let iso = ctx.isolate("svc");
+    let provider = plugin("provider", |ctx: &Context, (): &()| {
+        ctx.provide_named("svc", value("value".to_string()))?;
+        Ok(())
+    });
+
+    let first = start_fn(&iso, &provider, ()).unwrap();
+    first.dispose();
+    assert!(iso.get_named("svc").is_none());
+
+    let second = start_fn(&iso, &provider, ()).unwrap();
+    assert_eq!(
+        second
+            .context()
+            .get_named("svc")
+            .and_then(|v| v.downcast_ref::<String>().cloned()),
+        Some("value".to_string())
+    );
+}
+
+#[test]
+fn provider_resources_outlive_dependent_teardown() {
+    // #196: a provider's earlier effects are released only after its
+    // dependents have unloaded — the dependent's teardown observes a
+    // working service value.
+    let ctx = Context::new();
+    let order: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+    let cell: Rc<RefCell<&'static str>> = Rc::new(RefCell::new("value"));
+
+    let provider = plugin("provider", {
+        let order = Rc::clone(&order);
+        let cell = Rc::clone(&cell);
+        move |ctx: &Context, (): &()| {
+            let order = Rc::clone(&order);
+            let cell = Rc::clone(&cell);
+            ctx.attach({
+                let cell = Rc::clone(&cell);
+                move || {
+                    order.borrow_mut().push("resource-released");
+                    *cell.borrow_mut() = "";
+                }
+            })?;
+            ctx.provide_named("svc", value(Rc::clone(&cell)))?;
+            Ok(())
+        }
+    });
+    let provider_fiber = start_fn(&ctx, &provider, ()).unwrap();
+
+    let dependent = ctx
+        .inject(&["svc"], {
+            let order = Rc::clone(&order);
+            move |ctx: &Context| {
+                let captured = ctx
+                    .get_named("svc")
+                    .and_then(|v| v.downcast::<Rc<RefCell<&'static str>>>().ok())
+                    .unwrap();
+                let order = Rc::clone(&order);
+                ctx.attach(move || {
+                    order.borrow_mut().push("dependent-teardown");
+                    assert_eq!(*captured.borrow(), "value");
+                })?;
+                Ok(())
+            }
+        })
+        .unwrap();
+    assert_eq!(dependent.state(), FiberState::Active);
+
+    provider_fiber.dispose();
+
+    assert_eq!(
+        *order.borrow(),
+        vec!["dependent-teardown", "resource-released"]
+    );
+    assert!(ctx.get_named("svc").is_none());
+}
+
+#[test]
+fn parallel_error_names_the_event() {
+    // #205: the joined parallel error describes the failing event.
+    let ctx = Context::new();
+    ctx.on_named(
+        "boom-event",
+        Rc::new(|_| Some(value("err-one".to_string()))),
+        opts(),
+    )
+    .unwrap();
+    let err = ctx.parallel("boom-event", &[]).unwrap_err();
+    let text = err.to_string();
+    assert!(
+        text.contains("one or more listeners of event \"boom-event\" failed"),
+        "missing event label in {text}"
+    );
+    assert!(text.contains("err-one"), "missing err-one in {text}");
 }

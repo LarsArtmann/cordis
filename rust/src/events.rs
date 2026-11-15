@@ -361,7 +361,12 @@ impl Context {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(crate::Error::Validation(errors.join("\n")))
+            // Mirrors upstream #205: the aggregate names the failing event.
+            Err(crate::Error::Validation(format!(
+                "one or more listeners of event {:?} failed\n{}",
+                name,
+                errors.join("\n")
+            )))
         }
     }
 

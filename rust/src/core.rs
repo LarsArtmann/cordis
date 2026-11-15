@@ -349,6 +349,19 @@ pub fn leave(core: &Rc<RefCell<Core>>) {
     if !should_drain {
         return;
     }
+    settle_pending(core);
+    core.borrow_mut().draining = false;
+}
+
+/// Drain the queue of scheduled fiber transitions to completion, regardless
+/// of API depth. `leave` calls it once the outermost public API call
+/// returns; the provide cleanup calls it directly so the dependents
+/// notified by a service withdrawal settle before the provider's remaining
+/// cleanups run. That is the synchronous counterpart of the
+/// `await Promise.allSettled` in the TypeScript provide disposer, and the
+/// unload guard of the calculus: a consumer's teardown completes while the
+/// resource it hands back to the provider still exists.
+pub fn settle_pending(core: &Rc<RefCell<Core>>) {
     loop {
         let next = core.borrow_mut().dirty.pop_front();
         match next {
@@ -360,7 +373,6 @@ pub fn leave(core: &Rc<RefCell<Core>>) {
             None => break,
         }
     }
-    core.borrow_mut().draining = false;
 }
 
 /// Run a user cleanup, catching panics into the error log and draining any
