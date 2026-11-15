@@ -20,21 +20,26 @@ Flake apps: `nix run .#test` (everything), `.#test-go`, `.#test-rust`,
 `.#test-zig`. Directly:
 
 - Go: `cd go && go test ./...` (also `go vet`; `-race` clean; coverage
-  91.4% total, every package 88.8–91.7%, 2026-09-10 panic-free sweep).
-  Requires Go 1.27 (gotcha below). Timer tests run in a `testing/synctest`
-  bubble (virtual clock, ~2 ms, deterministic); write timing tests that
-  way, not `time.Sleep`. The repo root is a minimal Go module (`go.mod` +
+  90.3% total (cross-package `-coverpkg`), every package 88.3–91.0%,
+  2026-11-15 rc.13-program re-baseline). Requires Go 1.27 (gotcha
+  below). Timer tests run in a `testing/synctest` bubble (virtual clock,
+  ~2 ms, deterministic); write timing tests that way, not `time.Sleep`.
+  The repo root is a minimal Go module (`go.mod` +
   `doc.go` stub, no buildable code) so repo-root Go tooling (`go
   generate/test/vet ./...`) resolves; do not delete it or put port code
   in it — the port lives in the nested `go/` module.
 - Rust: `cd rust && cargo test` (clippy clean on both feature variants,
   `cargo clippy --all-targets [--features thread-safe]`, gated in the
-  flake check/apps and ports.yml). Coverage baseline 86.7% lines / 86.1%
-  regions (cargo-llvm-cov 0.9.0, 2026-09-10; code files 82–91%, `sync.rs`
-  cfg plumbing, `lib.rs` doc-only) — reproduce from `rust/` with `nix
-  shell nixpkgs#cargo-llvm-cov nixpkgs#llvm -c sh -c 'export
+  flake check/apps and ports.yml). Coverage baseline 85.7% lines / 84.1%
+  regions (2026-11-15 rc.13-program re-baseline; `snapshot.rs` 80.7%,
+  `sync.rs` cfg plumbing, `lib.rs` doc-only) — reproduce from `rust/`
+  with `nix shell nixpkgs#cargo-llvm-cov
+  nixpkgs#llvmPackages_23.llvm -c sh -c 'export
   LLVM_COV=$(command -v llvm-cov) LLVM_PROFDATA=$(command -v
-  llvm-profdata); cargo llvm-cov --summary-only'`. Benchmarks: `cargo bench` (`benches/core.rs`,
+  llvm-profdata); cargo llvm-cov --summary-only'`. The llvm pin is
+  load-bearing: system rustc 1.99 emits raw profile format v11, and
+  nixpkgs' default `llvm` (21/22) llvm-profdata refuses to merge it —
+  match the LLVM major to the toolchain after bumps. Benchmarks: `cargo bench` (`benches/core.rs`,
   mirrors the six `go/bench_test.go` hot paths, dependency-free harness,
   best-of-five).
 - Zig: `cd zig && zig build test` (leak-checked via testing.allocator);
@@ -376,6 +381,16 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
 
 ## Repo hygiene facts
 
+- Program-execution lessons (rc.13 sync session, 2026-11-15): gates must
+  run against the STAGED/COMMITTED tree, not the worktree —
+  `git diff --cached` sanity-check before every commit, re-run gates
+  post-commit when a subagent was live (a raced gate once shipped
+  placeholder content, caught and rewritten via `git reset --soft` while
+  unpushed); never commit a file scope a concurrent session or live
+  subagent owns (`git add` with explicit paths only). Subagents hitting
+  provider rate limits die with no output — compensate in-session, never
+  assume their scope completed. One session per worktree: a concurrent
+  session shares this tree and owns its uncommitted files absolutely.
 - Lint configs: `.markdownlint.jsonc` (MD013 off, MD010-in-code-blocks
   off, keepachangelog duplicate headings allowed; strict JSON, no trailing
   commas — see Buildflow) + `.markdownlintignore` (`docs/status/`,

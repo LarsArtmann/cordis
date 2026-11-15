@@ -40,11 +40,14 @@ rc.13 upstream notes: the TS tree gained eight ecosystem packages the
 ports do not cover by scope (cli, cli-cordis, env, fs, fs-node, http,
 http-socks, package-manager) and dropped packages/utils; upstream also
 renamed the plugin concept to component (#307) — the ports keep the
-Plugin vocabulary (decision D1; see DOMAIN_LANGUAGE.md). Decision memos:
-`docs/planning/2026-11-15_hmr-rc13-divergence-memo.md` (D3 confirmed),
-`docs/planning/2026-11-15_registry-replace-memo.md` (replace rejected),
-`docs/planning/2026-11-15_loader-parity-review.md` (eight loader fixes
-mapped).
+Plugin vocabulary (decision D1; see DOMAIN_LANGUAGE.md). The
+internal/config waterfall (#134) is Go-only for now: its consumer is
+config evaluation in loader-style scopes, and only the Go port carries a
+loader; Rust and Zig revisit it if a loader port ever lands. Decision
+memos: `docs/planning/2026-11-15_hmr-rc13-divergence-memo.md` (D3
+confirmed), `docs/planning/2026-11-15_registry-replace-memo.md`
+(replace rejected), `docs/planning/2026-11-15_loader-parity-review.md`
+(eight loader fixes mapped).
 
 ## Planned, in priority order
 
@@ -169,11 +172,13 @@ Go, Rust and Zig test suites with byte-identical expected traces, plus
 
 ### Go
 
-1. Parity reassessment after the 2026-09-08 upstream sync: decide how the
-   three-stage reload (#111), include journal (#121), bare-specifier
-   resolution (#123), `hmr.watch()` (#128) and the replayed `3-stage-hmr`
-   loader semantics map onto `go/loader`/`go/hmr` — port, or document the
-   divergence here.
+1. ~~Parity reassessment after the 2026-09-08 upstream sync~~ — resolved
+   by the rc.13 program: the 2026-11-15 sync absorbed upstream through
+   `68c9d99`, the loader fixes are mapped in
+   `docs/planning/2026-11-15_loader-parity-review.md`, and the hmr
+   rework question is closed by
+   `docs/planning/2026-11-15_hmr-rc13-divergence-memo.md` (D3: the
+   programmatic-core port keeps its shape).
 2. Native API phase 3 (idea): generic methods (`ctx.Get[T]()`) are feasible
    under Go 1.27 (research-verified 2026-09-08, including the interface
    limitation) but would fragment the surface against the named
@@ -210,7 +215,7 @@ Bounded repo tasks (CI guards, lint gates, post-push verification) live in
 `TODO_LIST.md`; `nix flake check` remains the local port gate until a CI
 job enforces it remotely.
 
-### Upstream sync (2026-09-08, pin bumped 2026-09-09)
+### Upstream sync (2026-09-08, pins 2026-09-09 and 2026-11-15)
 
 `main` was rebased onto upstream `caab04e`; the fork's TS tree now carries
 the three-stage reload (#111), include journal (#121), bare-specifier
@@ -218,8 +223,16 @@ resolution (#123), `hmr.watch()` (#128) and the upstream `3-stage-hmr`
 fix branch replayed on top (`b4650df`: commit-based loader entry changes,
 atomic include writes). Local TS suite: 248/248. On 2026-09-09 the pin
 moved to `f8ea3cd` (rc.10 version set) — a manifest-only upstream delta,
-adopted byte-for-byte. The parity gaps this
-opens for the ports are tracked in the Go section above.
+adopted byte-for-byte. On 2026-11-15 the pin moved to `68c9d99` (rc.13:
+the plugin→component rename, oxlint migration, tracked yarn.lock, eight
+new ecosystem packages, the hmr rework and the loader/hmr/core fixes
+this ROADMAP's rc.13 rows and memos cover); the sync commits kept exact
+`packages/` tree equality with the pin and re-verified the suite at
+926 passed / 13 skipped / 939.
+
+Upstream watch-branches for the next delta: `perf/traceable-underscore`
+and `refactor/migrate-server` (flagged by the rc.10→rc.13 assessment,
+2026-11-14).
 
 ### Open decisions (user-gated)
 
