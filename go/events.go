@@ -318,7 +318,12 @@ func (c *Context) Parallel(name string, args ...any) error {
 
 	wg.Wait()
 
-	return errors.Join(errs...)
+	if joined := errors.Join(errs...); joined != nil {
+		// Mirrors upstream #205: the aggregate names the failing event.
+		return fmt.Errorf("one or more listeners of event %q failed: %w", name, joined)
+	}
+
+	return nil
 }
 
 // Serial delivers name to matching listeners one at a time and returns the
