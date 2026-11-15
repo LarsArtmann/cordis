@@ -2,6 +2,7 @@ package cordis
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 )
 
@@ -21,6 +22,11 @@ type Context struct {
 	// isolate holds this scope's realm overrides, keyed by service name.
 	// A nil map inherits the parent chain unchanged.
 	isolate map[string]isolateKey
+
+	// injectLayer holds the per-service configuration defaults a plugin
+	// declared through InjectConfig. They sit under every scope intercept
+	// (upstream #206); only the fiber's own context carries a layer.
+	injectLayer map[string]any
 
 	// intercept holds per-service configuration overrides for this scope.
 	intercept map[string]any
@@ -135,9 +141,11 @@ func (c *Context) Cleanup(label string, run Cleanup) (Disposer, error) {
 }
 
 // Intercept creates a child scope in which the configuration of the named
-// service is overridden, mirroring ctx.intercept(). The logger service
-// honors LoggerIntercept values; other services may read their overrides
-// through Intercepted.
+// service is overridden, mirroring ctx.intercept(). Intercepts merge from
+// the outermost scope to the nearest one, with the inject configs of the
+// governing fibers underneath (#206): the logger service honors
+// LoggerIntercept values; other services may read their overrides through
+// Intercepted.
 func (c *Context) Intercept(name string, config any) *Context {
 	child := c.Extend()
 	child.intercept = map[string]any{name: config}
@@ -145,20 +153,73 @@ func (c *Context) Intercept(name string, config any) *Context {
 	return child
 }
 
-// Intercepted returns the nearest configuration override for name in the
-// scope chain.
+// Intercepted returns the configuration override for name, merged from
+// the outermost scope to the nearest one (upstream #206): nearer scopes
+// overlay fields while outer scopes keep providing the rest. The inject
+// configs the governing fibers declared through InjectConfig form the
+// bottom layer, under every scope intercept. Map and struct values merge
+// field-wise; any other value type uses the nearest scope's value.
 func (c *Context) Intercepted(name string) (any, bool) {
+	var scopeChain []*Context
 	for ctx := c; ctx != nil; ctx = ctx.parent {
-		if ctx.intercept == nil {
-			continue
-		}
+		scopeChain = append(scopeChain, ctx)
+	}
 
-		if value, ok := ctx.intercept[name]; ok {
-			return value, true
+	var layers []any
+	for i := len(scopeChain) - 1; i >= 0; i-- {
+		if layer := scopeChain[i].injectLayer; layer != nil {
+			if v, ok := layer[name]; ok {
+				layers = append(layers, v)
+			}
+		}
+	}
+	for i := len(scopeChain) - 1; i >= 0; i-- {
+		if intercept := scopeChain[i].intercept; intercept != nil {
+			if v, ok := intercept[name]; ok {
+				layers = append(layers, v)
+			}
+		}
+	}
+	if len(layers) == 0 {
+		return nil, false
+	}
+
+	merged := layers[0]
+	for _, overlay := range layers[1:] {
+		merged = mergeIntercept(merged, overlay)
+	}
+
+	return merged, true
+}
+
+// mergeIntercept overlays newer onto older. Two maps merge shallowly; two
+// values of the same struct type merge field-wise with the overlay's
+// non-zero fields winning; anything else replaces.
+func mergeIntercept(older, newer any) any {
+	if oldMap, ok := older.(map[string]any); ok {
+		if newMap, ok := newer.(map[string]any); ok {
+			merged := make(map[string]any, len(oldMap)+len(newMap))
+			maps.Copy(merged, oldMap)
+			maps.Copy(merged, newMap)
+
+			return merged
 		}
 	}
 
-	return nil, false
+	oldVal, newVal := reflect.ValueOf(older), reflect.ValueOf(newer)
+	if oldVal.IsValid() && newVal.IsValid() && oldVal.Type() == newVal.Type() && oldVal.Kind() == reflect.Struct {
+		merged := reflect.New(oldVal.Type()).Elem()
+		merged.Set(oldVal)
+		for i := range oldVal.NumField() {
+			if field := newVal.Field(i); field.IsValid() && !field.IsZero() {
+				merged.Field(i).Set(field)
+			}
+		}
+
+		return merged.Interface()
+	}
+
+	return newer
 }
 
 // WithFilter creates a child scope whose filter restricts event dispatch:

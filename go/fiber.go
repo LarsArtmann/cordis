@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 )
 
 // FiberState describes the lifecycle of a fiber, mirroring FiberState in the
@@ -127,10 +126,7 @@ func newFiber(parent *Context, config any, base *pluginBase, rt *Runtime) *Fiber
 	ctx := parent.Extend()
 
 	ctx.fiber = f
-	if len(f.injectConfig) > 0 {
-		ctx.intercept = make(map[string]any, len(f.injectConfig))
-		maps.Copy(ctx.intercept, f.injectConfig)
-	}
+	ctx.injectLayer = f.injectConfig
 
 	f.ctx = ctx
 	f.stdCtx, f.stdCancel = context.WithCancelCause(context.Background())
