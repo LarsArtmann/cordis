@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // Listener handles an event. The returned value is significant for the Bail,
@@ -32,11 +33,16 @@ func Global() EventOption {
 	return func(o *eventOptions) { o.global = true }
 }
 
-// hook is one registered listener.
+// hook is one registered listener. removed marks a hook disposed before
+// its dispatch snapshot ran, mirroring the upstream fix for #242: disposal
+// splices the hook from the store, but dispatch loops iterate a pointer
+// snapshot, so the flag is the tombstone they honor. Writes happen under
+// core.mu; dispatch reads are lock-free, hence the atomic.
 type hook struct {
-	owner  *Context
-	fn     Listener
-	global bool
+	owner   *Context
+	fn      Listener
+	global  bool
+	removed atomic.Bool
 }
 
 // Well known internal events, mirroring the Events interface upstream.
@@ -168,16 +174,8 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 
 	dispose, err := c.registerCleanup(fmt.Sprintf("ctx.on(%q)", name), func() {
 		c.core.mu.Lock()
-		defer c.core.mu.Unlock()
-
-		hooks := c.core.hooks[name]
-		for i, candidate := range hooks {
-			if candidate == h {
-				c.core.hooks[name] = append(hooks[:i], hooks[i+1:]...)
-
-				return
-			}
-		}
+		c.core.removeHookLocked(name, h)
+		c.core.mu.Unlock()
 	})
 	if err != nil {
 		c.core.mu.Lock()
@@ -191,6 +189,7 @@ func (c *Context) On(name string, listener Listener, opts ...EventOption) (Dispo
 }
 
 func (c *core) removeHookLocked(name string, h *hook) {
+	h.removed.Store(true)
 	hooks := c.hooks[name]
 	for i, candidate := range hooks {
 		if candidate == h {
@@ -275,6 +274,10 @@ func (c *Context) Emit(name string, args ...any) {
 	c.notifyDispatch("emit", name, args)
 
 	for _, h := range c.resolveHooks(name) {
+		if h.removed.Load() {
+			continue
+		}
+
 		h.fn(args...)
 	}
 }
@@ -301,6 +304,10 @@ func (c *Context) Parallel(name string, args ...any) error {
 				}
 			}()
 
+			if h.removed.Load() {
+				return
+			}
+
 			if result := h.fn(args...); result != nil {
 				if err, ok := result.(error); ok {
 					errs[i] = err
@@ -320,6 +327,10 @@ func (c *Context) Serial(name string, args ...any) any {
 	c.notifyDispatch("serial", name, args)
 
 	for _, h := range c.resolveHooks(name) {
+		if h.removed.Load() {
+			continue
+		}
+
 		if result := h.fn(args...); isBailed(result) {
 			return result
 		}
@@ -347,12 +358,20 @@ func (c *Context) Waterfall(name string, terminal func(...any) any, args ...any)
 	var next func(...any) any
 
 	next = func(nextArgs ...any) any {
-		if len(hooks) == 0 {
+		var h *hook
+		for len(hooks) > 0 {
+			h, hooks = hooks[0], hooks[1:]
+			if !h.removed.Load() {
+				break
+			}
+
+			h = nil
+		}
+
+		if h == nil {
 			return terminal(nextArgs...)
 		}
 
-		h := hooks[0]
-		hooks = hooks[1:]
 		// Copy: appending next must never write into the caller's slice
 		// backing array.
 		full := make([]any, 0, len(nextArgs)+1)

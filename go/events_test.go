@@ -289,3 +289,264 @@ func mustOn(t *testing.T, ctx *Context, name string, listener Listener, opts ...
 		t.Fatal(err)
 	}
 }
+
+// Mid-dispatch disposal (#242 parity): a listener disposed by an earlier
+// listener of the same dispatch must not fire. Disposal splices the hook
+// from the store, but dispatch iterates a pointer snapshot, so the removed
+// tombstone is what the loops honor. Registration order is invocation
+// order: the disposer registers first, the victim second.
+
+func TestMidDispatchDisposalSkipsRemovedEmit(t *testing.T) {
+	ctx := New()
+
+	var victimCalled bool
+
+	var victim Disposer
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		victim()
+		return nil
+	})
+	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
+		victimCalled = true
+		return nil
+	})
+
+	ctx.Emit("test")
+
+	if victimCalled {
+		t.Fatal("listener disposed by an earlier listener still fired")
+	}
+}
+
+func TestMidDispatchDisposalSkipsRemovedSerial(t *testing.T) {
+	ctx := New()
+
+	var victimCalled bool
+
+	var victim Disposer
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		victim()
+		return nil
+	})
+	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
+		victimCalled = true
+		return "victim"
+	})
+
+	if result := ctx.Serial("test"); result != nil {
+		t.Fatalf("expected nil result, got %v", result)
+	}
+
+	if victimCalled {
+		t.Fatal("disposed listener fired in serial dispatch")
+	}
+}
+
+func TestMidDispatchDisposalSkipsRemovedBail(t *testing.T) {
+	ctx := New()
+
+	var victimCalled bool
+
+	var victim Disposer
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		victim()
+		return "first"
+	})
+	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
+		victimCalled = true
+		return "victim"
+	})
+
+	if result := ctx.Bail("test"); result != "first" {
+		t.Fatalf("expected first listener result, got %v", result)
+	}
+
+	if victimCalled {
+		t.Fatal("disposed listener fired in bail dispatch")
+	}
+}
+
+func nextArg(t *testing.T, args []any) func(...any) any {
+	t.Helper()
+
+	if len(args) == 0 {
+		t.Fatal("waterfall listener invoked without a next function")
+	}
+
+	next, ok := args[len(args)-1].(func(...any) any)
+	if !ok {
+		t.Fatalf("last argument is not next: %T", args[len(args)-1])
+	}
+
+	return next
+}
+
+func TestWaterfallContinuesPastRemovedListener(t *testing.T) {
+	ctx := New()
+
+	var victimCalled bool
+
+	var victim Disposer
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		victim()
+		return nextArg(t, args)()
+	})
+	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
+		victimCalled = true
+		return nil
+	})
+	mustOn(t, ctx, "test", func(args ...any) any {
+		return nextArg(t, args)("third")
+	})
+
+	terminal := func(args ...any) any {
+		if len(args) > 0 {
+			return args[0]
+		}
+
+		return nil
+	}
+
+	if result := ctx.Waterfall("test", terminal); result != "third" {
+		t.Fatalf("expected chain to reach the last listener, got %v", result)
+	}
+
+	if victimCalled {
+		t.Fatal("disposed listener fired in waterfall dispatch")
+	}
+}
+
+func TestWaterfallAllListenersRemovedReachesTerminal(t *testing.T) {
+	ctx := New()
+
+	var victimCalled bool
+
+	var victim Disposer
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		victim()
+		return nextArg(t, args)()
+	})
+	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
+		victimCalled = true
+		return nil
+	})
+
+	terminal := func(args ...any) any { return "terminal" }
+
+	if result := ctx.Waterfall("test", terminal); result != "terminal" {
+		t.Fatalf("expected terminal after skipping the removed listener, got %v", result)
+	}
+
+	if victimCalled {
+		t.Fatal("disposed listener fired in waterfall dispatch")
+	}
+}
+
+func TestWaterfallDefersAddedListenersUntilNextDispatch(t *testing.T) {
+	ctx := New()
+
+	var lateCalled bool
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		mustOn(t, ctx, "test", func(args ...any) any {
+			lateCalled = true
+			return nil
+		})
+
+		if len(args) > 0 {
+			if next, ok := args[len(args)-1].(func(...any) any); ok {
+				return next()
+			}
+		}
+
+		return nil
+	})
+
+	if result := ctx.Waterfall("test", func(args ...any) any { return "done" }); result != "done" {
+		t.Fatalf("expected terminal, got %v", result)
+	}
+
+	if lateCalled {
+		t.Fatal("listener added mid-dispatch joined the running waterfall")
+	}
+
+	ctx.Emit("test")
+
+	if !lateCalled {
+		t.Fatal("listener added mid-dispatch never ran on the next dispatch")
+	}
+}
+
+// TestMidDispatchDisposalParallel asserts the joined error stays nil when a
+// listener disposes a sibling mid-flight. Goroutine scheduling makes
+// strict skip-ordering untestable here (a victim goroutine may already be
+// past its tombstone check); the deterministic skip contract is pinned by
+// the emit/serial/bail/waterfall tests plus the tombstone unit test below.
+func TestMidDispatchDisposalParallel(t *testing.T) {
+	ctx := New()
+
+	var victimCalls int64
+
+	var victim Disposer
+
+	mustOn(t, ctx, "test", func(args ...any) any {
+		victim()
+		return nil
+	})
+	victim = mustOnErr(t, ctx, "test", func(args ...any) any {
+		atomic.AddInt64(&victimCalls, 1)
+		return nil
+	})
+
+	if err := ctx.Parallel("test"); err != nil {
+		t.Fatalf("unexpected joined error: %v", err)
+	}
+
+	if calls := atomic.LoadInt64(&victimCalls); calls > 1 {
+		t.Fatalf("victim listener ran %d times", calls)
+	}
+}
+
+// TestRemoveHookSetsTombstone pins the mechanism itself: removal marks the
+// hook before splicing, lock-free readers observe the atomic.
+func TestRemoveHookSetsTombstone(t *testing.T) {
+	ctx := New()
+
+	d, err := ctx.On("test", func(...any) any { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hooks := ctx.core.hooks["test"]
+	if len(hooks) != 1 {
+		t.Fatalf("expected 1 hook, got %d", len(hooks))
+	}
+
+	h := hooks[0]
+
+	if h.removed.Load() {
+		t.Fatal("hook marked removed before disposal")
+	}
+
+	d()
+
+	if !h.removed.Load() {
+		t.Fatal("disposal did not set the removed tombstone")
+	}
+}
+
+func mustOnErr(t *testing.T, ctx *Context, name string, listener Listener, opts ...EventOption) Disposer {
+	t.Helper()
+
+	d, err := ctx.On(name, listener, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return d
+}
