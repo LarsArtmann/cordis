@@ -380,8 +380,11 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
   off, keepachangelog duplicate headings allowed; strict JSON, no trailing
   commas — see Buildflow) + `.markdownlintignore` (`docs/status/`,
   `docs/planning/` frozen history; all of `packages/` upstream-owned,
-  byte-parity-guarded; vendored/generated dirs); `.oxlintrc.json`
-  (`ignorePatterns` skips generated `lib/`/`dist/`); `dprint.json`
+  byte-parity-guarded; vendored/generated dirs); `oxlint.config.ts`
+  (upstream's rc.13 config, adopted with the sync; the fork's old
+  `.oxlintrc.json` was deleted 2026-11-15 — oxlint allows only one config
+  per directory and upstream's `**/*.js`/`**/*.mjs` ignores already cover
+  the fork's generated `lib/`/`dist/` and `examples/`); `dprint.json`
   (excludes `packages/**` — upstream owns formatting there; never let a
   formatter rewrite upstream files); `.buildflow.yml`.
 - Rust: `pedantic`+`nursery` are `deny` (Cargo.toml). All findings cleared

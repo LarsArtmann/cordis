@@ -40,3 +40,12 @@ skip_steps:
   # parity-locked surface. Splitting is tracked in TODO_LIST.md; new-code
   # file hygiene stays owned by the structure linter.
   - file-size-check
+  # Buildflow's bare `vitest` invocation cannot reproduce the workspace
+  # test semantics: cross-package imports must resolve through the root
+  # tsconfig paths to src (yakumo vitest + tsx), or stack-frame specs like
+  # include/tests/location.spec.ts see built lib/ frames instead of
+  # src/**/tree.ts; the package-manager specs additionally need corepack's
+  # per-project yarn dispatch, which the devShell's yarn-berry binary does
+  # not provide. TS tests are owned by `yarn test` (CI build.yml "Unit
+  # Test" runs yarn test:json; baseline 926 passed / 13 skipped / 939).
+  - vitest-test
