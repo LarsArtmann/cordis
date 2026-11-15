@@ -334,7 +334,7 @@ func TestStartGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Start[int](ctx, nil, 0); err == nil {
+	if _, err := Start(ctx, nil, 0); err == nil {
 		t.Fatal("starting nil must fail")
 	}
 }

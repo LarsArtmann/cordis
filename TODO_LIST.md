@@ -5,174 +5,145 @@ live in `ROADMAP.md`; completed work is logged in `CHANGELOG.md`, never here.
 
 **Prime directive: native-max APIs, not TS 1:1 ports.**
 
-## Panic-free surface follow-ups (from the 2026-09-10 sweep)
-
-Source: `docs/status/2026-09-10_06-32_panic-free-typed-errors-sweep.md`.
-Already done this pass (dropped from the report's list): Zig reachability
-audit (dispatch aborts 27 → 15), the panic-allowlist CI gate
-(`scripts/panic-allowlist.sh`), the CHANGELOG `[Unreleased]` entry.
-
-- [ ] Design an error channel for the typed-event guards (Go `go/typed.go`
-      6 sites, Rust `rust/src/events.rs` 2 sites): envelope value or
-      `Result`-listener variant, decided once for all three ports
-      (report f#7).
-- [ ] Zig: `std.testing.failure_allocator` tests asserting
-      `error.OutOfMemory` from the fallible public APIs (`isolateShared`,
-      `provideNamed`, `restart`, `update`, the `bindCleanup` paths)
-      (report c6/f#8).
-- [ ] Zig: per-site `// dispatch: no error channel` comments on the
-      remaining 15 of the original 27 `@panic` sites
-      `@panic` sites in `zig/src/cordis.zig` (report f#9).
-- [ ] Loader: validate `Isolate` label comparability at config-decode time
-      with a field-precise error, before `buildContext` (report f#11).
-- [ ] Rust: encapsulate `FiberId` (`pub` field → `pub(crate)` + accessor)
-      so out-of-range indexing is unrepresentable outside the crate
-      (`rust/src/core.rs`, report f#13).
-- [ ] Re-run `cargo bench` (`rust/benches/core.rs`) to confirm no perf
-      change from the arena `Option` removal and the Waterfall arg
-      reordering (report f#18/f#19).
-- [ ] Run `nix run .#test` and `nix develop -c buildflow` end-to-end to
-      mirror the full local CI sequence on this machine (report f#20).
-- [ ] Next upstream rebase checklist: note that Go `Waterfall`/`Isolate`
-      signatures diverge from TS shapes by design (report f#22).
-- [ ] One doc pass consolidating the per-port fallibility shapes (Go
-      `(T, error)`, Rust `Result`, Zig `Error!T`) into PORTS.md,
-      FEATURES.md and the fork README port table (report f#23/f#24/f#40/f#47).
-- [ ] LSP environment fix: per-project gopls/golangci-lint wrapper pinned
-      to the flake's Go 1.27; zero usable diagnostics on this machine all
-      session (report c8/e8).
-- [ ] Working tree awaits the commit instruction (28 swept files + status
-      report + this pass's audit/gate/doc changes), then watch Ports CI
-      (report f#2/f#21).
-
 ## Upstream tracking
 
-Nothing pending — the pin is `f8ea3cd` (bumped 2026-09-09 with its rc.10
-workspace manifests adopted byte-for-byte), the manifest divergence is back
-to the single deliberate `@types/node ^26.5.0` delta, and CI is green on the
-set (the 2026-09-08 bump-and-restyle divergence turned out to break the dts
-build under TypeScript 7 and was reverted; see AGENTS.md → TS workspace
-gotchas).
+The 2026-11-14 read-only assessment
+(`docs/status/2026-11-14_16-31_upstream-rc10-rc13-assessment.md`) found
+upstream at rc.13 (77 commits, +21.5k lines) with one verified port gap
+(#242 mid-dispatch listener removal in all three ports). The sync itself is
+user-gated on three policy questions (plugin → component rename, yarn.lock
+adoption, hmr re-port scope — report section (g)); until it lands, do not
+touch `packages/`.
 
-## Parity
+- [ ] Watch upstream `perf/traceable-underscore` and
+      `refactor/migrate-server` branches for the next delta (report
+      2026-11-14_16-31 §f47). — Low / S / Upstream
+- [ ] Parity test: no injected metadata for a fiber's own provisions
+      (#209 second half) — write the test against current port semantics
+      when the rc.13 sync lands, or earlier if a session wants the
+      coverage now (report 2026-11-14_16-31 §f15). — Medium / S / Parity
+- [ ] Working tree awaits the commit instruction (loader label
+      validation + entry split, Zig OOM sweep + three real fixes, Rust
+      FiberId/Arg, greeter examples, CI workflows, doc pass), then watch
+      Ports CI (2026-11-14 session).
 
-The 2026-09-10 Rust/Zig catch-up landed: Rust effect introspection
-(`attach_labeled`), logger service and `internal/get|set|listener|dispatch`
-interception events; Zig intercept, snapshot/restore + stashing delete,
-`internal/status`/`plugin`/`update` events, config validation
-(`ValidatedPlugin`), logger service and comptime accessors/mixins.
-Remaining Go-only surface: callable services + tracker, timer, loader,
-hmr. Remaining Rust/Zig rows live in `ROADMAP.md` → Planned (loader/hmr
-gated on the module-layout decision).
+## Panic-free surface follow-ups
+
+Closed 2026-11-14 (evidence in CHANGELOG [Unreleased]): the typed-event
+guard error-channel decision (ROADMAP.md → "Typed-event guard error
+channel" — keep the contract-bound panic; a Result-listener variant is
+the only sanctioned escape hatch, deferred to the breaking-surface
+release window), the Zig OOM sweep (`zig/tests/oom.zig`, the 0.17
+`std.testing` failure-allocator harness sweeping every registration
+allocation index for the fallible public APIs; three real bugs
+fixed: init logger leak, `provideNamed` abort, hooks poison entry), the
+per-site `// dispatch: no error channel` markers (all 17 sites), loader
+isolate-label validation with a field-precise error, Rust `FiberId`
+encapsulation, `cargo bench` re-run (no perf regression), the
+fallibility doc pass (PORTS/README/FEATURES), and the AGENTS
+rebase-checklist note for the Go `Waterfall`/`Isolate` divergences. The
+Zig dispatch-abort end state stays user-gated in ROADMAP.
 
 ## Rust follow-ups
 
-- [ ] Rust: miri job in Ports CI over the core port (no miri in
-      `.github/workflows/ports.yml` or the flake rust check; report
-      2026-08-22 #33). — Low / M / Quality
-- [ ] Rust: logger `Arg` `From` impls for `u32`/`usize` (`&Error`
-      decided against — error args are formatted strings by design;
-      report 2026-09-10_08-25 §29, partial). — Low / S
-
-Nothing pending beyond the sweep items above — the `deps_ready` allowlist
-comment now carries a verified `go/fiber.go` citation, the `once` scrutinee
-hardening and the `Fiber::name` one-lock shape are pinned in
-`rust/tests/thread_safe.rs`, root-dispose's no-`internal/plugin` contract is
-pinned in `rust/tests/parity.rs`, and the crate docs narrate the internal
-events and the root guard (all landed 2026-09-08).
+Nothing pending — the miri job joined Ports CI (golden/typed/parity
+under `-Zmiri-ignore-leaks -Zmiri-disable-isolation`, verified locally
+2026-11-14: typed 4.9 s, golden 6.3 s) and the logger `Arg`
+`From<u32>`/`From<usize>` conversions landed with a parity test. The
+`deps_ready` allowlist citation, the `once` scrutinee hardening, the
+`Fiber::name` one-lock shape, the root-dispose contract and the crate
+docs were already landed (2026-09-08).
 
 ## Repo guards and small fixes
 
-- [ ] Rust supply-chain gate: commit `rust/deny.toml` (created
-      2026-11-14, still untracked) and install cargo-audit/cargo-deny in
-      the flake devShell (still "no such command"; buildflow's nix-run
-      fallback covers them), or skip/disable those buildflow steps with
-      rationale in `.buildflow.yml` (reports 2026-09-08_04-32 §7,
-      2026-10-10 §12). — Medium / S
-- [ ] Job-count/runtime review of both workflows after this week's
-      additions (15-43 f48; `.github/workflows/`; report
-      2026-09-08_21-18 §49). — Low / S
-- [ ] erraudit re-verify on the next Go error-path change (gate for the
-      new plumbing; the 2026-11-10-14 sweep + golden.rs refactor
-      triggered it without a recorded re-run; report
-      2026-09-10_07-06 §42). — Medium / S
-- [ ] HARVEST 2026-09-09_01-54's leftover items into
-      TODO_LIST/ROADMAP (the report's meta-row, still open; report
-      2026-09-09_01-54 row 13). — Medium / M / Documentation
+Nothing pending — `rust/deny.toml` is committed (`f6bf182`) and
+`cargo-audit`/`cargo-deny` now ship in the flake devShell (2026-11-14),
+so buildflow stops using the `nix run` fallback for them. The
+workflow job-count review verdict (2026-11-14): the `flake` job
+deliberately duplicates the go/rust/zig jobs with a hermetic
+`-race -count=3` profile — fast feedback vs hermetic gate, keep both;
+the zig job now pins 0.17.1 (tracking the nixpkgs zig the flake check
+uses; the port needs 0.17-only APIs) and runs the fmt gate. erraudit
+re-verified 2026-11-14: 0 violations across `go/...` after the loader
+changes. The 2026-09-09_01-54 leftovers were dispositioned by the
+docs-gates audit-all replay (0 unharvested historical items outside the
+rc.13 assessment, which is routed above).
 
-Nothing pending beyond the sweep items above (2026-09-10): the panic
-allowlist gate joined the fixture canary and the manifest guard; the hmr
-fixture/spec replace-literal canary (`scripts/hmr-fixture-canary.mjs`) and
-the manifest divergence guard (`scripts/manifest-parity.mjs`) are wired into
-the `upstream-parity` CI job, `UPSTREAM_PIN` lives in the tracked one-line
-`.github/UPSTREAM_PIN` file the workflow reads, and the `package.json`
-exclusion is a documented, guarded decision (allowlist: root `@types/node`
-only).
+## Environment audit
 
-Earlier: the markdownlint gate (flake `markdown` check + `test-markdown`
-app) and GitHub Release pages for `go/v0.1.0` and `rust/v0.2.0` landed
-2026-09-08.
+Re-ran `scripts/vulnix-audit.sh direct` after the 2026-11-09 nixpkgs
+bump (2026-11-14): 9 findings across 3 packages, down from 4 packages /
+11 CVEs. The four tracked targets cleared exactly as predicted —
+nixpkgs now ships jq 1.8.2, perl 5.42.3 and libmicrohttpd 1.0.10, and
+zlib left the closure entirely. Verified verdicts (2026-11-14, NVD +
+upstream advisories): jq's HIGH trio is CVE-2026-49839 / CVE-2026-40164
+/ CVE-2026-32316, all fixed in jq 1.8.2 — the IDs named in the
+2026-09-28 report were wrong (CVE-2025-2810 is Draeger ICMHelper,
+CVE-2026-21734 is Imagination DDK, CVE-2026-21735 does not exist); perl
+CVE-2026-57432 is real and fixed in 5.40.5/5.42.3; libmicrohttpd
+CVE-2025-62689 is real, affected ≤ 1.0.2, fixed at commit level /
+1.0.3; CVE-2023-6992 affects the CLOUDFLARE zlib fork — not zlib-ng and
+not vanilla zlib, so the 2026-09-28 "zlib-ng mismatch" suspicion was
+wrong. `yarn npm audit` (2026-11-14): 7 findings, all in upstream-owned
+manifests — vite 7.3.6 (1 high launch-editor, 2 moderate, 1 low),
+esbuild 0.27.7 (1 low), eslint 8.57.1 deprecation (1 moderate); TS dep
+bumps belong upstream, nothing to do in the fork. The residual
+direct-scope findings (ShellCheck, cargo 1.99.1, go 1.27.3) are the
+same NVD product-name collision class behind the old audit's "~60% of
+findings were NVD false positives" wording — that estimate belonged to
+the whole-store closure scope; the direct scope's residuals are the
+same class — open the NVD entry before acting on any of them.
 
-## Environment audit follow-up (from the 2026-09-10 vulnix run)
-
-Source: `docs/status/2026-09-10_09-08_vulnix-environment-audit.md`.
-No in-repo action was required: every genuine finding is latest-release
-build/dev tooling whose fix lands with the next `nix flake update`
-(~60% of findings were NVD product-name false positives).
-
-- [ ] Re-run `scripts/vulnix-audit.sh direct` after the next nixpkgs
-      bump; expect glibc 2.43, python 3.14.7, coreutils 9.12, gzip 1.15,
-      binutils 2.47 to clear their entries (report §f1). — Low / S
-- [ ] One-off dependency-side audits vulnix cannot see: `yarn npm
-      audit` for the TS workspace (Go/Rust ports are dependency-free)
-      (report §f2). — Low / S
-- [ ] Verify and bucket jq's 3 CVEs (only untriaged package; report
-      2026-09-10_09-28 §2). — S
-- [ ] Nuance the 60%-FP wording in TODO_LIST.md (report
-      2026-09-10_09-28 §5). — S
 - [ ] Cold-cache smoke test of `scripts/vulnix-audit.sh` (NVD download
-      path; report 2026-09-10_09-28 §6). — S/M
-- [ ] Verify perl CVE-2026-57432 and libmicrohttpd CVE-2025-62689 (the
-      stragglers in otherwise-verified families; report
-      2026-09-10_09-28 §9). — S
-- [ ] Confirm zlib CVE-2023-6992 is the zlib-ng mismatch it looks like
-      (report 2026-09-10_09-28 §10). — S
+      path; the warm path is verified 2026-11-14). — S/M
+- [ ] Bucket the residual direct-scope findings: ShellCheck
+      CVE-2021-28794 vs ShellCheck 0.11.0 (vulnix range says affected;
+      open the entry before acting — likely a stale range), the 7
+      cargo-1.99.1 CVEs (expected product-name collision class), and
+      go-1.27.3 CVE-2023-49292 (4.9; verify the range against 1.27.3). —
+      Low / S
 
 ## Structure
 
-- [ ] Split the 12 files over the 350-line line when the next semantic
+- [ ] Split the remaining over-350-line files when the next semantic
       work touches them (go/fiber.go 759, go/coverage_test.go 660,
-      go/loader/entry.go 491, zig/src/cordis.zig, and the table-heavy
-      test files); golden tests must stay green byte-identically across
-      Go/Rust/Zig after any move. buildflow's `file-size-check` step is
-      skipped until then (.buildflow.yml). — Medium / M
+      zig/src/cordis.zig — one comptime module by design — and the
+      table-heavy test files). go/loader/entry.go is done: split into
+      entry.go / entry_lifecycle.go / entry_options.go (165/211/165
+      lines) on 2026-11-14 with the golden traces untouched.
+      buildflow's `file-size-check` step is skipped until then
+      (.buildflow.yml). — Medium / M
 
 ## Quality backlog
 
-- [ ] Repo: greeter example app in all three languages (`packages/`,
-      `go/`, `rust/`, `zig/`), built as a CI smoke step (no `examples/`
-      tree exists; report 2026-08-22 #48). — Low / M / Docs
-- [ ] Go: drop the redundant explicit type args gopls infertypeargs
-      flags (`go/coverage_test.go:337` `Start[int]`,
-      `go/accessor.go:127` `Accessor[S]`; report 2026-09-08_04-04 §24,
-      lines drifted). — Low / S / Go
-- [ ] Nightly multi-seed run for `TestDebounceThrottleProperty`
-      (4 seeds proven; fixed seed at `go/timer/property_test.go:22`, no
-      CI cron exists; report 2026-09-08_18-16 §25). — Low / S / Quality
-- [ ] Zig: `Fiber.restart`/`update` doc cross-links to the new events
-      (partial: context only; report 2026-09-10_08-25 §32). — Low / S / Docs
-- [ ] Logger golden scenario as a fifth golden run in all ports (the
-      logger service has no golden coverage; ROADMAP.md Go §3; reports
-      2026-09-08_16-47 §6, 2026-09-09_02-51 §16). — Low / M
-- [ ] Golden scenario v2: snapshot/restore ops in the shared DSL runner
-      (Go/Rust/Zig; report 2026-09-10_08-25 §15). — Low / M
-- [ ] Loader docs: `Tree.recordError` last-writer-wins vs
-      first-failure-wins semantics, pinned with a concurrent-reload test
-      (`go/loader/entry.go:114`; report 2026-09-08_18-16 §29). — Low / S
+Closed 2026-11-14: `nix run .#test` and `nix develop -c buildflow` ran
+end-to-end green (the full local CI mirror, f#20), erraudit stamped at
+0 violations; the logger golden scenario — the report's planned
+"fifth golden run", landed as the #6 run in all three ports
+(`golden/scenario-logger.txt`) — and the snapshot/restore golden v2
+(#5, Rust + Zig — the Go port has no snapshot API; FEATURES.md
+corrected). The FEATURES "Planned" section no longer lists bounded
+work.
+
 - [ ] On each nixpkgs/flake bump, re-check `nix flake check` output for
-      new nix deprecations (formatter naming fixed at `51cddf2`;
-      eval-cache warnings observed 2026-09-08, not reproducible on Nix
-      2.34.9; report 2026-09-08_05-27 §47). — Low / S / Nix
+      new nix deprecations (clean on the 2026-11-14 run; formatter
+      naming fixed at `51cddf2`). — Low / S / Nix
+- [ ] Go: godoc polish pass (every exported symbol has an
+      example-quality comment; report 2026-08-22_10-19 §30). — Low / M /
+      Docs
+- [ ] `govulncheck ./...` one-off for the Go port (source-level reachability,
+      complements vulnix's binary-closure view; report
+      2026-09-10_09-28 §12). — Low / S
+
+Closed 2026-11-14: the greeter example app in all four trees with CI
+smoke steps; the gopls infertypeargs cleanups
+(`go/coverage_test.go`, `go/accessor.go`); the nightly multi-seed run
+for the debounce/throttle property; the Zig `restart`/`update` event
+cross-links; the loader `recordError` last-writer-wins docs + pin
+tests. The LSP environment row is closed as stale: system Go is 1.27.3
+and gopls/golangci diagnostics verified working on this machine
+(2026-11-14) — the original root cause was the broken GOCACHE, repaired
+the same day; no wrapper needed.
 
 ## Cross-repo
 
@@ -193,8 +164,8 @@ build/dev tooling whose fix lands with the next `nix flake update`
 ## User-gated
 
 Standing decisions (yarn.lock policy, oxlint policy for upstream TS,
-one-session-per-worktree, TS toolchain stance, coverage/bench gate policy,
-generic-method deprecation timeline, release surface) live in
-`ROADMAP.md` → Open decisions — not duplicated here. New since the
-2026-09-10 sweep: the breaking-surface release policy, the Zig
-dispatch-abort end state, and the Go `Must*` fate (same file).
+one-session-per-worktree, TS toolchain stance, coverage/bench gate
+policy, generic-method deprecation timeline, release surface, the
+breaking-surface release policy, the Zig dispatch-abort end state, the
+Go `Must*` fate, and the rc.13 sync's three policy questions) live in
+`ROADMAP.md` → Open decisions — not duplicated here.

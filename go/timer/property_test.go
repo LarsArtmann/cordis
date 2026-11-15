@@ -2,6 +2,7 @@ package timer
 
 import (
 	"math/rand/v2"
+	"os"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -13,83 +14,111 @@ import (
 // TestDebounceThrottleProperty drives randomized call sequences through
 // Debounce and both Throttle modes inside a virtual-time bubble and checks
 // the observed fire counts against an independent event-simulation model
-// of each schedule. The fixed seed keeps any failure reproducible.
+// of each schedule. The fixed seed keeps any failure reproducible; the
+// nightly workflow replays many seeds through
+// TestDebounceThrottlePropertyMultiSeed.
 //
 // A call landing on the same virtual instant as a pending timer fire has
 // no portable ordering, so the generator rejection-samples gaps that never
 // coincide with a modelled fire deadline.
 func TestDebounceThrottleProperty(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx := cordis.New()
-		rng := rand.New(rand.NewPCG(20260908, 42))
+		runDebounceThrottleRounds(t, rand.New(rand.NewPCG(20260908, 42)))
+	})
+}
 
-		for round := range 40 {
-			delay := time.Duration(2+rng.IntN(6)) * time.Millisecond
+// TestDebounceThrottlePropertyMultiSeed replays the debounce/throttle
+// property across many PCG seeds, covering the generator's rejection
+// sampling beyond the single reproducible seed. It is guarded by
+// CORDIS_MULTI_SEED so the default suite stays fast and deterministic; the
+// nightly workflow sets the variable.
+func TestDebounceThrottlePropertyMultiSeed(t *testing.T) {
+	if os.Getenv("CORDIS_MULTI_SEED") == "" {
+		t.Skip("set CORDIS_MULTI_SEED to run the multi-seed property sweep")
+	}
 
-			var (
-				debFires atomic.Int64
-				debGot   atomic.Int64
-				thrFires atomic.Int64
-				thrNT    atomic.Int64
-			)
-
-			deb, stopDeb, err := Debounce(ctx, func(args ...any) {
-				debFires.Add(1)
-
-				if n, ok := args[0].(int); ok {
-					debGot.Store(int64(n))
-				}
-			}, delay)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			thr, stopThr, err := Throttle(ctx, func(args ...any) { thrFires.Add(1) }, delay, false)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			thrNoTrailing, stopThrNT, err := Throttle(ctx, func(args ...any) { thrNT.Add(1) }, delay, true)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			defer func() {
-				stopDeb()
-				stopThr()
-				stopThrNT()
-			}()
-
-			m := newDispatchModel(delay)
-			for call := 1; call <= 1+rng.IntN(10); call++ {
-				synctest.Sleep(m.nextGap(rng))
-				m.call(call)
-				deb(call)
-				thr(call)
-				thrNoTrailing(call)
-			}
-
-			m.finish()
-			synctest.Sleep(10 * delay)
-			synctest.Wait()
-
-			if got, want := debFires.Load(), int64(m.debFires); got != want {
-				t.Fatalf("round %d: debounce fired %d times, want %d", round, got, want)
-			}
-
-			if got, want := debGot.Load(), int64(m.debLastFiredCall); got != want {
-				t.Fatalf("round %d: debounce delivered call %d, want %d", round, got, want)
-			}
-
-			if got, want := thrFires.Load(), int64(m.thrFires); got != want {
-				t.Fatalf("round %d: throttle fired %d times, want %d", round, got, want)
-			}
-
-			if got, want := thrNT.Load(), int64(m.thrNTFires); got != want {
-				t.Fatalf("round %d: no-trailing throttle fired %d times, want %d", round, got, want)
+	synctest.Test(t, func(t *testing.T) {
+		for day := 1; day <= 8; day++ {
+			for slot := range 4 {
+				runDebounceThrottleRounds(t, rand.New(rand.NewPCG(uint64(20260900+day), uint64(100+slot))))
 			}
 		}
 	})
+}
+
+// runDebounceThrottleRounds is the shared 40-round property body over one
+// generator.
+func runDebounceThrottleRounds(t *testing.T, rng *rand.Rand) {
+	t.Helper()
+
+	ctx := cordis.New()
+
+	for round := range 40 {
+		delay := time.Duration(2+rng.IntN(6)) * time.Millisecond
+
+		var (
+			debFires atomic.Int64
+			debGot   atomic.Int64
+			thrFires atomic.Int64
+			thrNT    atomic.Int64
+		)
+
+		deb, stopDeb, err := Debounce(ctx, func(args ...any) {
+			debFires.Add(1)
+
+			if n, ok := args[0].(int); ok {
+				debGot.Store(int64(n))
+			}
+		}, delay)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		thr, stopThr, err := Throttle(ctx, func(args ...any) { thrFires.Add(1) }, delay, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		thrNoTrailing, stopThrNT, err := Throttle(ctx, func(args ...any) { thrNT.Add(1) }, delay, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		defer func() {
+			stopDeb()
+			stopThr()
+			stopThrNT()
+		}()
+
+		m := newDispatchModel(delay)
+		for call := 1; call <= 1+rng.IntN(10); call++ {
+			synctest.Sleep(m.nextGap(rng))
+			m.call(call)
+			deb(call)
+			thr(call)
+			thrNoTrailing(call)
+		}
+
+		m.finish()
+		synctest.Sleep(10 * delay)
+		synctest.Wait()
+
+		if got, want := debFires.Load(), int64(m.debFires); got != want {
+			t.Fatalf("round %d: debounce fired %d times, want %d", round, got, want)
+		}
+
+		if got, want := debGot.Load(), int64(m.debLastFiredCall); got != want {
+			t.Fatalf("round %d: debounce delivered call %d, want %d", round, got, want)
+		}
+
+		if got, want := thrFires.Load(), int64(m.thrFires); got != want {
+			t.Fatalf("round %d: throttle fired %d times, want %d", round, got, want)
+		}
+
+		if got, want := thrNT.Load(), int64(m.thrNTFires); got != want {
+			t.Fatalf("round %d: no-trailing throttle fired %d times, want %d", round, got, want)
+		}
+	}
 }
 
 // dispatchModel is an event-simulation oracle for the three schedules over

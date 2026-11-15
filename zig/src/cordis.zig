@@ -429,7 +429,7 @@ pub const Registry = struct {
         // disposing removes each id from that same list (poisoning vacated
         // slots) and frees the list with the last one, exactly like the
         // snapshot-then-dispose order of the Go and Rust registries.
-        const ids = self.core.gpa.dupe(usize, list.items) catch @panic("cordis: out of memory in dispatch");
+        const ids = self.core.gpa.dupe(usize, list.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         defer self.core.gpa.free(ids);
         // Stash the last live fiber's config so restore can restart the
         // runtime with it.
@@ -437,7 +437,7 @@ pub const Registry = struct {
             const f = self.core.fibers.items[id].?;
             if (!f.disposed) {
                 self.core.stash.put(key, .{ .plugin = plugin, .config = f.config }) catch
-                    @panic("cordis: out of memory in dispatch");
+                    @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
                 break;
             }
         }
@@ -555,12 +555,16 @@ pub const Fiber = struct {
         const payload = self.core.a().create(Fiber) catch return;
         payload.* = self;
         d.ctx.emitNamed(event_plugin, &.{value(payload)});
-        self.core.queue(self.id) catch @panic("cordis: out of memory in dispatch");
+        self.core.queue(self.id) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
     }
 
     /// Unload and reload the fiber with its current config. Restarting the
     /// root fiber rolls back every root scope effect and starts a fresh
-    /// bag, mirroring upstream.
+    /// bag, mirroring upstream. Observers track the sequence through the
+    /// internal event namespace: `internal/plugin` fires before the
+    /// rollback (listeners still see the fiber active, mirroring the Go
+    /// and Rust ports) and `internal/status` fires when the fiber settles
+    /// into its next state.
     pub fn restart(self: Fiber) Error!void {
         self.core.enter();
         defer self.core.leave();
@@ -575,12 +579,14 @@ pub const Fiber = struct {
     }
 
     /// Replace the fiber's config and restart it. The update is
-    /// interceptable through the `event_update` waterfall (arguments
+    /// interceptable through the `internal/update` waterfall (arguments
     /// `[fiber, config, no_save]` followed by a `*Next`, mirroring the Go
     /// and Rust ports): listeners may rewrite the config by invoking next
     /// with a new one, or veto the update by not invoking it. A null
     /// config clears the stored config directly; there is nothing to
-    /// intercept.
+    /// intercept. The restart itself is observable like [`restart`]: an
+    /// `internal/plugin` event fires before the rollback and an
+    /// `internal/status` event on the settle.
     pub fn update(self: Fiber, config: ?Value) Error!void {
         self.core.enter();
         defer self.core.leave();
@@ -599,7 +605,7 @@ pub const Fiber = struct {
                 const td = target.data();
                 if (args.len > 1) td.config = args[1];
                 td.restart_requested = true;
-                target.core.queue(target.id) catch @panic("cordis: out of memory in dispatch");
+                target.core.queue(target.id) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
                 return null;
             }
         };
@@ -891,16 +897,16 @@ pub const Core = struct {
                     .label = node.label,
                     .disposed = node.disposed,
                     .children = children,
-                }) catch @panic("cordis: out of memory in dispatch");
+                }) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
             } else if (entry.cleanup) |cleanup| {
                 list.append(self.a(), .{
                     .label = entry.label,
                     .disposed = cleanup.done,
                     .children = &.{},
-                }) catch @panic("cordis: out of memory in dispatch");
+                }) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
             }
         }
-        return list.toOwnedSlice(self.a()) catch @panic("cordis: out of memory in dispatch");
+        return list.toOwnedSlice(self.a()) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
     }
 
     /// Allocate a shared cleanup on the arena so a Disposer can mark it
@@ -969,6 +975,9 @@ pub const Context = struct {
             .logger = LoggerService.init(gpa),
         };
         errdefer core.arena.deinit();
+        // The logger's built-in buffer entry is allocated eagerly by init;
+        // a later failure must release it like the full deinit path does.
+        errdefer core.logger.deinit(gpa);
         const root = try core.a().create(Context);
         root.* = .{ .core = core, .parent = null, .fiber = 0, .realm = null, .config_override = null, .filter = null, .collect = null };
         const root_fiber = try core.a().create(FiberData);
@@ -1098,7 +1107,7 @@ pub const Context = struct {
     /// channel, so an allocation failure aborts; fallible callers use
     /// `isolateKeyE` instead.
     pub fn isolateKey(self: *const Context, name: []const u8) u64 {
-        return self.isolateKeyE(name) catch @panic("cordis: out of memory in dispatch");
+        return self.isolateKeyE(name) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
     }
 
     fn isolateKeyE(self: *const Context, name: []const u8) Error!u64 {
@@ -1146,8 +1155,12 @@ pub const Context = struct {
         const list = blk: {
             const result = self.core.hooks.getOrPut(name) catch return error.OutOfMemory;
             if (!result.found_existing) {
-                result.key_ptr.* = self.core.a().dupe(u8, name) catch return error.OutOfMemory;
                 result.value_ptr.* = .empty;
+                const owned = self.core.a().dupe(u8, name) catch {
+                    self.core.hooks.removeByPtr(result.key_ptr);
+                    return error.OutOfMemory;
+                };
+                result.key_ptr.* = owned;
             }
             break :blk result.value_ptr;
         };
@@ -1185,8 +1198,12 @@ pub const Context = struct {
         const list = blk: {
             const result = self.core.hooks.getOrPut(name) catch return error.OutOfMemory;
             if (!result.found_existing) {
-                result.key_ptr.* = self.core.a().dupe(u8, name) catch return error.OutOfMemory;
                 result.value_ptr.* = .empty;
+                const owned = self.core.a().dupe(u8, name) catch {
+                    self.core.hooks.removeByPtr(result.key_ptr);
+                    return error.OutOfMemory;
+                };
+                result.key_ptr.* = owned;
             }
             break :blk result.value_ptr;
         };
@@ -1315,8 +1332,12 @@ pub const Context = struct {
         const list = blk: {
             const result = self.core.hooks.getOrPut(name) catch return error.OutOfMemory;
             if (!result.found_existing) {
-                result.key_ptr.* = self.core.a().dupe(u8, name) catch return error.OutOfMemory;
                 result.value_ptr.* = .empty;
+                const owned = self.core.a().dupe(u8, name) catch {
+                    self.core.hooks.removeByPtr(result.key_ptr);
+                    return error.OutOfMemory;
+                };
+                result.key_ptr.* = owned;
             }
             break :blk result.value_ptr;
         };
@@ -1353,7 +1374,7 @@ pub const Context = struct {
         const list = self.core.hooks.getPtr(name) orelse return;
         var hooks_snapshot: std.ArrayList(Hook) = .empty;
         defer hooks_snapshot.deinit(self.core.gpa);
-        hooks_snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory in dispatch");
+        hooks_snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         for (hooks_snapshot.items) |hook| {
             if (!self.visible(hook)) continue;
             _ = hook.listener.call(hook.listener.ctx, args);
@@ -1366,7 +1387,7 @@ pub const Context = struct {
         const list = self.core.hooks.getPtr(name) orelse return null;
         var hooks_snapshot: std.ArrayList(Hook) = .empty;
         defer hooks_snapshot.deinit(self.core.gpa);
-        hooks_snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory in dispatch");
+        hooks_snapshot.appendSlice(self.core.gpa, list.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         for (hooks_snapshot.items) |hook| {
             if (!self.visible(hook)) continue;
             if (hook.listener.call(hook.listener.ctx, args)) |result| return result;
@@ -1403,12 +1424,12 @@ pub const Context = struct {
 
     fn waterfallStep(self: *Context, next: *Next, args: []const Value) ?Value {
         const hook = next.hooks[next.index];
-        const sub = self.core.a().create(Next) catch @panic("cordis: out of memory in dispatch");
+        const sub = self.core.a().create(Next) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         sub.* = .{ .ctx = next.ctx, .name = next.name, .hooks = next.hooks, .index = next.index + 1, .terminal = next.terminal };
         var full: std.ArrayListUnmanaged(Value) = .empty;
         defer full.deinit(self.core.gpa);
-        full.appendSlice(self.core.gpa, args) catch @panic("cordis: out of memory in dispatch");
-        full.append(self.core.gpa, @ptrCast(sub)) catch @panic("cordis: out of memory in dispatch");
+        full.appendSlice(self.core.gpa, args) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
+        full.append(self.core.gpa, @ptrCast(sub)) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         if (!self.visible(hook)) {
             return sub.invoke(args);
         }
@@ -1425,11 +1446,11 @@ pub const Context = struct {
         var hooks: std.ArrayList(Hook) = .empty;
         defer hooks.deinit(self.core.gpa);
         for (list.items) |hook| {
-            if (self.visible(hook)) hooks.append(self.core.gpa, hook) catch @panic("cordis: out of memory in dispatch");
+            if (self.visible(hook)) hooks.append(self.core.gpa, hook) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         }
         if (hooks.items.len == 0) return terminal(args);
-        const owned = self.core.a().dupe(Hook, hooks.items) catch @panic("cordis: out of memory in dispatch");
-        const next = self.core.a().create(Next) catch @panic("cordis: out of memory in dispatch");
+        const owned = self.core.a().dupe(Hook, hooks.items) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
+        const next = self.core.a().create(Next) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
         next.* = .{ .ctx = self, .name = name, .hooks = owned, .index = 0, .terminal = terminal };
         return self.waterfallStep(next, args);
     }
@@ -1458,7 +1479,7 @@ pub const Context = struct {
         defer self.core.leave();
         try self.assertActive();
         const bag = self.currentBag() orelse return Error.InactiveEffect;
-        const key = self.isolateKey(name);
+        const key = try self.isolateKeyE(name);
         if (self.core.store.contains(key)) return Error.DuplicateService;
         self.core.store.put(key, .{ .fiber = self.fiber, .val = val }) catch return error.OutOfMemory;
 
@@ -1473,7 +1494,7 @@ pub const Context = struct {
         const cleanup = try self.core.bindCleanup(Removal, removal, struct {
             fn run(r: *Removal) void {
                 _ = r.core.store.remove(r.key);
-                r.core.notifyDependents(r.ctx, r.name) catch @panic("cordis: out of memory in dispatch");
+                r.core.notifyDependents(r.ctx, r.name) catch @panic("cordis: out of memory in dispatch"); // dispatch: no error channel
             }
         }.run);
         const provide_label = std.fmt.allocPrint(self.core.a(), "ctx.provide({s})", .{name}) catch return error.OutOfMemory;

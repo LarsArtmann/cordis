@@ -27,6 +27,7 @@
   "ignorePatterns": [
     "**/node_modules/**",
     "**/lib/**",
-    "**/dist/**"
+    "**/dist/**",
+    "examples/**"
   ]
 }

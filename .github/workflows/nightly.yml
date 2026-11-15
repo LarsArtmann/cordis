@@ -1,0 +1,31 @@
+name: Nightly
+
+# Nightly-only sweeps that must not slow the per-push gate. The multi-seed
+# property run replays the debounce/throttle oracle across 32 PCG seeds
+# (the per-push suite pins one reproducible seed, see
+# go/timer/property_test.go).
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  go-multiseed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: stable
+      - name: Multi-seed debounce/throttle property
+        working-directory: go
+        env:
+          CORDIS_MULTI_SEED: "1"
+        run: go test -race -run TestDebounceThrottlePropertyMultiSeed -count=1 ./timer/
+      - name: Full suite sanity
+        working-directory: go
+        run: go test ./...

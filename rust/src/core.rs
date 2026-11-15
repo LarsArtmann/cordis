@@ -270,7 +270,7 @@ impl Core {
     /// arena never shrinks, so a live `FiberId` always resolves.
     #[allow(clippy::indexing_slicing)]
     pub fn fiber(&self, id: FiberId) -> Rc<RefCell<FiberData>> {
-        Rc::clone(&self.fibers[id.0])
+        Rc::clone(&self.fibers[id.index()])
     }
 
     /// Queue a fiber for state transition evaluation.

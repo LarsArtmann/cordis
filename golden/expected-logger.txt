@@ -1,0 +1,5 @@
+log-count 4
+log ERROR boom
+log WARN careful
+log INFO hello
+log INFO hello-again

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -143,6 +144,22 @@ func (r *goldenRunner) provide(scope *Context, name, realm string) {
 	r.logf("provided %s", name)
 }
 
+// logLine logs one plain-string message through the scenario's "gold"
+// logger, exercising the shared logger service surface.
+func (r *goldenRunner) logLine(level, msg string) {
+	l := r.ctx.Logger("gold")
+	switch level {
+	case "error":
+		l.Error(msg)
+	case "warn":
+		l.Warn(msg)
+	case "info":
+		l.Info(msg)
+	default:
+		r.t.Fatalf("unsupported golden log level %q", level)
+	}
+}
+
 func (r *goldenRunner) withdraw(name, realm string) {
 	key := "provider:" + name
 
@@ -236,6 +253,28 @@ func (r *goldenRunner) run(line string) {
 		}
 
 		r.logf("registry-size %d", want)
+	case "log":
+		r.logLine(args[0], strings.Join(args[1:], " "))
+	case "dump-logs":
+		for _, m := range r.ctx.core.logger.Buffer() {
+			rendered := make([]string, len(m.Args))
+			for i, a := range m.Args {
+				rendered[i] = fmt.Sprint(a)
+			}
+
+			r.logf("log %s %s", strings.ToUpper(m.Level.String()), strings.Join(rendered, " "))
+		}
+	case "expect-log-count":
+		want, err := strconv.Atoi(args[0])
+		if err != nil {
+			panic(err)
+		}
+
+		if got := len(r.ctx.core.logger.Buffer()); got != want {
+			r.t.Fatalf("expected log count %d, got %d", want, got)
+		}
+
+		r.logf("log-count %d", want)
 	case "expect-state":
 		fiber := r.fibers[args[0]]
 		if fiber == nil {
@@ -437,6 +476,10 @@ func runScenario(t *testing.T, scenarioFile, expectedFile string, exec func(r *g
 	if len(r.trace) != len(expected) {
 		t.Fatalf("trace length %d, expected %d", len(r.trace), len(expected))
 	}
+}
+
+func TestGoldenLogger(t *testing.T) {
+	runScenario(t, "scenario-logger.txt", "expected-logger.txt", func(r *goldenRunner, line string) { r.run(line) })
 }
 
 func TestGoldenCascade(t *testing.T) {

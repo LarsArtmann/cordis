@@ -95,6 +95,21 @@ impl From<i64> for Arg {
     }
 }
 
+impl From<u32> for Arg {
+    fn from(v: u32) -> Self {
+        Self::Int(i64::from(v))
+    }
+}
+
+impl From<usize> for Arg {
+    fn from(v: usize) -> Self {
+        // usize can exceed i64::MAX in theory (a usize-sized counter); such
+        // a value cannot come from the framework's bounded bookkeeping, so
+        // saturate instead of lying with a cast.
+        Self::Int(i64::try_from(v).unwrap_or(i64::MAX))
+    }
+}
+
 impl From<f64> for Arg {
     fn from(v: f64) -> Self {
         Self::Float(v)

@@ -1,0 +1,37 @@
+# cordis golden scenario v5 — registry snapshot and restore (Rust + Zig)
+#
+# Executed verbatim by the Rust and Zig runners (the Go port has no
+# snapshot/restore API yet — see the FEATURES.md parity row). The trace
+# each runner emits must match golden/expected-snapshot.txt exactly,
+# pinning: snapshot captures the registry view, a post-snapshot start is
+# disposed as the delta on restore, and a deleted runtime restarts from
+# the stash with its last config.
+#
+# Ops (beyond scenario v1):
+#   snapshot            capture the registry view; traces "snapshot taken"
+#   restore             dispose the delta and restart stashed runtimes;
+#                        traces "restored" after the restart drain settles
+#
+# The re-applied "apply consumer" line pins the stash restart; a post-
+# restore `expect-state consumer` would read the runner's stale
+# pre-restore fiber handle, so the restored fiber's state is pinned by
+# its apply line only.
+#
+# Regenerate expected-snapshot.txt with
+# GOLDEN_UPDATE=1 cargo test --test golden golden_scenario_snapshot
+# then re-verify the Zig runner matches byte for byte.
+
+provide config
+start consumer inject=config config=1
+expect-state consumer ACTIVE
+expect-registry-size 2
+snapshot
+start extra config=2
+expect-state extra ACTIVE
+expect-registry-size 3
+delete consumer
+expect-state consumer DISPOSED
+expect-registry-size 2
+restore
+expect-state extra DISPOSED
+expect-registry-size 2

@@ -1,0 +1,29 @@
+# cordis golden scenario v6 — logger service (all three ports)
+#
+# Executed verbatim by the Go, Rust and Zig runners. The trace each runner
+# emits must match golden/expected-logger.txt exactly, pinning the logger
+# dispatch order (sequence order equals call order), the buffered-entry
+# shape and the level taxonomy shared by the three ports.
+#
+# Ops (beyond scenario v1):
+#   log <level> <message...>   the logger named "gold" logs the message at
+#                               <level> (error/warn/info)
+#   dump-logs                  emit "log <LEVEL> <message>" for every
+#                               buffered entry, oldest first
+#   expect-log-count <n>       buffered entry count; traces "log-count <n>"
+#
+# The dump skips sequence numbers, timestamps and logger names (the ports
+# stamp those differently by design) and uses plain-string messages so the
+# trace stays byte-identical. DEBUG is deliberately absent: the default
+# exporter exports info and above.
+#
+# Regenerate expected-logger.txt with
+# GOLDEN_UPDATE=1 go test -run TestGoldenLogger ./... then re-verify the
+# Rust and Zig runners.
+
+log error boom
+log warn careful
+log info hello
+log info hello-again
+expect-log-count 4
+dump-logs

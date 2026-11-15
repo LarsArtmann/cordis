@@ -42,4 +42,24 @@ All three ports share one architecture:
   `TypedRegistration` builder, so every typed registration path shares
   the same decode/validation plumbing.
 
+## Fallibility shapes
+
+Each port surfaces domain errors in its native form. The shapes below are
+the shared contract (verified 2026-11-14); the typed-event dispatch guards
+panic in every port by the same reviewed contract — listener callbacks
+have no error channel, and a wrong emission shape is a caller programming
+error (`scripts/panic-allowlist.sh` is the machine gate; ROADMAP.md holds
+the decision record).
+
+- **Go** — fallible APIs return `(T, error)`; sentinel `*Error` codes wrap
+  with `%w`; the typed guards in `go/typed.go` panic (6 reviewed sites).
+- **Rust** — fallible APIs return `Result<T, Error>` (`crate::Result`);
+  the typed guards in `rust/src/events.rs` panic (2 reviewed sites).
+- **Zig** — fallible APIs return `Error!T` with
+  `Error{InactiveEffect, DuplicateService, PluginFailed, OutOfMemory}`;
+  allocation failures thread `error.OutOfMemory` through every
+  registration path (`zig/tests/oom.zig` sweeps each registration
+  allocation index), while the 17 dispatch/void-query sites abort with
+  the greppable `cordis: out of memory in dispatch`.
+
 See [ROADMAP.md](ROADMAP.md) for the parity matrix and planned work.

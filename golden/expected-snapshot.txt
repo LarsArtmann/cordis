@@ -1,0 +1,17 @@
+provided config
+apply consumer config=1
+state consumer ACTIVE
+registry-size 2
+snapshot taken
+apply extra config=2
+state extra ACTIVE
+registry-size 3
+cleanup consumer
+deleted consumer
+state consumer DISPOSED
+registry-size 2
+cleanup extra
+apply consumer config=1
+restored
+state extra DISPOSED
+registry-size 2

@@ -1158,6 +1158,29 @@ fn logger_format_pipeline() {
 }
 
 #[test]
+fn logger_arg_from_unsigned_integers() {
+    use cordis::{Arg, Level, Message, format_message};
+
+    let render = |args: Vec<Arg>| {
+        format_message(&Message {
+            sn: 1,
+            time: std::time::SystemTime::UNIX_EPOCH,
+            name: "test".to_string(),
+            kind: "info",
+            level: Level::Info,
+            args,
+        })
+    };
+
+    let seven_u32: Arg = 7u32.into();
+    let seven_usize: Arg = 7usize.into();
+    assert_eq!(seven_u32, Arg::Int(7));
+    assert_eq!(seven_usize, Arg::Int(7));
+    assert_eq!(render(vec![Arg::from("n=%d"), 3u32.into()]), "n=3");
+    assert_eq!(render(vec![Arg::from("n=%d"), 9usize.into()]), "n=9");
+}
+
+#[test]
 fn framework_errors_flow_through_the_logger() {
     let ctx = Context::new();
     let faulty = plugin("faulty", |_: &Context, (): &()| {

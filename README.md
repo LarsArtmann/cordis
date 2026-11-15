@@ -112,6 +112,11 @@ All three ports implement the same invariants:
   re-enter the framework from any goroutine.
 - **Realm-keyed services.** `Isolate` shadows a service behind a fresh realm
   key without leaking in either direction; shared labels opt into sharing.
+- **Native fallibility.** Each port surfaces errors in its own shape —
+  Go `(T, error)`, Rust `Result`, Zig `Error!T` threading
+  `error.OutOfMemory` through every registration path. No panics cross the
+  framework boundary; the reviewed exceptions are machine-gated
+  (`scripts/panic-allowlist.sh`).
 - **One spec, three runners.** Four golden scenarios (`golden/`) pin the
   shared semantics byte-identically in the Go, Rust and Zig test suites
   (the per-scenario matrix in `golden/README.md` is the source of truth).

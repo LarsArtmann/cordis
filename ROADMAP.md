@@ -244,6 +244,28 @@ opens for the ports are tracked in the Go section above.
   `MustRegister` (breaking wiring code) or keep them as the documented,
   explicitly opt-in panic sugar?
 
+### Typed-event guard error channel — decided 2026-11-14
+
+The 2026-09-10 sweep (f#7) asked for one error-channel design for the
+typed-event guards (Go `go/typed.go` 6 sites, Rust `rust/src/events.rs`
+2 sites, the Zig guards inside their listener wrappers). Decided:
+
+**Keep the guards' panic contract.** The guards run inside listener
+wrappers, so the mismatch they catch (wrong arity, wrong payload type) is
+a caller programming error at the `Emit` site, not a runtime condition:
+Go type assertions panic the same way, and there is no envelope shape
+that does not tax every correct dispatch to launder a programming error.
+An envelope value would also change every listener signature in all three
+ports — a breaking-surface change for zero runtime benefit.
+
+If the fleet ever wants fallible listeners, the sanctioned escape hatch
+is a **Result-listener variant** (`OnResult[E]` / `on_result::<E>` /
+`onResultTyped`) added alongside the existing `On`/`on`/`onTyped`, never
+a reshaping of the existing contract. That variant is deferred to the
+breaking-surface release window (see the release-policy decision above);
+until then there is nothing to implement, and the allowlist gate
+(`scripts/panic-allowlist.sh`) keeps the guard count pinned.
+
 ### Release cadence
 
 - **Go** (`github.com/LarsArtmann/cordis/go`): tagged `go/v0.1.x` per
@@ -294,7 +316,11 @@ paths under 1.27 (`go test -bench . -benchmem`): start/dispose ≈2.4 µs,
 provide+get+dispose ≈0.61 µs, get ≈23 ns, emit ≈65 ns, 5-hop waterfall
 ≈0.21 µs; the Rust port posts the same six benchmarks in
 `rust/benches/core.rs` (start/dispose ≈0.56 µs, get ≈24 ns, waterfall
-≈0.30 µs, same machine, best of five).
+≈0.30 µs, same machine, best of five). Re-verified 2026-11-14 after the
+arena `Option` removal and the Waterfall argument reordering
+(start/dispose ≈0.47 µs, get ≈25 ns, waterfall ≈0.32 µs, emit ≈41 ns,
+typed dispatch ≈45 ns, provide+withdraw+get ≈0.21 µs): every delta is
+within run-to-run noise — no perf regression.
 
 Deliberately NOT adopted: generic methods (new in 1.27) for the typed API.
 `Provide[T]/Get[T]/On[E]` stay package-level functions because `Context`

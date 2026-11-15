@@ -97,7 +97,7 @@
                 # sandbox, so point both caches at $TMPDIR.
                 export ZIG_LOCAL_CACHE_DIR="$TMPDIR/zig-cache"
                 export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/zig-global-cache"
-                zig fmt --check build.zig src tests
+                zig fmt --check build.zig src tests examples
                 zig build test --summary all --cache-dir "$TMPDIR/zig-cache"
                 # Doc emission gate: fails on code the compiler rejects; the
                 # library compile walks every public decl.
@@ -179,6 +179,8 @@
               rustc
               cargo
               clippy
+              cargo-audit
+              cargo-deny
               zig
               nodejs_24
               yarn-berry
@@ -192,7 +194,6 @@
           };
         }
       );
-
       apps = forAllSystems (
         system:
         let

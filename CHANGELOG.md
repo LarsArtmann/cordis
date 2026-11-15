@@ -10,6 +10,69 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Added
 
+- **Golden scenarios #5 and #6** — `golden/scenario-snapshot.txt`
+  (Rust + Zig: registry snapshot/restore — delta disposal and stash
+  restart with last config; the Go port has no snapshot API, corrected
+  in FEATURES.md from FULLY_FUNCTIONAL to PLANNED) and
+  `golden/scenario-logger.txt` (all three ports: logger dispatch order,
+  level taxonomy, buffered-entry shape). The Rust runner gained
+  `GOLDEN_UPDATE` support to regenerate its expected traces.
+- **Golden scenarios #5 and #6** — `golden/scenario-snapshot.txt`
+  (Rust + Zig: registry snapshot/restore — delta disposal and stash
+  restart with last config; the Go port has no snapshot API, corrected
+  in FEATURES.md from FULLY_FUNCTIONAL to PLANNED) and
+  `golden/scenario-logger.txt` (all three ports: logger dispatch order,
+  level taxonomy, buffered-entry shape). The Rust runner gained
+  `GOLDEN_UPDATE` support to regenerate its expected traces.
+- **Greeter example app in all four trees** — `go/examples/greeter`,
+  `rust/examples/greeter.rs`, `zig/examples/greeter.zig` (installed by
+  `zig build`) and `examples/typescript/greeter.mjs`, each printing one
+  deterministic greeting line and verified by `Example smoke` CI steps
+  (`ports.yml` go/rust/zig, `build.yml` after the two-step build).
+- **Ports CI miri job** — the core Rust port (golden/typed/parity) runs
+  under nightly miri with `-Zmiri-ignore-leaks -Zmiri-disable-isolation`
+  (the suite intentionally leaves Contexts undisposed at process exit;
+  the golden runner reads its scenario files from disk).
+- **Zig OOM sweep** — `zig/tests/oom.zig` fails every registration
+  allocation index in turn and asserts `error.OutOfMemory` with clean
+  recovery, covering the scope constructors, `provide`/`provideNamed`,
+  the `bindCleanup` paths (`attach`/`attachLabeled`), listener and
+  exporter registration, `snapshot`/`restore`, `accessor`,
+  `ValidatedPlugin` start, and the lifecycle trio with their dispatch
+  boundaries. It found and pinned three real bugs (below). The same
+  pass added the per-site `// dispatch: no error channel` markers on
+  all 17 reviewed abort sites and the `Fiber.restart`/`update`
+  internal-event doc cross-links. The Zig CI job also runs
+  `zig fmt --check` and now pins zig 0.17.1, tracking the
+  nixpkgs-pinned zig the flake check uses (the port needs 0.17-only
+  APIs).
+- **Nightly multi-seed property sweep** — `TestDebounceThrottlePropertyMultiSeed`
+  replays the debounce/throttle oracle across 32 PCG seeds behind
+  `CORDIS_MULTI_SEED`; a new cron workflow (`.github/workflows/nightly.yml`)
+  runs it with `-race`.
+- **Go loader: isolate-label validation at update time** — an
+  uncomparable `Isolate` label now fails `Tree.Update`/`Tree.Replace`
+  with a field-precise error (`isolate["key"]: label of type T is not
+  comparable`) before any option is stored or fiber is restarted;
+  previously the generic `Context.Isolate` error surfaced only at start
+  time. `Entry.recordError` is documented as last-writer-wins and pinned
+  by a sequential + concurrent-failing-reload test.
+- **Rust: `Arg` conversions for unsigned counters** — `From<u32>` and
+  `From<usize>` for the logger's typed `Arg`, pinned by a parity test.
+- **Rust: `FiberId` encapsulation** — the arena index is `pub(crate)`
+  with a `const fn index()` accessor, so out-of-range indexing into the
+  fiber arena is unrepresentable outside the crate.
+- **Supply-chain tooling in the devShell** — `cargo-audit` and
+  `cargo-deny` join the flake devShell next to the committed
+  `rust/deny.toml`, so buildflow stops falling back to `nix run` for
+  them.
+- **Fallibility-shape documentation** — PORTS.md gained a "Fallibility
+  shapes" section, README.md a "Native fallibility" invariant bullet, and
+  FEATURES.md/AGENTS.md the Zig OOM contract; ROADMAP.md records the
+  typed-event guard error-channel decision (keep the contract-bound
+  panic; a Result-listener variant is the only sanctioned escape hatch)
+  and the 2026-11-14 bench re-verification (no regression from the arena
+  `Option` removal / Waterfall reorder).
 - **Rust port: interception events** — `internal/get` (fallback services
   via a `GetResult` waterfall around failed lookups), `internal/set`
   (veto/observe/rewrite service registrations), `internal/listener`
@@ -111,6 +174,19 @@ in `packages/` track upstream and are not released from this fork.
 
 ### Fixed
 
+- **Zig: uninitialized hooks entry on OOM** — `onNamed`, `onceNamed` and
+  the typed `on`/`once` left a freshly inserted hooks map entry with an
+  undefined key and uninitialized `ArrayList` when the listener-name
+  dupe failed; a later `deinit` could then panic on the garbage list.
+  The value is now initialized first and the entry removed on dupe
+  failure (found by the OOM sweep).
+- **Zig: `provideNamed` aborted instead of returning OOM** — it resolved
+  the service name through the channel-less `isolateKey` query, so an
+  allocation failure in lazy root-realm assignment panicked even though
+  the API has an error channel; it now uses `isolateKeyE`.
+- **Zig: `Context.init` leaked on failure** — the logger service's
+  eagerly allocated built-in buffer entry was not covered by the
+  errdefer chain, so a failed root-fiber allocation leaked it.
 - **Zig 0.17.1 gate repair** — the 2026-11-09 nixpkgs bump moved zig from
   0.16 to 0.17: `zig fmt` migrated `@intFromEnum` to `@backingInt` (2
   sites in `src/cordis.zig`), removed `zig build --global-cache-dir`, and

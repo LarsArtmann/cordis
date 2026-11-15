@@ -124,5 +124,5 @@ func Mixin[S any, V any](ctx *Context, name string, get func(S) V, set ...func(S
 		})
 	}
 
-	return Accessor[S](ctx, name, project, write...)
+	return Accessor(ctx, name, project, write...)
 }

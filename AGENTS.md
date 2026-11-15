@@ -211,7 +211,15 @@ Intentional divergences from TS behavior are documented in ROADMAP.md.
   `scripts/panic-allowlist.sh`: typed event guards run inside listener
   wrappers (no error channel in any port's callback contract), 17 Zig
   dispatch/void-query aborts keep `cordis: out of memory in dispatch`
-  (details in ROADMAP.md).
+  (details in ROADMAP.md). The 2026-11-14 OOM sweep hardened the claim:
+  Zig `Context.init` no longer leaks the logger entry on failure,
+  `provideNamed` returns `error.OutOfMemory` instead of aborting, and the
+  hooks `getOrPut` no longer leaves an uninitialized entry when its name
+  dupe fails (all pinned in `zig/tests/oom.zig`). Rebase checklist note:
+  Go `Waterfall` (typed terminal parameter) and `Isolate` (`(name,
+  label...)` returning an error for uncomparable labels) diverge from the
+  TS shapes BY DESIGN — do not "fix" them toward upstream during a rebase
+  (2026-09-10 sweep f#22).
 - Plugin apply errors move the fiber to `StateFailed`, roll back partial
   effects, and are routed to the logger — never thrown across the
   framework boundary.

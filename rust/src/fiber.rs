@@ -64,8 +64,20 @@ pub enum FiberState {
 }
 
 /// Arena index of a fiber inside its core.
+///
+/// The raw index is crate-internal: callers cannot fabricate or decompose
+/// ids from outside the crate, so out-of-range indexing into the arena is
+/// unrepresentable. Ids are only minted by [`Core::alloc_fiber`] (and the
+/// root constructor).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FiberId(pub usize);
+pub struct FiberId(pub(crate) usize);
+
+impl FiberId {
+    /// The raw arena index, for the crate's own resolution paths.
+    pub(crate) const fn index(self) -> usize {
+        self.0
+    }
+}
 
 /// Introspection view of one registered effect.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -22,8 +22,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use cordis::{
-    Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Next, Value, plugin, start_fn,
-    value,
+    Arg, Context, EventOptions, Fiber, FiberState, FnPlugin, Listener, Next, RegistrySnapshot,
+    Value, plugin, start_fn, value,
 };
 
 type Trace = Rc<RefCell<Vec<String>>>;
@@ -44,6 +44,7 @@ struct Runner {
     fibers: FiberMap,
     plugins: PluginMap,
     children: HashMap<String, Vec<Spawn>>,
+    snapshot: Option<RegistrySnapshot>,
 }
 
 const fn state_name(state: FiberState) -> &'static str {
@@ -171,6 +172,7 @@ impl Runner {
             fibers: Rc::new(RefCell::new(HashMap::new())),
             plugins: Rc::new(RefCell::new(HashMap::new())),
             children: HashMap::new(),
+            snapshot: None,
         }
     }
 
@@ -203,6 +205,12 @@ impl Runner {
             "provide" | "provide-in-realm" | "withdraw" | "withdraw-in-realm" | "delete" => {
                 self.service_op(&op, &args, &params);
             }
+            "snapshot" | "restore" => {
+                self.snapshot_op(&op);
+            }
+            "log" | "dump-logs" | "expect-log-count" => {
+                self.logger_op(&op, &args);
+            }
             "start" | "start-isolated" | "spawn" | "update" | "restart" | "dispose"
             | "restart-root" => {
                 self.lifecycle_op(&op, &args, &params);
@@ -211,6 +219,56 @@ impl Runner {
                 self.expectation_op(&op, &args, &params);
             }
             other => panic!("unknown op {other}"),
+        }
+    }
+
+    fn logger_op(&self, op: &str, args: &[String]) {
+        match op {
+            "log" => {
+                let logger = self.ctx.logger(Some("gold"));
+                let rendered: String = args[1..].join(" ");
+                let arg = [Arg::from(rendered.as_str())];
+                match args[0].as_str() {
+                    "error" => logger.error(&arg),
+                    "warn" => logger.warn(&arg),
+                    "info" => logger.info(&arg),
+                    other => panic!("unsupported golden log level {other}"),
+                }
+            }
+            "dump-logs" => {
+                for m in self.ctx.logger_buffer() {
+                    let rendered = m
+                        .args
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let line = format!("log {} {}", m.level.as_str().to_uppercase(), rendered);
+                    self.trace.borrow_mut().push(line);
+                }
+            }
+            "expect-log-count" => {
+                let want: usize = args[0].parse().expect("log count");
+                let got = self.ctx.logger_buffer().len();
+                assert_eq!(got, want, "expected log count {want}, got {got}");
+                self.trace.borrow_mut().push(format!("log-count {want}"));
+            }
+            _ => panic!("op {op} is dispatched by run"),
+        }
+    }
+
+    fn snapshot_op(&mut self, op: &str) {
+        match op {
+            "snapshot" => {
+                self.snapshot = Some(self.ctx.snapshot());
+                self.trace.borrow_mut().push("snapshot taken".to_string());
+            }
+            "restore" => {
+                let snapshot = self.snapshot.take().expect("restore before snapshot");
+                self.ctx.restore(&snapshot);
+                self.trace.borrow_mut().push("restored".to_string());
+            }
+            _ => panic!("op {op} is dispatched by run"),
         }
     }
 
@@ -349,13 +407,18 @@ impl Runner {
 
 fn run_lifecycle_scenario(scenario_file: &str, expected_file: &str) {
     let scenario = read_lines(scenario_file);
-    let expected = read_lines(expected_file);
 
     let mut r = Runner::new();
     for line in &scenario {
         r.run(line);
     }
 
+    if std::env::var("GOLDEN_UPDATE").is_ok() {
+        let rendered = format!("{}\n", r.trace.borrow().join("\n"));
+        std::fs::write(golden_dir().join(expected_file), rendered).expect("write expected trace");
+        return;
+    }
+    let expected = read_lines(expected_file);
     let trace = r.trace.borrow();
     compare_trace(&trace, &expected);
 }
@@ -368,6 +431,16 @@ fn golden_scenario() {
 #[test]
 fn golden_scenario_cascade() {
     run_lifecycle_scenario("scenario-cascade.txt", "expected-cascade.txt");
+}
+
+#[test]
+fn golden_scenario_snapshot() {
+    run_lifecycle_scenario("scenario-snapshot.txt", "expected-snapshot.txt");
+}
+
+#[test]
+fn golden_scenario_logger() {
+    run_lifecycle_scenario("scenario-logger.txt", "expected-logger.txt");
 }
 
 fn event_listener(trace: &Trace, event: &str, who: &str) -> Listener {

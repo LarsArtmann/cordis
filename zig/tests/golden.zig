@@ -21,6 +21,7 @@ const ChildSpec = struct {
 
 const Runner = struct {
     gpa: std.mem.Allocator,
+    snapshot: ?cordis.RegistrySnapshot = null,
     trace: std.ArrayListUnmanaged([]const u8) = .empty,
     fibers: std.StringHashMapUnmanaged(Fiber) = .empty,
     plugins: std.StringHashMapUnmanaged(*const cordis.Plugin) = .empty,
@@ -97,6 +98,15 @@ const Params = struct {
     config: i32 = 0,
     lifo: bool = false,
 };
+
+fn upperLevel(level: cordis.Level) []const u8 {
+    return switch (level) {
+        .err => "ERROR",
+        .warn => "WARN",
+        .info => "INFO",
+        .debug => "DEBUG",
+    };
+}
 
 fn parseParams(gpa: std.mem.Allocator, tokens: []const []const u8) Params {
     var p = Params{};
@@ -228,6 +238,55 @@ fn runLifecycleScenario(r: *Runner, ctx: *Context, alloc: std.mem.Allocator, sce
             list.appendSlice(alloc, existing) catch @panic("cordis: out of memory");
             list.append(alloc, spec.*) catch @panic("cordis: out of memory");
             r.children.put(alloc, parent, list.toOwnedSlice(alloc) catch @panic("cordis: out of memory")) catch @panic("cordis: out of memory");
+        } else if (std.mem.eql(u8, op, "snapshot")) {
+            r.snapshot = try ctx.snapshot();
+            r.log("snapshot taken", .{});
+        } else if (std.mem.eql(u8, op, "restore")) {
+            try ctx.restore(r.snapshot orelse return error.GoldenRestoreBeforeSnapshot);
+            r.log("restored", .{});
+        } else if (std.mem.eql(u8, op, "log")) {
+            const lg = ctx.logger("gold");
+            var msg: []const u8 = "";
+            for (args.items[1..], 0..) |word, i| {
+                if (i == 0) {
+                    msg = word;
+                } else {
+                    msg = try std.fmt.allocPrint(alloc, "{s} {s}", .{ msg, word });
+                }
+            }
+
+            const one = [_][]const u8{msg};
+            if (std.mem.eql(u8, args.items[0], "error")) {
+                lg.err(&one);
+            } else if (std.mem.eql(u8, args.items[0], "warn")) {
+                lg.warn(&one);
+            } else if (std.mem.eql(u8, args.items[0], "info")) {
+                lg.info(&one);
+            } else {
+                return error.GoldenUnsupportedLogLevel;
+            }
+        } else if (std.mem.eql(u8, op, "dump-logs")) {
+            for (ctx.loggerBuffer()) |m| {
+                var rendered: []const u8 = "";
+                for (m.args, 0..) |arg, i| {
+                    if (i == 0) {
+                        rendered = arg;
+                    } else {
+                        rendered = try std.fmt.allocPrint(alloc, "{s} {s}", .{ rendered, arg });
+                    }
+                }
+
+                r.log("log {s} {s}", .{ upperLevel(m.level), rendered });
+            }
+        } else if (std.mem.eql(u8, op, "expect-log-count")) {
+            const want = try std.fmt.parseInt(usize, args.items[0], 10);
+            const got = ctx.loggerBuffer().len;
+            if (got != want) {
+                std.debug.print("expected log count {d}, got {d}\n", .{ want, got });
+                return error.GoldenLogCountMismatch;
+            }
+
+            r.log("log-count {d}", .{want});
         } else if (std.mem.eql(u8, op, "delete")) {
             const p = r.plugins.get(args.items[0]).?;
             ctx.registry().delete(p);
@@ -386,6 +445,40 @@ test "golden scenario cascade" {
     const expected = try readScenarioLines(alloc, golden_data.expected_cascade);
 
     const ctx = try Context.init(gpa);
+    defer ctx.deinit();
+
+    var r = Runner{ .gpa = alloc };
+
+    try runLifecycleScenario(&r, ctx, alloc, scenario);
+    try expectGoldenTrace(&r, expected);
+}
+
+test "golden scenario: logger service" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const scenario = try readScenarioLines(alloc, golden_data.scenario_logger);
+    const expected = try readScenarioLines(alloc, golden_data.expected_logger);
+
+    const ctx = try Context.init(std.testing.allocator);
+    defer ctx.deinit();
+
+    var r = Runner{ .gpa = alloc };
+
+    try runLifecycleScenario(&r, ctx, alloc, scenario);
+    try expectGoldenTrace(&r, expected);
+}
+
+test "golden scenario: registry snapshot and restore" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const scenario = try readScenarioLines(alloc, golden_data.scenario_snapshot);
+    const expected = try readScenarioLines(alloc, golden_data.expected_snapshot);
+
+    const ctx = try Context.init(std.testing.allocator);
     defer ctx.deinit();
 
     var r = Runner{ .gpa = alloc };

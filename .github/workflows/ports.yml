@@ -26,6 +26,11 @@ jobs:
       - name: Test
         working-directory: go
         run: go test -race -count=3 ./...
+      - name: Example smoke
+        working-directory: go
+        run: |
+          out="$(go run ./examples/greeter)"
+          [ "$out" = "Hello, world, from cordis!" ]
       - name: Golden determinism canary (twice)
         working-directory: go
         run: |
@@ -54,6 +59,11 @@ jobs:
       - name: Test thread-safe feature
         working-directory: rust
         run: cargo test --features thread-safe
+      - name: Example smoke
+        working-directory: rust
+        run: |
+          out="$(cargo run --quiet --example greeter)"
+          [ "$out" = "Hello, world, from cordis!" ]
 
   zig:
     runs-on: ubuntu-latest
@@ -64,10 +74,44 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          # Must track the nixpkgs-pinned zig in flake.nix's zig check; the
+          # port uses 0.17-only APIs (e.g. @backingInt).
+          version: 0.17.1
+      - name: Format
+        run: zig fmt --check src tests build.zig
+        working-directory: zig
       - name: Test
         working-directory: zig
         run: zig build test --summary all
+      - name: Example smoke
+        working-directory: zig
+        run: |
+          zig build
+          out="$(./zig-out/bin/greeter 2>&1)"
+          [ "$out" = "Hello, world, from cordis!" ]
+
+  miri:
+    # Miri over the core port (default features; the thread-safe variant's
+    # mutex+thread story is a separate cost). -Zmiri-ignore-leaks: the test
+    # suite intentionally leaves Contexts undisposed at process exit, and
+    # disposal parity lives in the fiber API, not process-exit
+    # bookkeeping; -Zmiri-disable-isolation: the golden suite reads its
+    # scenario files from disk.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MIRIFLAGS: -Zmiri-ignore-leaks -Zmiri-disable-isolation
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Rust nightly
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # nightly
+        with:
+          components: miri
+      - name: Test under miri
+        working-directory: rust
+        run: cargo miri test --test golden --test typed --test parity
+
 
   panic-allowlist:
     runs-on: ubuntu-latest

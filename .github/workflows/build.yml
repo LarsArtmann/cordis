@@ -50,6 +50,10 @@ jobs:
         run: yarn build core
       - name: Build (2)
         run: yarn build
+      - name: Example smoke
+        run: |
+          out="$(node examples/typescript/greeter.mjs)"
+          [ "$out" = "Hello, world, from cordis!" ]
       - name: Publish
         if: >-
           github.event_name == 'push' &&

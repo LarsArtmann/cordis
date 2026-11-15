@@ -10,9 +10,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // The greeter example doubles as the CI smoke app; `zig build` installs
+    // it to zig-out/bin/greeter.
+    const greeter = b.addExecutable(.{
+        .name = "greeter",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/greeter.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "cordis", .module = mod }},
+        }),
+    });
+    b.installArtifact(greeter);
+
     const test_step = b.step("test", "Run the cordis Zig test suite");
 
-    for ([_][]const u8{ "tests/parity.zig", "tests/typed.zig" }) |path| {
+    for ([_][]const u8{ "tests/parity.zig", "tests/typed.zig", "tests/oom.zig" }) |path| {
         const tests = b.addTest(.{
             .root_module = b.createModule(.{
                 .root_source_file = b.path(path),
@@ -35,6 +48,10 @@ pub fn build(b: *std.Build) void {
     _ = golden_files.addCopyFile(b.path("../golden/expected-dispatch.txt"), "expected-dispatch.txt");
     _ = golden_files.addCopyFile(b.path("../golden/scenario-cascade.txt"), "scenario-cascade.txt");
     _ = golden_files.addCopyFile(b.path("../golden/expected-cascade.txt"), "expected-cascade.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/scenario-snapshot.txt"), "scenario-snapshot.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/expected-snapshot.txt"), "expected-snapshot.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/scenario-logger.txt"), "scenario-logger.txt");
+    _ = golden_files.addCopyFile(b.path("../golden/expected-logger.txt"), "expected-logger.txt");
     const golden_data = golden_files.add("golden_data.zig",
         \\pub const scenario = @embedFile("scenario.txt");
         \\pub const expected = @embedFile("expected.txt");
@@ -44,6 +61,10 @@ pub fn build(b: *std.Build) void {
         \\pub const expected_dispatch = @embedFile("expected-dispatch.txt");
         \\pub const scenario_cascade = @embedFile("scenario-cascade.txt");
         \\pub const expected_cascade = @embedFile("expected-cascade.txt");
+        \\pub const scenario_snapshot = @embedFile("scenario-snapshot.txt");
+        \\pub const expected_snapshot = @embedFile("expected-snapshot.txt");
+        \\pub const scenario_logger = @embedFile("scenario-logger.txt");
+        \\pub const expected_logger = @embedFile("expected-logger.txt");
         \\
     );
     const golden_data_mod = b.createModule(.{ .root_source_file = golden_data });

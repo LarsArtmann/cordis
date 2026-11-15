@@ -13,16 +13,20 @@ executes the script and emits a canonical trace:
 
 ## Scenarios
 
-| Scenario     | Spec                    | Expected trace          | Go | Rust | Zig | Pins                                                                              |
-| ------------ | ----------------------- | ----------------------- | -- | ---- | --- | --------------------------------------------------------------------------------- |
-| #1 lifecycle | `scenario.txt`          | `expected.txt`          | ✅ | ✅   | ✅  | fiber lifecycle, inject reactivity, LIFO rollback, isolation realms, root restart |
-| #2 events    | `scenario-events.txt`   | `expected-events.txt`   | ✅ | ✅   | ✅  | dispatch order, realm filters, global listeners                                   |
-| #3 cascade   | `scenario-cascade.txt`  | `expected-cascade.txt`  | ✅ | ✅   | ✅  | nested plugin disposal order, registry delete, registry size                      |
-| #4 dispatch  | `scenario-dispatch.txt` | `expected-dispatch.txt` | ✅ | ✅   | ✅  | bail/serial short-circuiting, waterfall composition and cut, parallel fan-out     |
+| Scenario     | Spec                    | Expected trace          | Go | Rust | Zig | Pins                                                                                                                                       |
+| ------------ | ----------------------- | ----------------------- | -- | ---- | --- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| #1 lifecycle | `scenario.txt`          | `expected.txt`          | ✅ | ✅   | ✅  | fiber lifecycle, inject reactivity, LIFO rollback, isolation realms, root restart                                                          |
+| #2 events    | `scenario-events.txt`   | `expected-events.txt`   | ✅ | ✅   | ✅  | dispatch order, realm filters, global listeners                                                                                            |
+| #3 cascade   | `scenario-cascade.txt`  | `expected-cascade.txt`  | ✅ | ✅   | ✅  | nested plugin disposal order, registry delete, registry size                                                                               |
+| #4 dispatch  | `scenario-dispatch.txt` | `expected-dispatch.txt` | ✅ | ✅   | ✅  | bail/serial short-circuiting, waterfall composition and cut, parallel fan-out                                                              |
+| #5 snapshot  | `scenario-snapshot.txt` | `expected-snapshot.txt` | —  | ✅   | ✅  | registry snapshot/restore: delta disposal, stash restart with last config (Go has no snapshot API yet — FEATURES.md parity row)            |
+| #6 logger    | `scenario-logger.txt`   | `expected-logger.txt`   | ✅ | ✅   | ✅  | logger service: dispatch order, level taxonomy, buffered-entry shape (levels error/warn/info; the default exporter exports info and above) |
 
-All four scenarios run in all three ports. Scenario #3 (cascade) rides on
-Zig's typed registry (`hasTyped`/`deleteTyped`): its `spawn`/`delete`/
-`expect-registry-size` ops need registry identity keyed by plugin type.
+Scenarios #1–#4 and #6 run in all three ports; #5 runs in Rust and Zig
+(the Go port has no registry snapshot/restore API yet). Scenario #3 (cascade)
+rides on Zig's typed registry (`hasTyped`/`deleteTyped`): its
+`spawn`/`delete`/`expect-registry-size` ops need registry identity keyed
+by plugin type.
 Every scenario that a runner does execute must match byte for byte; the
 matrix above is the source of truth for which pins hold in which port.
 
@@ -44,7 +48,7 @@ To regenerate after intentionally changing the scenario:
 
 ```sh
 GOLDEN_UPDATE=1 (cd go && go test -run TestGoldenScenario -count=1 ./...)
-(cd rust && cargo test --test golden)
+GOLDEN_UPDATE=1 (cd rust && cargo test --test golden)
 (cd zig && zig build test)
 ```
 
