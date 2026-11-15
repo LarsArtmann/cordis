@@ -28,11 +28,12 @@ All three ports share one architecture:
   associated `Config` (plus `FnPlugin` closures), a Zig comptime
   constructor (`TypedPlugin`). See `ROADMAP.md` for the documented
   divergences.
-- **Four golden scenarios, three runners.** `golden/scenario.txt`,
-  `scenario-events.txt`, `scenario-cascade.txt` and `scenario-dispatch.txt`
-  are executed by all three test suites (the Zig cascade runner rides on
-  its typed registry — see `golden/README.md` for the per-scenario runner
-  matrix).
+- **Six golden scenarios.** `golden/scenario.txt`, `scenario-events.txt`,
+  `scenario-cascade.txt`, `scenario-dispatch.txt`, `scenario-snapshot.txt`
+  and `scenario-logger.txt` are executed by the runners in the
+  per-scenario matrix (`golden/README.md`): #1–#4 and #6 in all three
+  ports, #5 (registry snapshot/restore) in Rust and Zig — the Go port has
+  no snapshot API yet.
   Each runner must emit the exact traces in `golden/expected*.txt`,
   pinning the shared semantics across ports. The Go loader additionally
   pins its watch/reload lifecycle in a Go-only golden transcript

@@ -116,14 +116,20 @@ same class — open the NVD entry before acting on any of them.
 
 ## Quality backlog
 
+- [ ] Golden scenario: status/plugin event ops in the shared DSL runner
+      (byte-identical across ports; report 2026-09-10_08-25 §14 — a
+      different "v2" idea than the snapshot/restore ops that landed as
+      #5). — Low / M
+
 Closed 2026-11-14: `nix run .#test` and `nix develop -c buildflow` ran
 end-to-end green (the full local CI mirror, f#20), erraudit stamped at
 0 violations; the logger golden scenario — the report's planned
 "fifth golden run", landed as the #6 run in all three ports
 (`golden/scenario-logger.txt`) — and the snapshot/restore golden v2
 (#5, Rust + Zig — the Go port has no snapshot API; FEATURES.md
-corrected). The FEATURES "Planned" section no longer lists bounded
-work.
+corrected). The loader's `Tree.recordError` last-writer-wins docs plus
+the sequential + concurrent-reload pin tests also landed. The FEATURES
+"Planned" section no longer lists bounded work.
 
 - [ ] On each nixpkgs/flake bump, re-check `nix flake check` output for
       new nix deprecations (clean on the 2026-11-14 run; formatter
