@@ -29,6 +29,22 @@ its architecture.
 | Loader (config entries, watch/reload)                       | DONE               | -                                 | -                                 |
 | HMR (implementation swap, rollback)                         | DONE               | -                                 | -                                 |
 | Concurrent access safety                                    | DONE (race tested) | thread-safe build (Mutex)         | single-threaded                   |
+| Listener prepend (event option)                             | DONE               | DONE                              | -                                 |
+| Mid-dispatch listener disposal honored (#242)               | DONE               | DONE                              | DONE                              |
+| Provider unload settles dependents first (#196)             | DONE               | DONE                              | DONE                              |
+| Config resolved through internal/config on reload (#134)    | DONE               | -                                 | -                                 |
+| Parallel errors label the failing event (#205)              | DONE               | DONE                              | n/a (parallel returns void)       |
+| registry.replace (#266)                                     | rejected (memo)    | -                                 | -                                 |
+
+rc.13 upstream notes: the TS tree gained eight ecosystem packages the
+ports do not cover by scope (cli, cli-cordis, env, fs, fs-node, http,
+http-socks, package-manager) and dropped packages/utils; upstream also
+renamed the plugin concept to component (#307) — the ports keep the
+Plugin vocabulary (decision D1; see DOMAIN_LANGUAGE.md). Decision memos:
+`docs/planning/2026-11-15_hmr-rc13-divergence-memo.md` (D3 confirmed),
+`docs/planning/2026-11-15_registry-replace-memo.md` (replace rejected),
+`docs/planning/2026-11-15_loader-parity-review.md` (eight loader fixes
+mapped).
 
 ## Planned, in priority order
 

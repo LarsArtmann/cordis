@@ -117,10 +117,11 @@ All three ports implement the same invariants:
   `error.OutOfMemory` through every registration path. No panics cross the
   framework boundary; the reviewed exceptions are machine-gated
   (`scripts/panic-allowlist.sh`).
-- **One spec, three runners.** Four golden scenarios (`golden/`) pin the
+- **One spec, three runners.** Six golden scenarios (`golden/`) pin the
   shared semantics byte-identically in the Go, Rust and Zig test suites
   (the per-scenario matrix in `golden/README.md` is the source of truth).
-  Lifecycle, events, cascades and dispatch modes are machine-pinned across
+  Lifecycle, events, cascades, dispatch modes, registry snapshot/restore
+  and logger dispatch are machine-pinned across
   ports, not documented and hoped for.
 
 Details: [PORTS.md](PORTS.md).
@@ -175,8 +176,12 @@ and pull request.
 ## Relationship to upstream
 
 This repository is a fork of [cordiverse/cordis](https://github.com/cordiverse/cordis)
-that tracks `main` upstream. The TypeScript packages stay intact and keep
-building; the ports live alongside them in `go/`, `rust/` and `zig/`.
+that tracks `main` upstream (currently pinned to rc.13, `68c9d99`; the
+byte-for-byte sync state is machine-guarded in CI). The TypeScript
+packages stay intact and keep building; the ports live alongside them in
+`go/`, `rust/` and `zig/`. Upstream renamed the plugin concept to
+"component" in rc.13 — the ports keep the `Plugin` vocabulary (see
+[docs/DOMAIN_LANGUAGE.md](docs/DOMAIN_LANGUAGE.md)).
 
 ## License
 

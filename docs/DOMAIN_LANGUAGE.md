@@ -22,6 +22,13 @@ service dependencies, an optional config validator and an apply function.
 Definitions: Go `NewPlugin[C]`; Rust `Plugin` trait (associated `Config`)
 or `plugin()` closure (`FnPlugin`); Zig `TypedPlugin` comptime constructor
 or runtime `Plugin` value; TypeScript function/object with `apply`.
+Upstream renamed this concept to **component** in rc.13 (#307): the TS
+type is now `Component`, `ctx.use(...)` is unchanged, `ctx.plugin(...)`
+survives as a deprecated alias, and the `internal/plugin` event name did
+not change. The ports deliberately keep the `Plugin` vocabulary
+(decision D1, ROADMAP.md): it names the same concept in every port API,
+and "component" would collide with UI-framework vocabulary for no
+semantic gain. Where upstream docs say component, read plugin.
 
 **Fiber** — one instance of a running plugin: an _effect scope with a
 lifecycle_. When a fiber leaves the active state, everything it
