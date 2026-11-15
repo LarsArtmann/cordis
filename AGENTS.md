@@ -59,22 +59,24 @@ that day — do not resurrect `~/go/bin` tool copies.
 
 ## TS workspace gotchas (learned in the 2026-09-07 upstream rebase)
 
-- **Toolchain pins are load-bearing.** VERIFIED WORKING SET (2026-09-09,
-  from-scratch install + CI two-step build + 248/248 suite): manifests are
-  the upstream pin's bytes; the fork's ONLY delta is root
-  `@types/node ^26.5.0` — yarn 4.14.1, TypeScript ^5.9.3, vitest ^4.1.5,
-  vite ^7.3.2, esbuild ^0.28.0, eslint ^8.57.1 (all upstream values),
-  enforced by the `upstream-parity` CI job via `scripts/manifest-parity.mjs`
-  (manifest guard, in-script allowlist). **TypeScript 7 is fatal, twice
-  confirmed** (2026-09-08): 7.0.2 compiles tests (vitest never typechecks)
-  but the dts build dies with `TS2665: Module 'cordis' resolves to an
-  untyped module at lib/index.js` — the cross-package
-  `declare module 'cordis'` augmentation does not resolve under TS 7's
-  resolver; three red CI runs. Stay on upstream's yarn 4.14.1 (4.18.0 was
-  only for the TS 7 experiment; see the saga below). js-yaml 5 stays
-  fatal for the include build (`yaml.Type` gone). NO yarn.lock
-  by design (upstream does the same): every install re-resolves, so a bad
-  bump breaks `yarn install` for everyone immediately.
+- **Toolchain pins are load-bearing.** VERIFIED WORKING SET (re-verified
+  2026-11-15 on pin `68c9d99` / rc.13: from-scratch install + two-step
+  build green): manifests are the upstream pin's bytes; the fork's ONLY
+  delta is root `@types/node ^26.6.6` — yarn 4.14.1, TypeScript ^5.9.3,
+  vitest ^4.1.5, vite ^7.3.2, esbuild ^0.28.0, oxlint ^1.93.0 (upstream
+  dropped eslint for oxlint in #326), enforced by the `upstream-parity`
+  CI job via `scripts/manifest-parity.mjs` (manifest guard, in-script
+  allowlist). **TypeScript 7 is fatal, twice confirmed** (2026-09-08):
+  7.0.2 compiles tests (vitest never typechecks) but the dts build dies
+  with `TS2665` — the cross-package `declare module 'cordis'`
+  augmentation does not resolve under TS 7's resolver. Upstream rc.13
+  still ships TS ^5.9.3 / vite ^7.3.2 / vitest ^4.1.5; the fork-local
+  TS 7 / vite 8 / vitest 5 / eslint 10 manifest bump (`c610a16`,
+  `e72e743`) overshot upstream and was superseded by the 2026-11-15
+  sync (decision D4 in ROADMAP). js-yaml 5 stays fatal for the include
+  build (`yaml.Type` gone). `yarn.lock` is TRACKED since 2026-11-15
+  (upstream #319, decision D2): base = upstream's bytes, plus the one
+  fork-side `@types/node` re-resolution; installs are hermetic.
 - **Single-step `yarn build` from a clean tree fails; the CI two-step
   sequence is green.** From fully clean state, one `yarn build`
   deterministically reports ~35 dts errors (`@Inject('loader')` loses the
@@ -86,9 +88,11 @@ that day — do not resurrect `~/go/bin` tool copies.
   `packages/*/tsconfig.tsbuildinfo` before verifying toolchain changes.
 - **Test fixtures are string-coupled to the specs.** hmr specs mutate
   fixture sources via literal `content.replace("value = 'initial'", ...)`;
-  fork-style reformatting of `packages/hmr/tests/*` fixtures (yml + plugin
-  `.ts`) silently no-ops those replaces and every reload test times out.
-  ALL fixtures (hmr + include, yml and plugin `.ts`) are byte-identical to
+  `packages/hmr/tests/*` fixtures (yml + plugin/component `.ts`) silently
+  no-ops those replaces and every reload test times out. Since rc.13 the
+  specs live flat in `tests/` and fixtures in `tests/fixtures/`; the
+  canary walks the tree recursively. ALL fixtures (hmr + include, yml and
+  plugin `.ts`) are byte-identical to
   upstream, CI-guarded by the `upstream-parity` byte check plus
   `scripts/hmr-fixture-canary.mjs` fast-fail (every spec replace literal
   must exist in a fixture; same CI job) — milliseconds instead of ~190 s
@@ -279,17 +283,22 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
   [cordiverse/cordis](https://github.com/cordiverse/cordis) exactly inside
   `packages/`; TS dep bumps belong upstream (after touching TS manifests,
   check `git diff <upstream> -- '**/package.json'`).
-- Upstream commits **no yarn.lock**, installs with `yarn --no-immutable`
-  (floating ranges resolved on every run). Local TS reproduction:
+- Upstream tracks `yarn.lock` since #319 and the fork adopts it (D2):
+  upstream's bytes as base + the single `@types/node ^26.6.6`
+  re-resolution. Local TS reproduction:
   `nix shell nixpkgs#nodejs_24 nixpkgs#corepack -c sh -c 'export
   PATH=/tmp/corepack-bin:$PATH; yarn install && yarn build'`. Never commit
-  `yarn.lock` / `node_modules/`.
+  `node_modules/`; keep yarn.lock churn to the deliberate delta.
 - Upstream's `packages/hmr` suite used to flake (11 waitFor timeouts —
   upstream cache-invalidation bug, fixed on their unmerged `3-stage-hmr`
   branch). The fork replayed that branch (`b4650df`): commit-based loader
   entry changes, atomic include writes, `hmr.watch()`. Local suite green
-  (248/248); Build and Ports CI green on `3da7d0f` (2026-09-08, incl.
-  flake + upstream-parity jobs).
+  (248/248 at rc.10; 926 passed / 13 skipped / 939 total at rc.13,
+  2026-11-15, after the pin-68c9d99 sync). Build and Ports CI green on
+  `3da7d0f` (2026-09-08, incl. flake + upstream-parity jobs). Local-env
+  gotcha: `npm_config_cache=/mnt/buildcache/npm` is machine-pinned and
+  that mount fills up — package-manager/cli tests then fail on `npm
+  error nospc`; override `npm_config_cache=/tmp/npm-cache` for the run.
 - The root `README.md` is fork-owned (user demand, 2026-09-07; replaced
   upstream's symlink to `packages/core/README.md`). Never recreate the
   symlink; never put fork content into `packages/**/README.md` —
@@ -301,7 +310,15 @@ flake checks cannot see them (cost one "NotFound in sandbox" round trip,
   conflicts re-apply fork deltas onto upstream blobs. `hmr.watch()` (#128)
   was already in the fork base. 2026-09-09: pin bumped to `f8ea3cd`
   (rc.10); its entire delta vs `caab04e` is the eight workspace manifests,
-  adopted byte-for-byte.
+  adopted byte-for-byte. 2026-11-15: pin bumped to `68c9d99` (rc.13,
+  77 commits): 8 new packages (cli, cli-cordis, env, fs, fs-node, http,
+  http-socks, package-manager; `utils` removed — 16 total), the
+  plugin→component rename (#307; ports keep `Plugin` naming, decision D1),
+  eslint→oxlint (#326), tracked yarn.lock (#319), type-check-tests CI
+  (#337), hmr rework (#244/#269 — Go hmr re-port deferred, decision D3),
+  and core fixes #242 (ported to all three ports) / #266 `registry.replace`
+  / #209 / #196 / #133 / #191 / #56 / #134. Decisions D1–D5 ratified in
+  ROADMAP Open decisions.
 - TS 7 saga, RESOLVED final (2026-09-09): two independent breakages. (1)
   `yarn install` hard-crashed with `typescript: ^7.0.2` under yarn 4.14.1
   (TS 7 tarballs ship only `bin/tsc`, no `lib/_tsc.js`, which yarn's

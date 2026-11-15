@@ -24,9 +24,10 @@ skip_steps:
   # and encoding/json/v2 (GOEXPERIMENT-gated; its own finding warns the v2 swap
   # has runtime-only failure modes). Port is parity-locked; see ROADMAP.md.
   - go-auto-upgrade
-  # Upstream pins ESLint 8 + .eslintrc (no flat config); TS linting is owned by
-  # `yarn lint` in the packages/ workspace, which buildflow's v9-style tool
-  # cannot drive.
+  # The TS workspace migrated from ESLint to oxlint (upstream #326, pin
+  # 68c9d99): there is no eslint dependency or config anymore. TS linting
+  # is owned by `yarn lint` (oxlint, driven by upstream's oxlint.config.ts)
+  # in the packages/ workspace; buildflow has no oxlint step to enable.
   - eslint-fix
   # tsc runs at the repo root without the workspace node_modules
   # (TS2688: @types/node unresolvable); TS checking is owned by the yarn
