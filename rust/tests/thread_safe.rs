@@ -15,7 +15,7 @@
 #![cfg(feature = "thread-safe")]
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use cordis::{Context, EventOptions, plugin, start_fn, value};
 
@@ -218,4 +218,94 @@ fn once_listener_may_dispose_itself_synchronously() {
     ctx.emit_named("ping", &[]);
     ctx.emit_named("ping", &[]);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn mid_dispatch_disposal_skips_removed() {
+    // #242 parity under the Mutex build: a listener disposed by an earlier
+    // listener of the same dispatch must not fire. Disposal splices the
+    // hook from the store under the core lock, but dispatch iterates an
+    // Arc snapshot taken before, so the splice also raises the atomic
+    // `removed` tombstone that the dispatch loop honors lock-free.
+    let ctx = Arc::new(Context::new());
+    let fired = Arc::new(AtomicBool::new(false));
+    let victim: Arc<std::sync::Mutex<Option<cordis::Disposer>>> =
+        Arc::new(std::sync::Mutex::new(None));
+
+    ctx.on_named(
+        "test",
+        {
+            let victim = Arc::clone(&victim);
+            Arc::new(move |_args: &[cordis::Value]| {
+                // Take the cell before disposing so no lock spans the call.
+                let pending = victim.lock().expect("victim cell").take();
+                if let Some(d) = pending {
+                    d.dispose();
+                }
+                None
+            })
+        },
+        EventOptions::default(),
+    )
+    .expect("disposer on");
+
+    let fired_listener = Arc::clone(&fired);
+    let disposer = ctx
+        .on_named(
+            "test",
+            Arc::new(move |_args: &[cordis::Value]| {
+                fired_listener.store(true, Ordering::SeqCst);
+                None
+            }),
+            EventOptions::default(),
+        )
+        .expect("victim on");
+    *victim.lock().expect("victim cell") = Some(disposer);
+
+    ctx.emit_named("test", &[]);
+
+    assert!(
+        !fired.load(Ordering::SeqCst),
+        "listener disposed by an earlier listener still fired"
+    );
+}
+
+#[test]
+fn disposed_listener_stays_silent_across_threads() {
+    // The tombstone is a one-way door observed across threads: a listener
+    // fires on every dispatch until another thread disposes it, and never
+    // again afterwards.
+    let ctx = Arc::new(Context::new());
+    let hits = Arc::new(AtomicUsize::new(0));
+
+    let called = Arc::clone(&hits);
+    let disposer = ctx
+        .on_named(
+            "test",
+            Arc::new(move |_args: &[cordis::Value]| {
+                called.fetch_add(1, Ordering::SeqCst);
+                None
+            }),
+            EventOptions::default(),
+        )
+        .expect("victim on");
+
+    let emitter = {
+        let ctx = Arc::clone(&ctx);
+        std::thread::spawn(move || {
+            for _ in 0..100 {
+                ctx.emit_named("test", &[]);
+            }
+        })
+    };
+    emitter.join().expect("emitter thread");
+    assert_eq!(hits.load(Ordering::SeqCst), 100);
+
+    disposer.dispose();
+    ctx.emit_named("test", &[]);
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        100,
+        "listener fired after being disposed from another dispatch"
+    );
 }

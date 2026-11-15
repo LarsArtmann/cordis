@@ -18,7 +18,9 @@ use cordis::sync::BorrowExt as _;
 use cordis::sync::Rc;
 use cordis::sync::RefCell;
 
-use cordis::{Context, Error, EventOptions, FiberState, Next, Value, plugin, start_fn, value};
+use cordis::{
+    Context, Disposer, Error, EventOptions, FiberState, Next, Value, plugin, start_fn, value,
+};
 
 fn opts() -> EventOptions {
     EventOptions::default()
@@ -146,6 +148,200 @@ fn parallel_aggregates_errors() {
     let text = err.to_string();
     assert!(text.contains("err-one"), "missing err-one in {text}");
     assert!(text.contains("err-two"), "missing err-two in {text}");
+}
+
+// Mid-dispatch disposal (#242 parity): a listener disposed by an earlier
+// listener of the same dispatch must not fire. Disposal splices the hook
+// from the store under the core borrow, but every dispatch mode iterates an
+// `Rc` snapshot taken before, so the splice also raises the `removed`
+// tombstone that the dispatch loops honor. Registration order is invocation
+// order: the disposer registers first, the victim second.
+
+type VictimCell = Rc<RefCell<Option<Disposer>>>;
+
+/// A listener that disposes whichever victim disposer the cell holds. The
+/// cell is taken before disposing so no borrow spans the dispose call (a
+/// re-entrant lock of the same cell would deadlock the Mutex build).
+fn disposing_listener(cell: &VictimCell) -> TestListener {
+    let cell = Rc::clone(cell);
+    Rc::new(move |_| {
+        let pending = cell.borrow_mut().take();
+        if let Some(victim) = pending {
+            victim.dispose();
+        }
+        None
+    })
+}
+
+/// Extract the `next` continuation from a waterfall argument slice.
+fn next_arg(args: &[Value]) -> Next {
+    Rc::clone(
+        args.last()
+            .and_then(|arg| arg.downcast_ref::<Next>())
+            .unwrap(),
+    )
+}
+
+/// A waterfall listener that disposes the victim, then hands control on
+/// instead of short-circuiting the chain.
+fn disposing_chain_listener(cell: &VictimCell) -> TestListener {
+    let cell = Rc::clone(cell);
+    Rc::new(move |args| {
+        let pending = cell.borrow_mut().take();
+        if let Some(victim) = pending {
+            victim.dispose();
+        }
+        next_arg(args)(&[])
+    })
+}
+
+fn victim_listener(fired: &Rc<RefCell<bool>>) -> TestListener {
+    let fired = Rc::clone(fired);
+    Rc::new(move |_| {
+        *fired.borrow_mut() = true;
+        Some(value("victim"))
+    })
+}
+
+fn register_victim(ctx: &Context, name: &str, fired: &Rc<RefCell<bool>>, victim: &VictimCell) {
+    let disposer = ctx
+        .on_named(name, victim_listener(fired), opts())
+        .unwrap();
+    *victim.borrow_mut() = Some(disposer);
+}
+
+#[test]
+fn mid_dispatch_disposal_skips_removed_emit() {
+    let ctx = Context::new();
+    let fired = Rc::new(RefCell::new(false));
+    let victim: VictimCell = Rc::new(RefCell::new(None));
+    ctx.on_named("test", disposing_listener(&victim), opts())
+        .unwrap();
+    register_victim(&ctx, "test", &fired, &victim);
+
+    ctx.emit_named("test", &[]);
+
+    assert!(!*fired.borrow(), "listener disposed by an earlier listener of the same dispatch still fired");
+}
+
+#[test]
+fn mid_dispatch_disposal_skips_removed_serial() {
+    let ctx = Context::new();
+    let fired = Rc::new(RefCell::new(false));
+    let victim: VictimCell = Rc::new(RefCell::new(None));
+    ctx.on_named("test", disposing_listener(&victim), opts())
+        .unwrap();
+    register_victim(&ctx, "test", &fired, &victim);
+
+    // The disposer returns None, so without the tombstone the victim would
+    // fire and bail the chain with "victim".
+    assert!(ctx.serial("test", &[]).is_none());
+    assert!(!*fired.borrow(), "disposed listener fired in serial dispatch");
+}
+
+#[test]
+fn mid_dispatch_disposal_skips_removed_bail() {
+    let ctx = Context::new();
+    let fired = Rc::new(RefCell::new(false));
+    let victim: VictimCell = Rc::new(RefCell::new(None));
+    ctx.on_named("test", disposing_listener(&victim), opts())
+        .unwrap();
+    register_victim(&ctx, "test", &fired, &victim);
+
+    assert!(ctx.bail("test", &[]).is_none());
+    assert!(!*fired.borrow(), "disposed listener fired in bail dispatch");
+}
+
+#[test]
+fn mid_dispatch_disposal_skips_removed_parallel() {
+    let ctx = Context::new();
+    let fired = Rc::new(RefCell::new(false));
+    let victim: VictimCell = Rc::new(RefCell::new(None));
+    ctx.on_named("test", disposing_listener(&victim), opts())
+        .unwrap();
+    register_victim(&ctx, "test", &fired, &victim);
+
+    ctx.parallel("test", &[]).unwrap();
+
+    assert!(!*fired.borrow(), "disposed listener fired in parallel dispatch");
+}
+
+#[test]
+fn waterfall_continues_past_removed_listener() {
+    let ctx = Context::new();
+    let fired = Rc::new(RefCell::new(false));
+    let victim: VictimCell = Rc::new(RefCell::new(None));
+    ctx.on_named("test", disposing_chain_listener(&victim), opts())
+        .unwrap();
+    register_victim(&ctx, "test", &fired, &victim);
+    ctx.on_named(
+        "test",
+        Rc::new(|args| next_arg(args)(&[value("third")])),
+        opts(),
+    )
+    .unwrap();
+
+    let terminal: Next = Rc::new(|args| args.first().cloned());
+    let result = ctx.waterfall("test", vec![], &terminal).unwrap();
+    assert_eq!(*result.downcast::<&str>().unwrap(), "third");
+    assert!(!*fired.borrow(), "disposed listener fired in waterfall dispatch");
+}
+
+#[test]
+fn waterfall_all_listeners_removed_reaches_terminal() {
+    let ctx = Context::new();
+    let fired = Rc::new(RefCell::new(false));
+    let victim: VictimCell = Rc::new(RefCell::new(None));
+    ctx.on_named("test", disposing_chain_listener(&victim), opts())
+        .unwrap();
+    register_victim(&ctx, "test", &fired, &victim);
+
+    let terminal: Next = Rc::new(|_| Some(value("terminal")));
+    let result = ctx.waterfall("test", vec![], &terminal).unwrap();
+    assert_eq!(*result.downcast::<&str>().unwrap(), "terminal");
+    assert!(!*fired.borrow(), "disposed listener fired in waterfall dispatch");
+}
+
+#[test]
+fn waterfall_defers_added_listeners_until_next_dispatch() {
+    let ctx = Context::new();
+    let late_called = Rc::new(RefCell::new(false));
+    let inner = ctx.clone();
+    let late = Rc::clone(&late_called);
+    ctx.on_named(
+        "test",
+        Rc::new(move |args| {
+            // Clone per invocation: this outer listener must stay an `Fn`
+            // since a dispatch may run it more than once.
+            let late = Rc::clone(&late);
+            inner
+                .on_named(
+                    "test",
+                    Rc::new(move |_| {
+                        *late.borrow_mut() = true;
+                        None
+                    }),
+                    opts(),
+                )
+                .unwrap();
+            // The waterfall hands a `next` continuation; the plain emit of
+            // the second phase dispatches without one.
+            if let Some(next) = args.last().and_then(|arg| arg.downcast_ref::<Next>()) {
+                return next(&[]);
+            }
+            None
+        }),
+        opts(),
+    )
+    .unwrap();
+
+    let terminal: Next = Rc::new(|_| Some(value("done")));
+    let result = ctx.waterfall("test", vec![], &terminal).unwrap();
+    assert_eq!(*result.downcast::<&str>().unwrap(), "done");
+    assert!(!*late_called.borrow(), "listener added mid-dispatch joined the running waterfall");
+
+    ctx.emit_named("test", &[]);
+    assert!(*late_called.borrow(), "listener added mid-dispatch never ran on the next dispatch");
 }
 
 #[test]

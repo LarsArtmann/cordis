@@ -6,6 +6,7 @@ use crate::sync::BorrowExt as _;
 use crate::sync::Rc;
 use crate::sync::RefCell;
 use std::any::Any;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::context::{Context, Disposer};
 use crate::core::{self, Bag, Core};
@@ -130,6 +131,22 @@ pub struct Hook {
     pub owner: Context,
     pub listener: Listener,
     pub global: bool,
+    /// The removal tombstone of upstream #242: disposal splices the hook
+    /// from the store under the core borrow, but every dispatch mode
+    /// iterates an `Rc` snapshot taken earlier, so the splice also raises
+    /// this flag and the dispatch loops honor it. An atomic (not a
+    /// `Cell<bool>`, which the `thread-safe` build cannot share behind
+    /// `Arc`) keeps one field working in both builds, like the `fired` flag
+    /// of [`Context::once_named`]: written under the core borrow, read
+    /// lock-free while listeners run.
+    pub removed: AtomicBool,
+}
+
+impl Hook {
+    /// Whether the hook was removed after its dispatch snapshot was taken.
+    fn is_removed(&self) -> bool {
+        self.removed.load(Ordering::SeqCst)
+    }
 }
 
 /// Listener registration options.
@@ -205,6 +222,7 @@ impl Context {
             owner: self.clone(),
             listener,
             global: options.global,
+            removed: AtomicBool::new(false),
         });
         {
             let mut core = self.core.borrow_mut();
@@ -305,6 +323,9 @@ impl Context {
     pub fn emit_named(&self, name: &str, args: &[Value]) {
         self.notify_dispatch("emit", name, args);
         for hook in self.resolve_hooks(name) {
+            if hook.is_removed() {
+                continue;
+            }
             (hook.listener)(args);
         }
     }
@@ -322,6 +343,9 @@ impl Context {
         self.notify_dispatch("parallel", name, args);
         let mut errors = Vec::new();
         for hook in self.resolve_hooks(name) {
+            if hook.is_removed() {
+                continue;
+            }
             let result =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.listener)(args)));
             match result {
@@ -346,6 +370,9 @@ impl Context {
     pub fn bail(&self, name: &str, args: &[Value]) -> Option<Value> {
         self.notify_dispatch("serial", name, args);
         for hook in self.resolve_hooks(name) {
+            if hook.is_removed() {
+                continue;
+            }
             if let Some(result) = (hook.listener)(args) {
                 return Some(result);
             }
@@ -534,10 +561,14 @@ impl Context {
     /// by a `next` continuation; not calling `next` short-circuits the chain.
     pub fn waterfall(&self, name: &str, args: Vec<Value>, terminal: &Next) -> Option<Value> {
         fn call(hooks: &[Rc<Hook>], args: Vec<Value>, terminal: &Next) -> Option<Value> {
-            let Some((hook, tail)) = hooks.split_first() else {
+            // Advance past hooks tombstoned by earlier listeners of this
+            // same chain: skipping them keeps `next` reaching the terminal
+            // instead of stalling on a disposed listener.
+            let mut live = hooks.iter().filter(|hook| !hook.is_removed());
+            let Some(hook) = live.next() else {
                 return terminal(&args);
             };
-            let tail: Vec<Rc<Hook>> = tail.to_vec();
+            let tail: Vec<Rc<Hook>> = live.cloned().collect();
             let terminal = Rc::clone(terminal);
             let next: Next = Rc::new(move |next_args| call(&tail, next_args.to_vec(), &terminal));
             let mut rest = args;
@@ -568,6 +599,7 @@ impl Context {
 }
 
 fn remove_hook(core: &mut Core, name: &str, hook: &Rc<Hook>) {
+    hook.removed.store(true, Ordering::SeqCst);
     if let Some(hooks) = core.hooks.get_mut(name) {
         hooks.retain(|candidate| !Rc::ptr_eq(candidate, hook));
     }
