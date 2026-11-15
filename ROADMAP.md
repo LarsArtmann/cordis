@@ -207,9 +207,13 @@ opens for the ports are tracked in the Go section above.
 
 ### Open decisions (user-gated)
 
-- **`yarn.lock` policy:** commit a generated lockfile (reproducible CI) vs
+- **`yarn.lock` policy:** ~~commit a generated lockfile (reproducible CI) vs
   stay lock-free tracking upstream; a missing lockfile broke installs
-  twice in fork history.
+  twice in fork history.~~ Resolved 2026-11-14 (D2): upstream began
+  tracking `yarn.lock` (#319), so the fork adopts it — upstream's bytes as
+  the base, plus the one re-resolution delta the deliberate
+  `@types/node ^26.5.0` divergence forces (kept fork-side, documented in
+  AGENTS.md). Kills the every-install-re-resolves failure mode.
 - **TS toolchain stance:** track upstream exactly (their pins, their
   breakage) vs fork-pinned dependencies. Resolved in practice 2026-09-09:
   the fork matches upstream exactly except a deliberate
@@ -224,7 +228,14 @@ opens for the ports are tracked in the Go section above.
   them no-ops the specs' literal replaces and timed out 17 tests; the
   `upstream-parity` CI job enforces it.
 - **One-session-per-worktree convention** for concurrent agents.
-- **Oxlint policy for upstream TS** (report-only today).
+  Ratified 2026-11-14 as a convention: one agent session per worktree;
+  a session discovering foreign uncommitted changes must never revert or
+  commit them — reconcile by reading (the 2026-11-14 program ran
+  alongside a live `go/loader` session under exactly this rule).
+- **Oxlint policy for upstream TS** (report-only today). Resolved
+  2026-11-14 (D5): converge — upstream migrated linting to oxlint
+  (#326, `oxlint.config.ts`, `lint = oxlint`); `yarn lint` is the TS
+  lint gate and the report-only caveat is obsolete.
 - **Generic-method API deprecation timeline** (see Go section).
 - **Coverage and bench policy:** make the measured baselines (Go ≈90%,
   Rust 86.4%) enforced gates with a floor, and keep per-port bench
@@ -243,6 +254,27 @@ opens for the ports are tracked in the Go section above.
 - **Go `Must*` fate (2026-09-10):** delete `MustGet`/`MustGetNamed`/
   `MustRegister` (breaking wiring code) or keep them as the documented,
   explicitly opt-in panic sugar?
+
+### rc.13 sync decisions — ratified 2026-11-14
+
+The five gates of the sync program
+(`docs/planning/2026-11-14_16-41_upstream-rc13-sync-port-parity-program.md`),
+ratified with the recommended defaults:
+
+- **D1 — plugin → component rename (#307): keep `Plugin` naming in the
+  ports.** The ports are the fork's product; the rename is zero-semantics
+  API churn across three languages (golden op renames included). The
+  divergence is documented in DOMAIN_LANGUAGE.md and the parity matrix.
+  Revisit only if a later upstream release makes `component` load-bearing
+  for semantics.
+- **D2 — yarn.lock: adopted** (see the resolved open decision above).
+- **D3 — Go hmr re-port onto the reworked upstream core (#244/#269):
+  deferred.** The swap/generation/accept-set model stays pinned by the
+  watch-golden trace; decide after the T18 deep-read memo lands.
+- **D4 — `@types/node`: keep the fork's `^26.5.0` delta** (the single
+  machine-guarded manifest divergence); re-evaluate only if upstream's
+  25.x pin breaks the build.
+- **D5 — oxlint: converged** (see the resolved open decision above).
 
 ### Typed-event guard error channel — decided 2026-11-14
 
