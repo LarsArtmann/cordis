@@ -1,9 +1,11 @@
 {
-  "name": "@cordisjs/plugin-group",
-  "version": "1.0.0",
+  "name": "@cordisjs/group",
+  "version": "1.0.1",
+  "description": "Entry group plugin for Cordis",
+  "sideEffects": false,
   "type": "module",
   "main": "lib/index.js",
-  "typings": "lib/index.d.ts",
+  "types": "lib/index.d.ts",
   "files": [
     "lib"
   ],
@@ -19,11 +21,11 @@
   },
   "homepage": "https://cordis.io/",
   "peerDependencies": {
-    "@cordisjs/plugin-loader": "^1.0.0-rc.9",
+    "@cordisjs/loader": "^1.0.0-rc.10",
     "cordis": "^4.0.0-rc.13"
   },
   "devDependencies": {
-    "@cordisjs/plugin-loader": "^1.0.0-rc.9",
+    "@cordisjs/loader": "^1.0.0-rc.10",
     "cordis": "^4.0.0-rc.13"
   }
 }

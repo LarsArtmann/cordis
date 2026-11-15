@@ -1,0 +1,10 @@
+- id: hmr
+  name: '@cordisjs/hmr'
+- id: multi-a
+  name: ./component-multi
+  config:
+    label: a
+- id: multi-b
+  name: ./component-multi
+  config:
+    label: b

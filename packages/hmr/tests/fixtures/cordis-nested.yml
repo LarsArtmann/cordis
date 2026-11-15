@@ -1,0 +1,4 @@
+- id: hmr
+  name: '@cordisjs/hmr'
+- id: tree
+  name: ./component-tree

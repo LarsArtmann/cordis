@@ -1,0 +1,6 @@
+- id: hmr
+  name: '@cordisjs/hmr'
+- id: test-slow
+  name: ./component-slow
+- id: test-fast
+  name: ./component-fast

@@ -1,10 +1,11 @@
 {
-  "name": "@cordisjs/plugin-loader",
-  "description": "Loader for cordis",
-  "version": "1.0.0-rc.7",
+  "name": "@cordisjs/loader",
+  "description": "Loader for Cordis",
+  "version": "1.0.0-rc.10",
+  "sideEffects": false,
   "type": "module",
   "main": "lib/index.js",
-  "typings": "lib/index.d.ts",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -35,13 +36,12 @@
     "service"
   ],
   "devDependencies": {
-    "@cordisjs/plugin-logger-console": "^1.0.0",
-    "@types/js-yaml": "^4.0.9",
+    "@cordisjs/logger-console": "^1.0.1",
     "cordis": "^4.0.0-rc.13"
   },
   "peerDependencies": {
     "cordis": "^4.0.0-rc.13",
-    "node-addon-require-builtin": "^0.1.9"
+    "node-addon-require-builtin": "^0.1.0"
   },
   "peerDependenciesMeta": {
     "node-addon-require-builtin": {

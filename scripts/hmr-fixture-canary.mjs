@@ -15,7 +15,14 @@ import { fileURLToPath } from "node:url";
 
 const testsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "packages", "hmr", "tests");
 
-const allFiles = readdirSync(testsDir);
+function walkFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name);
+    return entry.isDirectory() ? walkFiles(full) : [full];
+  });
+}
+
+const allFiles = walkFiles(testsDir).map((full) => full.slice(testsDir.length + 1));
 const specs = allFiles.filter((f) => f.endsWith(".spec.ts"));
 const fixtures = allFiles.filter((f) => !f.endsWith(".spec.ts") && f !== "tsconfig.json");
 

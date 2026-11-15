@@ -1,522 +1,839 @@
-import { Context, Fiber, Inject, Plugin, Service } from "cordis";
-import { Awaitable, Dict } from "cosmokit";
-import { ModuleJob, ModuleLoader, ResolveResult } from "@cordisjs/plugin-loader";
-import { ChokidarOptions, FSWatcher, watch } from "chokidar";
-import { relative, resolve } from "node:path";
-import { handleError } from "./error.ts";
-import type {} from "@cordisjs/plugin-timer";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { createRequire } from "node:module";
-import picomatch from "picomatch";
-import enUS from "./locales/en-US.yml";
-import zhCN from "./locales/zh-CN.yml";
-import z from "schemastery";
+import { Component, Context, Fiber, Service } from 'cordis'
+import type {} from '@cordisjs/fs'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { realpathSync } from 'node:fs'
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { handleError } from './error.ts'
+import {
+  activate, invalidateResolution, locatePackage, ModuleCaches, ModuleLoader, Resolution, resolveRequest, restoreResolutions,
+} from './runtime/index.ts'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import z from 'schemastery'
 
-declare module "cordis" {
+declare module 'cordis' {
   interface Context {
-    hmr: Hmr;
-  }
-
-  interface Events {
-    "hmr/change"(url: string): void;
-    "hmr/reload"(stalePlugins: Map<Plugin, StalePlugin>): void;
+    hmr: Hmr
   }
 }
 
-export type WatchCallback = () => Awaitable<void>;
+type Awaitable<T> = T | Promise<T>
 
-/**
- * Recursively collect all module dependencies from a ModuleJob.
- * Skips node: builtins and node_modules to focus on user code.
- */
-async function loadDependencies(job: ModuleJob, ignored = new Set<string>()) {
-  const dependencies = new Set<string>();
-  async function traverse(job: ModuleJob) {
-    if (ignored.has(job.url) || dependencies.has(job.url)) return;
-    if (job.url.startsWith("node:") || job.url.includes("/node_modules/")) return;
-    dependencies.add(job.url);
-    const children = await job.linked;
-    await Promise.all(Array.prototype.map.call(children, traverse));
-  }
-  await traverse(job);
-  return dependencies;
+// A specifier that is a URL, e.g. `file:` or `data:`.
+const scheme = /^[a-z][a-z\d+.-]*:/i
+
+// A Windows drive-letter path, e.g. `C:\app\cordis.yml` or `C:/app/cordis.yml`.
+const driveLetter = /^[A-Za-z]:[\\/]/
+
+// a builtin has no file and no dependencies to follow
+function isBuiltin(url: string) {
+  return url.startsWith('node:')
 }
 
-/** An entry plugin whose module has changed. Keyed by the *old* plugin. */
-interface StalePlugin {
-  filename: string;
-  /** the runtime the old plugin was registered under */
-  runtime?: Plugin.Runtime;
-}
-
-/** One instance of a stale plugin, paired with what will replace it. */
-interface StaleFiber {
-  /** the entry file, relative to `baseDir`, for logging */
-  path: string;
-  /** the freshly imported plugin to rebuild with */
-  replacement: any;
-  /** the fiber left behind by the unload stage */
-  fiber: Fiber;
+// A native addon cannot be loaded again in the same process: requiring its
+// file once more returns the library that is already loaded.
+function isNativeAddon(url: string) {
+  return url.startsWith('file:') && url.endsWith('.node')
 }
 
 /**
- * Whether any ancestor of `fiber` is inactive, i.e. already disposed. Such a
- * fiber must not be rebuilt, for either of two reasons:
- *
- * - The ancestor is being reloaded in this batch, and rebuilding it rebuilds
- *   everything below it.
- * - The ancestor went away for an unrelated reason (a service disappeared, a
- *   concurrent config update). Nobody is going to rebuild it, and registering
- *   under a disposed context throws `INACTIVE_EFFECT`.
+ * Collect the modules reachable from `roots` along `edges`. The traversal
+ * neither includes nor passes through a module for which `stop` holds.
+ * Builtins are skipped.
  */
-function hasInactiveAncestor(fiber: Fiber) {
-  for (let current = fiber.parent.fiber; ; current = current.parent.fiber) {
-    if (current.uid === null) return true;
-    // the root fiber is its own parent's fiber
-    if (current === current.parent.fiber) return false;
+async function closure(
+  roots: Iterable<string>,
+  edges: (url: string) => Iterable<string> | Promise<Iterable<string>>,
+  stop: (url: string) => boolean = () => false,
+) {
+  const result = new Set<string>()
+  const traverse = async (url: string) => {
+    if (result.has(url) || isBuiltin(url) || stop(url)) return
+    result.add(url)
+    await Promise.all([...await edges(url)].map(traverse))
+  }
+  await Promise.all([...roots].map(traverse))
+  return result
+}
+
+/** A registered component whose module has changed. */
+interface StaleComponent {
+  /** the module to take the replacement from */
+  url: string
+  /** every module that exports the component */
+  urls: string[]
+  /** the modules of `urls` that no other module of `urls` imports, including `url` */
+  entries: string[]
+  /** the component before the change */
+  component: Component
+  /** the closure of the component in the old module graph */
+  modules: Set<string>
+}
+
+/** A change found in stage 1 that cannot be applied in place, reported in `skipped`. */
+class SkipError extends Error {
+  constructor(public reason: Hmr.SkipReason) {
+    super(reason)
   }
 }
 
-@Inject("loader")
-@Inject("timer")
+/**
+ * Whether a resolution records a request that may resolve elsewhere later,
+ * unlike a URL or an absolute path, which resolves to itself.
+ */
+function isRequest({ specifier }: Resolution) {
+  return !isAbsolute(specifier) && !scheme.test(specifier)
+}
+
+/** Whether `path` is `dir` or lies below it. */
+function contains(dir: string, path: string) {
+  return path === dir || path.startsWith(dir.endsWith(sep) ? dir : dir + sep)
+}
+
+/**
+ * Whether the changes at `root` concern the module at `path`: the module lies
+ * below it, or below the directory to which `root` adds a package as
+ * `node_modules/<name>`, where its imports of the package may resolve to it.
+ * A manifest stands for its directory.
+ */
+function covers(root: string, path: string) {
+  if (basename(root) === 'package.json') root = dirname(root)
+  if (contains(root, path)) return true
+  const location = locatePackage(root)
+  return !!location && contains(location.dir, path)
+}
+
+/** The import of a stale component in stage 1. */
+interface ImportAttempt {
+  stale: StaleComponent
+  /** the modules imported for the entries of the component, which may have moved */
+  imported: string[]
+  /** the new component, if the import succeeded */
+  replacement?: Component
+  failed: boolean
+  error?: unknown
+  /** why the component cannot be replaced in place, if it cannot */
+  skip?: Hmr.SkipReason
+  /** the modules that were not cached before this import, other than evicted modules */
+  loaded: string[]
+}
+
+/** A set of stale components that commit, abort or are skipped together. */
+interface ReconcileUnit {
+  attempts: ImportAttempt[]
+  /** the evicted modules in the closures of the components */
+  modules: Set<string>
+}
+
+/** Get the component exported by a module namespace. */
+function unwrapExports(exports: any) {
+  if (exports === null || exports === undefined) return exports
+  exports = exports.default ?? exports
+  // https://github.com/evanw/esbuild/issues/2623
+  // https://esbuild.github.io/content-types/#default-interop
+  if (!exports.__esModule) return exports
+  return exports.default ?? exports
+}
+
+function toPath(url: string) {
+  if (url.startsWith('file:')) return fileURLToPath(url)
+}
+
 class Hmr extends Service {
-  public baseDir: string;
+  /** The resolved `base`. `watch.files` and logged paths are relative to it. */
+  public baseDir: string
 
-  private internal?: ModuleLoader;
-  private watcher!: FSWatcher;
-
-  /**
-   * Changes from externals will always trigger a full reload.
-   * Externals are the dependency tree of the CLI worker entry point.
-   */
-  private externals!: Set<string>;
+  /** Node's internal ESM loader. */
+  private _loader: ModuleLoader
+  /** Node's module caches. */
+  private _modules: ModuleCaches
 
   /**
-   * Files that should be reloaded (accepted changes).
-   * Includes all stashed files and their dependents.
+   * The dependency tree of the main entry point. A change to any of these
+   * modules can only be applied by restarting the process.
    */
-  private accepted!: Set<string>;
+  public hostModules = new Set<string>()
 
-  /**
-   * Files that should NOT be reloaded.
-   * Includes externals and files whose dependents are all declined.
-   */
-  private declined!: Set<string>;
+  /** The tail of the transaction queue. */
+  private _queue: Promise<void> = Promise.resolve()
 
-  /** Stashed file changes waiting to be processed */
-  private stashed = new Set<string>();
+  /** The running transaction, matched against the async context of a call. */
+  private _current?: symbol
+  private _storage = new AsyncLocalStorage<symbol>()
 
-  /** Callbacks registered through `watch()`, keyed by absolute path. */
-  private watchers = new Map<string, Set<WatchCallback>>();
-
-  constructor(
-    ctx: Context,
-    public config: Hmr.Config,
-  ) {
-    super(ctx, "hmr");
-    this.internal = this.ctx.loader.internal;
-    this.baseDir = fileURLToPath(new URL(config.base || ".", ctx.baseUrl));
-  }
-
-  /**
-   * Resolve a module specifier to a URL, compatible with Node 22-24.
-   */
-  private async _resolve(
-    specifier: string,
-    parentURL: string,
-    attrs: ImportAttributes,
-  ): Promise<ResolveResult> {
-    const internal = this.internal!;
-    switch (internal.version) {
-      case "v1":
-        return await internal.resolve(specifier, parentURL, attrs);
-      case "v2":
-        return internal.resolveSync(parentURL, { specifier, attributes: attrs });
+  constructor(ctx: Context, public config: Hmr.Config) {
+    super(ctx, 'hmr')
+    const loader = ModuleLoader.fromInternal()
+    if (!loader) {
+      throw new Error('loader internals are unavailable, pass --expose-internals or install node-addon-require-builtin')
     }
+    this._loader = loader
+    this._modules = new ModuleCaches(loader)
+    ctx.effect(() => activate())
+
+    // `base` is resolved:
+    // - on Windows, as a drive-letter path through `pathToFileURL`, since
+    //   `new URL()` would read `C:` as a URL scheme;
+    // - as a URL against `ctx.baseUrl`, or as a file URL without one;
+    // - otherwise, against the working directory.
+    this.baseDir = process.platform === 'win32' && config.base && driveLetter.test(config.base)
+      ? fileURLToPath(pathToFileURL(config.base))
+      : ctx.baseUrl || config.base?.startsWith('file:')
+        ? fileURLToPath(new URL(config.base || '.', ctx.baseUrl))
+        : resolve(config.base || '.')
+
+    ctx.inject(['fs'], ctx => this._watch(ctx))
   }
 
-  async *[Service.init]() {
-    yield () => this.watcher?.close();
-
-    const { loader } = this.ctx;
-    const { root, ignored } = this.config;
+  /**
+   * Reconcile the changes collected over each debounce window. Skipped
+   * changes are reported, since restarting is up to the host. The files that
+   * concern an aborted unit are retried with the next batch.
+   */
+  private _watch(ctx: Context) {
+    const { enabled, files, debounce } = this.config.watch
+    if (!enabled || !files.length) return
     if (!this.config.base) {
-      this.ctx.logger.info("watching %o", root);
+      this.ctx.logger.info('watching %o', files)
     } else {
-      this.ctx.logger.info("watching %o in %s", root, this.baseDir);
-    }
-    if (!this.internal) {
-      // eslint-disable-next-line max-len
-      this.ctx.logger.warn(
-        "loader internals are unavailable, source code HMR is disabled; pass --expose-internals or install node-addon-require-builtin to enable it",
-      );
+      this.ctx.logger.info('watching %o in %s', files, this.baseDir)
     }
 
-    // Collect externals: framework modules reachable from the main entry.
-    // Changes to these files require a full process restart, not HMR.
-    this.externals = new Set();
-    const mainUrl = pathToFileURL(resolve(process.argv[1])).href;
-    const mainJob = this.internal?.loadCache.get(mainUrl);
-    if (mainJob) {
-      this.externals = await loadDependencies(mainJob);
-    }
+    const stashed = new Set<string>()
+    const retained = new Set<string>()
+    let timer: NodeJS.Timeout | undefined
+    ctx.effect(() => () => clearTimeout(timer))
 
-    const match = picomatch(ignored);
-    this.watcher = watch(root, {
-      ...this.config,
-      cwd: this.baseDir,
-      ignored: (path) =>
-        !this.watchers.has(resolve(this.baseDir, path)) && match(relative(this.baseDir, path)),
-    });
+    // Batches are flushed one after another, including the handling of their
+    // results, so that a batch takes the changes retained by the one before.
+    let flushing = Promise.resolve()
 
-    const partialReload = this.ctx.debounce(() => this.partialReload(), this.config.debounce);
-
-    this.watcher.on("change", async (path) => {
-      this.ctx.logger.debug("change detected at %C", path);
-      const filename = resolve(this.baseDir, path);
-      const url = pathToFileURL(filename).href;
-
-      // Full reload: the changed file is part of the framework
-      if (this.externals.has(url)) return loader.exit();
-
-      // Awaited before the steps below, so that within one change a watcher
-      // is settled by the time the file reaches module reloading.
-      const callbacks = this.watchers.get(filename);
-      if (callbacks?.size) {
-        await Promise.all(
-          [...callbacks].map(async (callback) => {
-            try {
-              await callback();
-            } catch (error) {
-              this.ctx.logger.warn(error);
-            }
-          }),
-        );
+    const flush = async () => {
+      if (!stashed.size) return
+      const files = new Set([...retained, ...stashed])
+      retained.clear()
+      stashed.clear()
+      try {
+        const result = await this.reconcile(() => files)
+        if (result.skipped.length) {
+          this.ctx.logger.warn([
+            'skipped changes, which apply after a restart:',
+            ...result.skipped.flatMap(({ urls, reason }) => urls.map(url => `- ${this._relative(url)} (${reason})`)),
+          ].join('\n'))
+        }
+        // An aborted unit has been logged by the transaction itself. The next
+        // batch may only repair a module that the unit newly imports, so the
+        // files that changed the unit are retained.
+        const paths = result.aborted.flatMap(({ urls }) => urls.flatMap(url => toPath(url) ?? []))
+        for (const file of files) {
+          if (paths.some(path => covers(file, path))) retained.add(file)
+        }
+      } catch (error) {
+        this.ctx.logger.warn(error)
+        for (const path of files) retained.add(path)
       }
+    }
 
-      // Partial reload: the file is in the ESM loadCache
-      // In Node 24, both CJS and ESM modules imported via import() end up
-      // in loadCache, so this check covers all module formats.
-      if (this.internal?.loadCache.has(url)) {
-        this.stashed.add(url);
-        return partialReload();
+    ctx.fs.watch(pathToFileURL(this.baseDir), { filter: files }).on('change', (url) => {
+      const filename = fileURLToPath(url)
+      this.ctx.logger.debug('change detected at %C', relative(this.baseDir, filename))
+      stashed.add(filename)
+      clearTimeout(timer)
+      timer = setTimeout(() => flushing = flushing.then(flush), debounce)
+    })
+  }
+
+  async* [Service.init]() {
+    // Collect host modules: framework modules reachable from the main entry.
+    // process.argv[1] is undefined in REPL, node -e, and some packed binaries.
+    // It may be a link, such as a bin shim, while module URLs are real paths.
+    if (process.argv[1]) {
+      let main = resolve(process.argv[1])
+      try {
+        main = realpathSync(main)
+      } catch {}
+      const mainUrl = pathToFileURL(main).href
+      if (this._modules.has(mainUrl)) {
+        this.hostModules = await closure([mainUrl], url => this._modules.edges(url))
       }
-
-      this.ctx.emit("hmr/change", url);
-    });
+    }
   }
 
   /**
-   * Watch a single file. `callback` runs on every change to it.
+   * Run `callback` as the body of a transaction, and replace the components
+   * affected by the roots that it resolves to. Transactions run one at a
+   * time; one started from within the running transaction, including from
+   * `callback`, is rejected. If `callback` throws, the transaction rejects
+   * with its error and the module caches are left as they are.
    *
-   * The path is watched even when it lies outside `root` or matches
-   * `ignored`. Registrations are not exclusive: every callback registered for
-   * a path runs on each change.
+   * A root is an absolute path of a file or a directory:
+   * - the loaded modules whose files are the root or lie below it are
+   *   changed. Module URLs are real paths, so the caller passes the real path
+   *   under which modules were loaded, such as the previous target of a link;
+   * - later resolutions observe the file system below it. For a package, the
+   *   caller also passes its location, such as a link or a directory where a
+   *   package is added, since Node resolves package names through it.
+   *
+   * A component whose module is no longer where the import that loaded it now
+   * resolves, e.g. after its package exports another entry or a link is
+   * retargeted, is replaced from the module that the import resolves to. A
+   * changed module that no component depends on is evicted too: its next import
+   * gets the new code, while existing references keep the old one.
+   *
+   * Every transaction first removes the module jobs that failed to load, link
+   * or evaluate, whether or not their files changed, so that the next import
+   * of their modules tries again.
    */
-  watch(path: string | URL, callback: WatchCallback) {
-    const filename =
-      path instanceof URL || path.startsWith("file:")
-        ? fileURLToPath(path)
-        : resolve(this.baseDir, path);
-    return this.ctx.effect(() => {
-      let callbacks = this.watchers.get(filename);
-      if (!callbacks) this.watchers.set(filename, (callbacks = new Set()));
-      callbacks.add(callback);
-      // The watch set only ever grows: a path handed to `add()` may well have
-      // been covered by `root` already, and `unwatch()` would take it out of
-      // the normal watch too. Dropping the callback is what ends the watch.
-      this.watcher.add(filename);
-      return () => {
-        callbacks.delete(callback);
-        if (!callbacks.size) this.watchers.delete(filename);
-      };
-    }, "ctx.hmr.watch()");
+  reconcile(callback: () => Awaitable<Iterable<string>>): Promise<Hmr.Result> {
+    const current = this._storage.getStore()
+    if (current && current === this._current) {
+      return Promise.reject(new Error('cannot start a transaction inside another transaction'))
+    }
+    const task = this._queue.then(() => {
+      const id = Symbol('transaction')
+      this._current = id
+      return this._storage.run(id, () => this._reconcile(callback)).finally(() => {
+        this._current = undefined
+      })
+    })
+    // only the order matters, so the result is not kept alive
+    this._queue = task.then(() => {}, () => {})
+    return task
   }
 
-  // hide stack trace from HMR
-  getOuterStack = (): string[] => [
-    // '    at HMR.partialReload (<anonymous>)',
-  ];
-
-  async getLinked(url: string) {
-    const job = this.internal?.loadCache.get(url);
-    if (!job) return [];
-    const linked = await job.linked;
-    return Array.prototype.map.call(linked, (job: ModuleJob) => job.url) as string[];
+  private _relative(url: string) {
+    // a module loaded through a custom scheme, such as `data:`, has no path
+    if (!url.startsWith('file:')) return url
+    return relative(this.baseDir, fileURLToPath(url))
   }
 
   /**
-   * Classify changed files into accepted (should reload) and declined (should not).
+   * Classify the loaded modules into accepted (evicted from the module cache)
+   * and declined (kept). The changed modules are accepted, and so is every
+   * module that imports an accepted one. This does not depend on whether a
+   * registered component uses them, so that a later import, such as by a component
+   * that is enabled again, gets the new code. Host modules are declined.
    *
-   * A file is accepted if it's directly changed (stashed) or if any of its
-   * dependents are accepted. A file is declined if all its dependents are
-   * declined or if it's an external.
+   * The returned `edges` are the dependencies of each loaded module before
+   * the eviction, i.e. the old module graph.
    */
-  private async analyzeChanges() {
-    const pending: string[] = [];
+  private async _analyze(changed: Set<string>) {
+    const caches = this._modules
+    const urls = [...caches.urls()].filter(url => !isBuiltin(url))
+    const edges = new Map<string, Set<string>>()
+    await Promise.all(urls.map(async url => edges.set(url, await caches.edges(url))))
 
-    this.accepted = new Set(this.stashed);
-    this.declined = new Set(this.externals);
+    const importers = new Map<string, string[]>()
+    for (const [url, children] of edges) {
+      if (this.hostModules.has(url)) continue
+      for (const child of children) {
+        let list = importers.get(child)
+        if (!list) importers.set(child, list = [])
+        list.push(url)
+      }
+    }
 
-    const isExcluded = (url: string) => url.startsWith("node:") || url.includes("/node_modules/");
+    const accepted = new Set<string>()
+    const queue = [...changed]
+    while (queue.length) {
+      const url = queue.pop()!
+      if (accepted.has(url)) continue
+      accepted.add(url)
+      queue.push(...importers.get(url) ?? [])
+    }
 
-    await Promise.all(
-      [...this.stashed].map(async (url) => {
-        const children = await this.getLinked(url);
-        for (const child of children) {
-          if (this.accepted.has(child) || this.declined.has(child) || isExcluded(child)) continue;
-          pending.push(child);
-        }
-      }),
-    );
+    const declined = new Set(this.hostModules)
+    for (const url of urls) {
+      if (!accepted.has(url)) declined.add(url)
+    }
+    return { accepted, declined, edges }
+  }
 
-    while (pending.length) {
-      let index = 0,
-        hasUpdate = false;
-      while (index < pending.length) {
-        const url = pending[index];
-        const children = await this.getLinked(url);
-        let isDeclined = true,
-          isAccepted = false;
-        for (const child of children) {
-          if (this.declined.has(child) || isExcluded(child)) continue;
-          if (this.accepted.has(child)) {
-            isAccepted = true;
-            break;
-          } else {
-            isDeclined = false;
-            if (!pending.includes(child)) {
-              hasUpdate = true;
-              pending.push(child);
-            }
-          }
-        }
-        if (isAccepted || isDeclined) {
-          hasUpdate = true;
-          pending.splice(index, 1);
-          if (isAccepted) {
-            this.accepted.add(url);
-          } else {
-            this.declined.add(url);
-          }
+  /**
+   * Partition the attempts into units: the connected components of the
+   * relation in which two components are related if their closures, in the old
+   * or the new module graph, share an evicted module.
+   *
+   * @param edges the dependencies of a module in the new module graph
+   * @param retained the modules kept in the caches through the eviction,
+   * which import no evicted module, so that the traversal stops at them
+   */
+  private async _partition(
+    attempts: ImportAttempt[],
+    evicted: Set<string>,
+    edges: (url: string) => Promise<Iterable<string>>,
+    retained: Set<string>,
+  ) {
+    const reaches = await Promise.all(attempts.map(attempt => {
+      return closure([...attempt.stale.urls, ...attempt.imported], edges, url => retained.has(url))
+    }))
+    const parents = attempts.map((_, index) => index)
+    const find = (index: number) => {
+      while (parents[index] !== index) index = parents[index] = parents[parents[index]]
+      return index
+    }
+    const owners = new Map<string, number>()
+    attempts.forEach((attempt, index) => {
+      for (const url of [...attempt.stale.modules, ...reaches[index]]) {
+        if (!evicted.has(url)) continue
+        const owner = owners.get(url)
+        if (owner === undefined) {
+          owners.set(url, index)
         } else {
-          index++;
+          parents[find(index)] = find(owner)
         }
       }
-      if (!hasUpdate) break;
-    }
-
-    for (const url of pending) {
-      this.declined.add(url);
-    }
+    })
+    const units = new Map<number, ReconcileUnit>()
+    attempts.forEach((attempt, index) => {
+      const root = find(index)
+      let unit = units.get(root)
+      if (!unit) units.set(root, unit = { attempts: [], modules: new Set() })
+      unit.attempts.push(attempt)
+      for (const url of [...attempt.stale.modules, ...reaches[index]]) {
+        if (evicted.has(url)) unit.modules.add(url)
+      }
+    })
+    return [...units.values()]
   }
 
-  private async partialReload() {
-    const internal = this.internal!;
-    await this.analyzeChanges();
-
-    const candidates = new Map<ModuleJob, Plugin>();
-    const invalidatedModules = new Set(this.accepted);
-    const stalePlugins = new Map<Plugin, StalePlugin>();
-
-    // Build a map of plugin names per config tree URL.
-    // Plugin entry files are treated as atomic reload units.
-    const nameMap: Dict<Set<string>> = Object.create(null);
-    for (const entry of this.ctx.loader.entries()) {
-      (nameMap[entry.parent.tree.ctx.baseUrl!] ??= new Set()).add(entry.options.name);
-    }
-
-    // Resolve each plugin name to its file URL and check if it needs reload
-    for (const baseUrl in nameMap) {
-      for (const name of nameMap[baseUrl]) {
+  /**
+   * Find every loaded module that exports a registered component, through its
+   * ESM namespace or the exports of its CJS module, so that a component that
+   * only `require()` has loaded is found too.
+   */
+  private _discover(declined: Set<string>) {
+    const candidates = new Map<string, Component>()
+    for (const url of this._modules.urls()) {
+      if (declined.has(url) || isBuiltin(url)) continue
+      for (const exports of [() => this._modules.namespace(url), () => this._modules.exports(url)]) {
+        let component: Component | undefined
         try {
-          const { url } = await this._resolve(name, baseUrl, {});
-          if (this.declined.has(url)) continue;
-          const job = internal.loadCache.get(url);
-          const plugin = this.ctx.loader.unwrapExports(job?.module?.getNamespace());
-          if (!job || !plugin) continue;
-          candidates.set(job, plugin);
-          this.declined.add(url);
-        } catch (err) {
-          this.ctx.logger.warn(err);
+          // reading a binding that has not been initialized throws
+          component = unwrapExports(exports())
+        } catch {
+          continue
         }
+        if (!component || !this.ctx.registry.has(component)) continue
+        candidates.set(url, component)
+        break
       }
     }
+    return candidates
+  }
 
-    // Check each candidate plugin's dependency tree for accepted files
-    for (const [job, plugin] of candidates) {
-      this.declined.delete(job.url);
-      const dependencies = [...(await loadDependencies(job, this.declined))];
-      this.declined.add(job.url);
-
-      if (!dependencies.some((dep) => this.accepted.has(dep))) continue;
-      dependencies.forEach((dep) => invalidatedModules.add(dep));
-
-      stalePlugins.set(plugin, {
-        filename: job.url,
-        runtime: this.ctx.registry.get(plugin),
-      });
+  /**
+   * Locate a module of a stale component again through the removed resolutions
+   * to it, so that a module that has moved, e.g. to a new `exports` target or
+   * through a retargeted link, is imported at its new URL. A resolution
+   * counts if it records a request and its parent is not evicted, since an
+   * evicted parent resolves its imports again by itself:
+   * - without one, the module is imported at its URL;
+   * - if every request now resolves to one module, it is imported through a
+   *   request;
+   * - otherwise, the component is skipped as `AmbiguousImport`.
+   */
+  private _locate(url: string, removed: Resolution[], evicted: Set<string>) {
+    const sources = removed.filter((resolution) => {
+      return resolution.url === url && !evicted.has(resolution.parentURL) && isRequest(resolution)
+    })
+    if (!sources.length) return { url }
+    const targets = new Set(sources.map(source => resolveRequest(this._loader, source)))
+    if (targets.size > 1) {
+      throw new SkipError(Hmr.SkipReason.AmbiguousImport)
     }
+    return { url: [...targets][0], source: sources[0] }
+  }
 
-    /**
-     * Clear module caches for affected modules and complete dependency trees
-     * of selected plugins before re-importing.
-     *
-     * We need to clear both:
-     * 1. ESM loadCache — managed by Node's internal ModuleLoader
-     * 2. CJS Module._cache — for CJS modules that were imported via import()
-     *
-     * In Node 24, CJS modules loaded via import() appear in both caches.
-     * If we only clear loadCache, the CJS cache may serve stale modules.
-     *
-     * We use Map.prototype methods directly on loadCache because:
-     * - In Node 22/23, loadCache is a plain Map<url, ModuleJob>
-     * - In Node 24, loadCache is a LoadCache extends Map<url, { [type]: ModuleJob }>
-     *   where .delete() only sets the type slot to undefined (doesn't remove the entry)
-     * Using Map.prototype.delete ensures complete removal in both versions.
-     */
-    const esmBackup: Dict = Object.create(null);
-    const cjsBackup: Dict = Object.create(null);
-    const require = createRequire(import.meta.url);
-    for (const filename of invalidatedModules) {
-      // Backup and clear ESM loadCache
-      const job = Map.prototype.get.call(internal.loadCache, filename);
-      esmBackup[filename] = job;
-      Map.prototype.delete.call(internal.loadCache, filename);
-
-      // Backup and clear CJS Module._cache
+  /**
+   * The loaded modules outside `matched` that are changed because a request
+   * now resolves elsewhere. For a removed ESM resolution whose request now
+   * resolves to another module, or fails:
+   * - if its parent links the previous result, the parent is changed, so that
+   *   it resolves its imports again;
+   * - otherwise the previous result was imported dynamically, such as a
+   *   component entry, and is changed itself, so that it is imported again where
+   *   the request now leads.
+   *
+   * CJS records no request. A CJS module below `<dir>` is changed if a root is
+   * `<dir>/node_modules/<name>` and a child of the module belongs to a package
+   * `<name>` in a `node_modules` above `<dir>`, which the new package may
+   * shadow; a module that requested the child otherwise is reloaded needlessly.
+   */
+  private async _moved(roots: Set<string>, matched: Set<string>, removed: Resolution[]) {
+    const moved = new Set<string>()
+    for (const resolution of removed) {
+      const { parentURL, url } = resolution
+      if (matched.has(parentURL) || matched.has(url) || !this._modules.has(url)) continue
+      const links = (await this._modules.edges(parentURL)).has(url)
+      if (!links && !isRequest(resolution)) continue
+      let target: string | undefined
       try {
-        const filepath = fileURLToPath(filename);
-        if (require.cache[filepath]) {
-          cjsBackup[filepath] = require.cache[filepath];
-          delete require.cache[filepath];
-        }
-      } catch {
-        // filename might not be a file: URL (e.g. node: protocol), ignore
-      }
+        target = resolveRequest(this._loader, resolution)
+      } catch {}
+      if (target !== url) moved.add(links ? parentURL : url)
     }
 
-    const rollback = () => {
-      for (const filename in esmBackup) {
-        Map.prototype.set.call(internal.loadCache, filename, esmBackup[filename]);
+    const locations = [...roots].flatMap(root => locatePackage(root) ?? [])
+    if (!locations.length) return moved
+    for (const url of this._modules.urls()) {
+      const path = toPath(url)
+      if (!path) continue
+      for (const { name, dir } of locations) {
+        if (!contains(dir, path)) continue
+        const marker = `${sep}node_modules${sep}${name.split('/').join(sep)}${sep}`
+        const shadows = this._modules.children(url).some((child) => {
+          const childPath = toPath(child)
+          const index = childPath?.lastIndexOf(marker) ?? -1
+          if (index === -1) return false
+          const above = childPath!.slice(0, index)
+          return above !== dir && contains(above, dir)
+        })
+        if (shadows) moved.add(url)
       }
-      for (const filepath in cjsBackup) {
-        require.cache[filepath] = cjsBackup[filepath];
-      }
-    };
+    }
+    return moved
+  }
 
-    // Stage 1: re-import the module graph (all-or-nothing).
-    // Plugin validity is checked here, where the only mutated state is the
-    // module cache and no plugin has been touched yet. Moving this check
-    // earlier is what allows stage 3 to have no rollback at all: a malformed
-    // export can no longer fail halfway through swapping instances.
-    const replacements: Dict = {};
-    try {
-      for (const [, { filename, runtime }] of stalePlugins) {
-        const exports = this.ctx.loader.unwrapExports(
-          await this.ctx.loader.import(filename, this.getOuterStack),
-        );
-        if (runtime && !this.ctx.registry.resolve(exports)) {
-          throw new Error(
-            `invalid plugin at ${relative(this.baseDir, fileURLToPath(filename))}, ` +
-              `expect function or object with an "apply" method, received ${typeof exports}`,
-          );
+  /**
+   * The loaded modules whose files are one of `roots` or lie below one of
+   * them. A root that matches no loaded module is logged.
+   */
+  private _match(roots: Set<string>) {
+    const matched = new Set<string>()
+    const used = new Set<string>()
+    for (const url of this._modules.urls()) {
+      let path = toPath(url)
+      if (!path) continue
+      // The ancestors are looked up instead of comparing prefixes, so that a
+      // root matches whole path segments only.
+      while (true) {
+        if (roots.has(path)) {
+          matched.add(url)
+          used.add(path)
         }
-        replacements[filename] = exports;
+        const parent = dirname(path)
+        if (parent === path) break
+        path = parent
       }
-    } catch (e) {
-      handleError(this.ctx, e);
-      return rollback();
+    }
+    for (const root of roots) {
+      if (!used.has(root)) this.ctx.logger.debug('skip %C (no loaded module)', relative(this.baseDir, root))
+    }
+    return matched
+  }
+
+  private async _reconcile(callback: () => Awaitable<Iterable<string>>): Promise<Hmr.Result> {
+    const result: Hmr.Result = { settled: [], aborted: [], skipped: [] }
+    const roots = new Set<string>()
+    for (const root of await callback()) {
+      if (typeof root !== 'string' || !isAbsolute(root)) {
+        throw new TypeError(`invalid root ${JSON.stringify(root)}, expected an absolute path`)
+      }
+      // `resolve()` normalizes the path and removes a trailing separator
+      roots.add(resolve(root))
+    }
+    // after the callback, so that a module job that failed during it is removed too
+    const caches = this._modules
+    await caches.sweep()
+    if (!roots.size) return result
+
+    // also when the roots match no loaded module, e.g. a changed manifest
+    const removed = invalidateResolution(roots)
+
+    const matched = this._match(roots)
+    const changed = new Set<string>()
+    for (const url of new Set([...matched, ...await this._moved(roots, matched, removed)])) {
+      if (this.hostModules.has(url)) {
+        result.skipped.push({ urls: [url], reason: Hmr.SkipReason.HostModule })
+      } else if (isNativeAddon(url)) {
+        result.skipped.push({ urls: [url], reason: Hmr.SkipReason.NativeAddon })
+      } else {
+        changed.add(url)
+      }
+    }
+    if (!changed.size) return result
+
+    const { accepted, declined, edges } = await this._analyze(changed)
+    const oldEdges = (url: string) => edges.get(url) ?? []
+
+    // A component may be exported by several modules, e.g. an entry module that
+    // re-exports its implementation. All of them are imported again together.
+    const exporters = new Map<Component.Runtime, Map<string, Component>>()
+    for (const [url, component] of this._discover(declined)) {
+      const runtime = this.ctx.registry.get(component)!
+      let exported = exporters.get(runtime)
+      if (!exported) exporters.set(runtime, exported = new Map())
+      exported.set(url, component)
     }
 
-    // Stage 2: unload (per plugin, synchronous).
-    // `registry.delete()` does not block, so deleting everything up front
-    // costs nothing, and it is what makes the ancestor check below decidable:
-    // by the time anything is rebuilt, every fiber this batch tears down has
-    // already had its `uid` cleared.
-    let staleFibers: StaleFiber[] = [];
-    for (const [plugin, { filename, runtime }] of stalePlugins) {
-      if (!runtime) continue;
-      const path = relative(this.baseDir, fileURLToPath(filename));
+    // The closure of a component consists of its modules and the accepted modules
+    // they reach through accepted modules. It includes the modules of another
+    // component, so that a component importing another one shares its unit.
+    const staleComponents: StaleComponent[] = []
+    const evicted = new Set(accepted)
+    const owned = new Set<string>()
+    for (const exported of exporters.values()) {
+      const urls = [...exported.keys()]
+      const own = new Set(urls)
+      const stop = (url: string) => declined.has(url) && !own.has(url)
+      const closures = new Map<string, Set<string>>()
+      for (const url of urls) {
+        closures.set(url, await closure([url], oldEdges, stop))
+      }
+      const modules = new Set([...closures.values()].flatMap(closure => [...closure]))
+      if (![...modules].some(url => accepted.has(url))) continue
+      for (const url of modules) {
+        evicted.add(url)
+        owned.add(url)
+      }
 
-      // `registry.delete()` deliberately leaves the fibers in `runtime.fibers`
-      // (the `registry.has()` guard in `Fiber` skips the removal) so that we
-      // can rebuild from them; snapshot anyway, as the list is backed by a
-      // live `Map` iterator.
-      const fibers = [...runtime.fibers];
+      // The replacement is taken from a module that no other module of the
+      // component imports. Stage 1 imports the other such modules too and checks
+      // that they export the same component.
+      const outermost = urls.filter(url => !urls.some(other => other !== url && closures.get(other)!.has(url)))
+      const url = outermost[0] ?? urls[0]
+      staleComponents.push({
+        url,
+        component: exported.get(url)!,
+        urls,
+        entries: outermost.length ? outermost : [url],
+        modules,
+      })
+    }
+
+    for (const url of changed) {
+      if (!owned.has(url)) this.ctx.logger.debug('evict %C (no dependent component)', this._relative(url))
+    }
+
+    const backup = caches.evict(evicted)
+
+    // Stage 1: import the new modules of every stale component. Only the caches
+    // have changed so far, and restoring them undoes a failure:
+    // - the new components are validated here, so that stages 2 and 3 need no
+    //   rollback;
+    // - no cache entry is restored before every component has been imported, so
+    //   that no new module links against an evicted one.
+    const retained = caches.urls()
+    const attempts: ImportAttempt[] = []
+    for (const stale of staleComponents) {
+      const before = caches.urls()
+      const attempt: ImportAttempt = { stale, imported: [], loaded: [], failed: false }
+      // The new module is recorded before it is imported, so that the new
+      // module graph is taken from it also when the import fails.
+      const load = async (url: string) => {
+        const { url: target, source } = this._locate(url, removed, evicted)
+        attempt.imported.push(target)
+        // through the request, which records it in the resolve cache again
+        return unwrapExports(await (source
+          ? this._loader.import(source.specifier, source.parentURL, source.attributes)
+          : this._loader.import(url, import.meta.url, {})))
+      }
       try {
-        this.ctx.registry.delete(plugin);
-      } catch (err) {
-        this.ctx.logger.warn("failed to dispose plugin at %C", path);
-        this.ctx.logger.warn(err);
+        // Import the other entries of the component too, so that their failures
+        // abort its unit as well. A module that another entry imports is
+        // imported through it, also when it has moved.
+        const others: unknown[] = []
+        for (const url of stale.entries) {
+          if (url !== stale.url) others.push(await load(url))
+        }
+        const exports = await load(stale.url)
+        if (!this.ctx.registry.resolve(exports)) {
+          throw new Error(`invalid component at ${this._relative(stale.url)}, `
+            + `expect function or object with an "apply" method, received ${typeof exports}`)
+        }
+        if (others.some(other => other !== exports)) {
+          throw new SkipError(Hmr.SkipReason.AmbiguousExport)
+        }
+        attempt.replacement = exports
+      } catch (error) {
+        if (error instanceof SkipError) {
+          attempt.skip = error.reason
+        } else {
+          handleError(this.ctx, error)
+          attempt.failed = true
+          attempt.error = error
+        }
       }
-      for (const fiber of fibers) {
-        staleFibers.push({ path, replacement: replacements[filename], fiber });
+      for (const url of caches.urls()) {
+        if (!before.has(url) && !evicted.has(url)) attempt.loaded.push(url)
+      }
+      attempts.push(attempt)
+    }
+
+    // The new module graph is read once, before any cache entry is restored.
+    const newGraph = new Map<string, Promise<Set<string>>>()
+    const newEdges = (url: string) => {
+      let edges = newGraph.get(url)
+      if (!edges) newGraph.set(url, edges = caches.edges(url))
+      return edges
+    }
+
+    // A unit is aborted if an attempt failed, and otherwise skipped if an
+    // attempt cannot be applied in place. Both are kept: their modules are
+    // restored alike.
+    const units = await this._partition(attempts, evicted, newEdges, retained)
+    const aborted = units.filter(unit => unit.attempts.some(attempt => attempt.failed))
+    const skipped = units.filter(unit => !aborted.includes(unit) && unit.attempts.some(attempt => attempt.skip))
+    const committed = units.filter(unit => !aborted.includes(unit) && !skipped.includes(unit))
+    const kept = [...aborted, ...skipped]
+
+    // An evicted module outside every unit is restored with the kept units it
+    // reaches in the old module graph, so that it links against the modules
+    // they restore. If it also reaches a committed unit, neither version is
+    // consistent with the caches, and it is left evicted.
+    const unowned = new Set(evicted)
+    for (const unit of units) unit.modules.forEach(url => unowned.delete(url))
+    for (const url of unowned) {
+      const reached = await closure([url], oldEdges, url => !evicted.has(url))
+      const overlaps = (unit: ReconcileUnit) => [...unit.modules].some(url => reached.has(url))
+      if (committed.some(overlaps)) continue
+      for (const unit of kept.filter(overlaps)) unit.modules.add(url)
+    }
+
+    // A module first loaded in stage 1:
+    // - is evicted if it reaches a restored module in the new module graph,
+    //   since it has been linked against the new version;
+    // - is kept otherwise, also if a kept unit loaded it, so that a committed
+    //   unit that imported it shares its instance with later imports.
+    // A job of it that failed is removed by the sweep of the next transaction.
+    const restored = new Set(kept.flatMap(unit => [...unit.modules]))
+    for (const url of attempts.flatMap(attempt => attempt.loaded)) {
+      const reached = await closure([url], newEdges, url => retained.has(url))
+      if ([...reached].some(url => restored.has(url))) caches.evict([url])
+    }
+    backup.restore(restored)
+    // The resolutions to and from the restored modules are restored too, so
+    // that the resolve cache records the requests that loaded them, e.g. the
+    // import of a component entry. A replaced parent resolves its imports again
+    // by itself.
+    const replaced = new Set([...evicted].filter(url => !restored.has(url)))
+    restoreResolutions(removed.filter(({ parentURL, url }) => {
+      return (restored.has(url) || restored.has(parentURL)) && !replaced.has(url) && !replaced.has(parentURL)
+    }))
+
+    for (const unit of aborted) {
+      const failure = unit.attempts.find(attempt => attempt.failed)!
+      result.aborted.push({ urls: [...unit.modules], error: failure.error })
+    }
+    for (const unit of skipped) {
+      const skip = unit.attempts.find(attempt => attempt.skip)!
+      result.skipped.push({ urls: [...unit.modules], reason: skip.skip! })
+    }
+
+    // Stage 2: replace the components in place (synchronous).
+    // A component may have been disposed while stage 1 was importing, in which
+    // case the replacement only forwards a later registration of it.
+    // Waiting is left to stage 3, so that no component is delayed behind another.
+    const fibers: Fiber[] = []
+    const applied = new Set(committed.flatMap(unit => unit.attempts))
+    for (const attempt of attempts) {
+      if (!applied.has(attempt)) continue
+      const { url, component } = attempt.stale
+      const path = this._relative(url)
+      try {
+        const replaced = this.ctx.registry.replace(component, attempt.replacement!)
+        if (!replaced.length) continue
+        this.ctx.logger.info('reload component at %C', path)
+        fibers.push(...replaced)
+      } catch (error) {
+        this.ctx.logger.warn('failed to reload component at %C', path)
+        this.ctx.logger.warn(error)
       }
     }
 
-    // Everything below a fiber that is going away is rebuilt by that fiber, so
-    // rebuilding it here as well would yield two instances. Decided in a
-    // single pass now that every delete is done and before anything is
-    // awaited, so that stage 3 only ever has to think about its own fiber.
-    staleFibers = staleFibers.filter((stale) => {
-      if (!hasInactiveAncestor(stale.fiber)) return true;
-      this.ctx.logger.debug("skip plugin at %C (inactive ancestor)", stale.path);
-      return false;
-    });
+    // Stage 3: wait for the fibers to settle (concurrent).
+    // No rollback: a component that fails to apply is left FAILED, exactly as it
+    // would be on a cold start, and has already been logged by its fiber. It
+    // keeps its parent and config, so the next change to the file retries it.
+    await Promise.all(fibers.map(fiber => fiber.await().catch(() => {})))
+    // a fiber below another restarted fiber may have been disposed by it
+    result.settled = fibers.filter(fiber => fiber.uid !== null)
 
-    // Stage 3: reload (per fiber, concurrent).
-    const logged = new Set<string>();
-    await Promise.all(
-      staleFibers.map(async ({ path, replacement, fiber }) => {
-        try {
-          while (fiber.inertia) await fiber.inertia;
-
-          const newFiber = fiber.parent.registry.plugin(
-            replacement,
-            fiber.config,
-            this.getOuterStack,
-          );
-          newFiber.entry = fiber.entry;
-          if (newFiber.entry) newFiber.entry.fiber = newFiber;
-          if (!logged.has(path)) {
-            logged.add(path);
-            this.ctx.logger.info("reload plugin at %C", path);
-          }
-        } catch (err) {
-          // No rollback: a plugin that fails to load is left failed, exactly
-          // as it would be on a cold start. It stays registered and keeps its
-          // parent and config, so the next change to the file retries it.
-          this.ctx.logger.warn("failed to reload plugin at %C", path);
-          this.ctx.logger.warn(err);
-        }
-      }),
-    );
-
-    this.ctx.emit("hmr/reload", stalePlugins);
-    this.stashed = new Set();
+    return result
   }
 }
 
 namespace Hmr {
-  export interface Config extends ChokidarOptions {
-    base?: string;
-    root: string[];
-    debounce: number;
-    ignored: string[];
+  export interface WatchConfig {
+    enabled: boolean
+    files: string[]
+    debounce: number
   }
 
-  export const Config: z<Config> = z
-    .object({
-      base: z.string(),
-      root: z.array(String).role("table").default(["."]),
-      ignored: z.array(String).role("table").default(["**/node_modules", "**/.*", "cache", "data"]),
-      debounce: z.natural().role("ms").default(100),
-    })
-    .i18n({
-      "en-US": enUS,
-      "zh-CN": zhCN,
-    });
+  export interface Config {
+    base?: string
+    watch: WatchConfig
+  }
+
+  export const Config: z<Config> = z.object({
+    base: z.string().description('The base directory. Defaults to `ctx.baseUrl`.'),
+    watch: z.object({
+      enabled: z.boolean().default(false).description('Reload on file changes. Requires the `fs` service.'),
+      files: z.array(String).role('table').default([
+        '.',
+        '!**/node_modules',
+        '!**/.*',
+      ]).description('Files to watch, in glob patterns relative to `base`, as `filter` of `ctx.fs.watch()`.'),
+      debounce: z.natural().role('ms').default(100).description('Debounce changes before reloading, in milliseconds.'),
+    }).description('Watch'),
+  })
+
+  /**
+   * The running state is brought in line with the changes, as far as they can
+   * be applied. Each change is applied, aborted or skipped.
+   */
+  export interface Result {
+    /** the replaced fibers; a fiber whose new component fails to apply is left `FAILED` */
+    settled: Fiber[]
+    /** the units whose new modules fail to import; a later transaction retries them */
+    aborted: Abort[]
+    /** the changes that cannot be applied in place; a restart applies them */
+    skipped: Skip[]
+  }
+
+  /**
+   * A new module of a unit failed to import, or does not export a component.
+   * Nothing in the unit is applied: its module cache is restored, and so are
+   * the resolutions to its modules. A later transaction retries the unit if
+   * its roots include those that changed the unit, e.g. a manifest that moved
+   * an entry, since the restored resolutions lead to the previous modules.
+   * The other units of the transaction are not affected.
+   */
+  export interface Abort {
+    /** the evicted modules of the unit, whose cache entries are restored */
+    urls: string[]
+    /** the first error raised while importing the unit */
+    error: unknown
+  }
+
+  /**
+   * A change that cannot be applied in place. The other changes are applied.
+   * The modules of a skipped unit are restored, as those of an aborted one.
+   */
+  export interface Skip {
+    /** the changed module, or the evicted modules of the unit */
+    urls: string[]
+    reason: SkipReason
+  }
+
+  /** Why a change cannot be applied in place. */
+  export const enum SkipReason {
+    /** The module is reached statically from the main entry point, which runs once. */
+    HostModule = 'host-module',
+    /** The module is a native addon, which a process cannot load again. */
+    NativeAddon = 'native-addon',
+    /**
+     * The imports that resolved to a component module now resolve to different
+     * modules, e.g. after only one of two links to a package is retargeted.
+     * A fiber does not record which import it comes from.
+     */
+    AmbiguousImport = 'ambiguous-import',
+    /**
+     * The modules that exported one component now export different values. A
+     * fiber does not record which module it comes from.
+     */
+    AmbiguousExport = 'ambiguous-export',
+  }
 }
 
-export default Hmr;
+export default Hmr

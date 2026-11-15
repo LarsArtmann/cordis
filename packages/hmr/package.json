@@ -1,10 +1,11 @@
 {
-  "name": "@cordisjs/plugin-hmr",
-  "description": "Hot Module Replacement Plugin for Cordis",
-  "version": "1.1.0",
+  "name": "@cordisjs/hmr",
+  "description": "Hot module replacement for Cordis",
+  "version": "2.0.0-rc.0",
+  "sideEffects": false,
   "type": "module",
   "main": "lib/index.js",
-  "typings": "lib/index.d.ts",
+  "types": "lib/index.d.ts",
   "files": [
     "lib"
   ],
@@ -21,51 +22,51 @@
   "homepage": "https://cordis.io/",
   "keywords": [
     "cordis",
-    "plugin",
+    "component",
     "hmr",
     "hot",
     "module",
     "replacement",
-    "reload",
-    "watch",
-    "development"
+    "reload"
   ],
   "yakumo": {
     "tsc": {
       "ignore": [
-        "@cordisjs/plugin-include"
+        "@cordisjs/include"
       ]
     }
   },
   "cordis": {
-    "services": {
-      "required": [
-        "timer"
-      ]
-    },
     "description": {
       "en": "Hot Module Replacement",
       "zh": "模块热替换"
     }
   },
   "peerDependencies": {
-    "@cordisjs/plugin-timer": "^1.1.4",
-    "cordis": "^4.0.0-rc.13"
+    "@cordisjs/fs": "^2.0.0-rc.0",
+    "cordis": "^4.0.0-rc.13",
+    "node-addon-require-builtin": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@cordisjs/fs": {
+      "optional": true
+    },
+    "node-addon-require-builtin": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@cordisjs/plugin-include": "^1.2.0",
-    "@cordisjs/plugin-loader": "^1.0.0-rc.9",
-    "@cordisjs/plugin-timer": "^1.1.4",
+    "@cordisjs/fs": "^2.0.0-rc.0",
+    "@cordisjs/fs-node": "^0.1.0",
+    "@cordisjs/include": "^2.0.0-rc.0",
+    "@cordisjs/loader": "^1.0.0-rc.10",
+    "@cordisjs/logger-console": "^1.0.1",
     "@types/babel__code-frame": "^7.27.0",
-    "@types/picomatch": "^4.0.3",
     "cordis": "^4.0.0-rc.13",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.27.3"
   },
   "dependencies": {
-    "@babel/code-frame": "^8.0.6",
-    "chokidar": "^5.0.0",
-    "cosmokit": "^1.8.1",
-    "picomatch": "^4.0.7",
+    "@babel/code-frame": "^7.29.0",
     "schemastery": "^3.18.0"
   }
 }
